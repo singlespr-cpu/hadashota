@@ -88,6 +88,12 @@ export default {
       return handleUtilities(request, ctx);
     }
 
+    if (url.pathname === "/api/alerts") {
+      if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handleEmergencyAlerts();
+    }
+
     if (url.pathname === "/api/health") {
       const deep = url.searchParams.get("deep");
       if (deep) {
@@ -158,6 +164,59 @@ function sitemapResponse(origin) {
 
 function escapeXml(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[ch]));
+}
+
+async function handleEmergencyAlerts() {
+  const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("timeout"), 3500);
+  try {
+    const response = await fetch(endpoint, {
+      signal: controller.signal,
+      cache: "no-store",
+      headers: {
+        "Accept": "application/json,text/plain,*/*",
+        "Referer": "https://www.oref.org.il/",
+        "X-Requested-With": "XMLHttpRequest",
+        "User-Agent": "Mozilla/5.0 (compatible; Hadashota/20.0; +https://www.oref.org.il/)"
+      }
+    });
+    if (!response.ok) throw new Error(`OREF HTTP ${response.status}`);
+    const raw = (await response.text()).replace(/^\\uFEFF/, "").trim();
+    const parsed = raw && raw !== "null" ? JSON.parse(raw) : null;
+    return json({
+      ok: true,
+      source: "פיקוד העורף",
+      official: true,
+      checkedAt: new Date().toISOString(),
+      alerts: normalizeOrefCurrentAlerts(parsed)
+    }, 200, {
+      "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
+      "Pragma":"no-cache"
+    });
+  } catch (error) {
+    return json({ ok:false, source:"פיקוד העורף", official:true, checkedAt:new Date().toISOString(), alerts:[], error:String(error?.message || error) }, 502, { "Cache-Control":"no-store" });
+  } finally { clearTimeout(timeout); }
+}
+
+function normalizeOrefCurrentAlerts(payload) {
+  if (!payload) return [];
+  const rows = Array.isArray(payload) ? payload : [payload];
+  return rows.flatMap((row, index) => {
+    if (!row || typeof row !== "object") return [];
+    const areas = Array.isArray(row.data) ? row.data : Array.isArray(row.cities) ? row.cities : Array.isArray(row.areas) ? row.areas : [];
+    const cleanedAreas = [...new Set(areas.map((area) => String(area || "").trim()).filter(Boolean))];
+    if (!cleanedAreas.length && !row.title && !row.desc) return [];
+    return [{
+      id: String(row.id || row.notificationId || `${row.cat || row.category || "alert"}-${index}-${cleanedAreas.join("|")}`),
+      category: String(row.cat ?? row.category ?? row.threat ?? ""),
+      title: String(row.title || row.desc || "התרעה פעילה").trim(),
+      description: String(row.desc || row.description || "").trim(),
+      areas: cleanedAreas,
+      isDrill: Boolean(row.isDrill || row.drill),
+      rawTime: row.time || row.alertDate || null
+    }];
+  }).filter((alert) => !alert.isDrill);
 }
 
 async function handleUtilities(request, ctx) {
@@ -501,7 +560,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "15.0.0",
+      "X-Hadashota-Version": "21.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -529,7 +588,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "15.0.0"
+        "X-Hadashota-Version": "21.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.

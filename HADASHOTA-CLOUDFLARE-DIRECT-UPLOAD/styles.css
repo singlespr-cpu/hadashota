@@ -2469,3 +2469,150 @@ html[data-theme="dark"] .back-to-top { background:rgba(21,27,36,.94); color:#f7f
 }
 
 @media (max-width:700px) { .currency-card .currency-badge { display:inline-grid !important; } }
+
+
+/* =========================================================
+   HADASHOTA V20 — real-time Home Front Command alert center
+   ========================================================= */
+.alert-center { margin-top:10px; }
+.alert-center-card {
+  min-height:62px; display:flex; align-items:center; gap:12px; padding:10px 12px;
+  border:1px solid #e1e7ee; border-radius:17px; background:rgba(255,255,255,.94);
+  box-shadow:0 8px 24px rgba(31,41,55,.055); transition:.22s ease; overflow:hidden; position:relative;
+}
+.alert-center-card::before { content:""; position:absolute; inset-inline-start:0; top:0; bottom:0; width:4px; background:#12b76a; }
+.alert-status-icon { width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border-radius:12px; background:#ecfdf3; color:#067647; }
+.alert-status-icon svg { width:20px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+.alert-center-copy { flex:1; min-width:0; }
+.alert-center-eyebrow { display:flex; align-items:center; gap:6px; color:#667085; font-size:9px; font-weight:700; margin-bottom:2px; }
+.alert-live-dot { width:7px; height:7px; border-radius:50%; background:#12b76a; box-shadow:0 0 0 4px rgba(18,183,106,.1); }
+.alert-center-eyebrow b { color:#344054; font-size:10px; }
+.alert-center-eyebrow span:last-child { color:#98a2b3; }
+.alert-center-copy > strong { display:block; color:#101828; font-size:14px; line-height:1.25; }
+.alert-center-actions { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+.alert-sound-quick,.alert-settings-button { height:34px; display:inline-flex; align-items:center; gap:6px; border:1px solid #e1e7ee; background:#fff; color:#475467; border-radius:10px; padding:0 10px; font:inherit; font-size:9.5px; font-weight:800; cursor:pointer; }
+.alert-sound-quick svg,.alert-settings-button svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+.alert-sound-quick .sound-on { display:none; }
+.alert-sound-quick[aria-pressed="true"] .sound-on { display:block; }
+.alert-sound-quick[aria-pressed="true"] .sound-off { display:none; }
+.alert-sound-quick[aria-pressed="true"] { border-color:#b7e4ce; background:#f0fdf6; color:#067647; }
+.alert-disclaimer { margin:4px 5px 0; color:#98a2b3; font-size:7.5px; line-height:1.4; }
+.alert-areas { display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+.alert-areas span { padding:3px 7px; border-radius:999px; background:rgba(255,255,255,.17); border:1px solid rgba(255,255,255,.25); color:#fff; font-size:9px; font-weight:800; }
+
+.alert-center-card.alert-active {
+  background:linear-gradient(105deg,#b42318 0%,#d92d20 55%,#f04438 100%); border-color:transparent; color:#fff; box-shadow:0 12px 34px rgba(217,45,32,.22);
+}
+.alert-center-card.alert-active::before { width:6px; background:#fff; opacity:.92; }
+.alert-center-card.alert-active .alert-status-icon { background:rgba(255,255,255,.16); color:#fff; animation:alertPulse 1.25s ease-in-out infinite; }
+.alert-center-card.alert-active .alert-live-dot { background:#fff; box-shadow:0 0 0 4px rgba(255,255,255,.15); animation:alertBlink 1s steps(2,end) infinite; }
+.alert-center-card.alert-active .alert-center-eyebrow,.alert-center-card.alert-active .alert-center-eyebrow b,.alert-center-card.alert-active .alert-center-eyebrow span:last-child,.alert-center-card.alert-active .alert-center-copy>strong { color:#fff; }
+.alert-center-card.alert-active .alert-center-copy>strong { font-size:17px; font-weight:900; }
+.alert-center-card.alert-active .alert-sound-quick,.alert-center-card.alert-active .alert-settings-button { color:#fff; border-color:rgba(255,255,255,.27); background:rgba(255,255,255,.10); }
+.alert-center-card.alert-active .alert-sound-quick[aria-pressed="true"] { background:rgba(255,255,255,.18); }
+@keyframes alertPulse { 50% { transform:scale(1.08); background:rgba(255,255,255,.23); } }
+@keyframes alertBlink { 50% { opacity:.42; } }
+
+.alert-settings-card { max-width:590px !important; }
+.alert-settings-heading { display:flex; align-items:center; gap:12px; margin-bottom:5px; }
+.alert-settings-heading h2 { margin:2px 0 0 !important; }
+.alert-modal-icon { background:#fff1f0 !important; color:#d92d20 !important; }
+.alert-settings-intro { margin:8px 0 14px !important; }
+.alert-setting-block { border:1px solid #e6eaf0; border-radius:15px; padding:11px 12px; margin-top:9px; background:#fbfcfe; }
+.alert-setting-row { display:flex; align-items:center; justify-content:space-between; gap:14px; position:relative; }
+.alert-setting-row > span { display:grid; gap:2px; }
+.alert-setting-row b { font-size:12px; color:#101828; }
+.alert-setting-row small { color:#667085; font-size:9.5px; line-height:1.4; }
+.mini-switch { display:flex; align-items:center; gap:6px; cursor:pointer; flex:0 0 auto; }
+.mini-switch input,.alert-toggle-list input { position:absolute; opacity:0; pointer-events:none; }
+.mini-switch i,.toggle-ui { width:34px; height:20px; border-radius:999px; background:#d0d5dd; position:relative; transition:.18s; flex:0 0 auto; }
+.mini-switch i::after,.toggle-ui::after { content:""; width:14px; height:14px; border-radius:50%; background:#fff; position:absolute; top:3px; right:3px; box-shadow:0 1px 3px rgba(16,24,40,.2); transition:.18s; }
+.mini-switch input:checked + i,.alert-toggle-list input:checked + .toggle-ui { background:#d92d20; }
+.mini-switch input:checked + i::after,.alert-toggle-list input:checked + .toggle-ui::after { transform:translateX(-14px); }
+.mini-switch em { font-style:normal; font-size:9px; color:#475467; font-weight:800; }
+.alert-city-picker { margin-top:10px; }
+.alert-city-picker.disabled { opacity:.46; pointer-events:none; }
+.alert-city-input-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; }
+.alert-city-input-row input { height:38px; border:1px solid #dfe4eb; border-radius:10px; background:#fff; padding:0 11px; color:#101828; font:inherit; font-size:11px; outline:none; }
+.alert-city-input-row input:focus { border-color:#84adff; box-shadow:0 0 0 3px rgba(23,105,255,.10); }
+.alert-city-input-row button,.alert-test-button { border:0; border-radius:10px; background:#101828; color:#fff; padding:0 14px; font:inherit; font-size:10px; font-weight:800; cursor:pointer; }
+.alert-city-chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.alert-city-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 8px; border-radius:999px; background:#fff1f0; color:#b42318; font-size:9px; font-weight:800; border:1px solid #fecdca; }
+.alert-city-chip button { border:0; background:none; padding:0; color:inherit; cursor:pointer; font-weight:900; line-height:1; }
+.field-help { display:block; margin-top:7px; color:#98a2b3; font-size:8.5px; line-height:1.45; }
+.alert-toggle-list { padding:0; overflow:hidden; }
+.alert-toggle-list .alert-setting-row { padding:11px 12px; cursor:pointer; }
+.alert-toggle-list .alert-setting-row + .alert-setting-row { border-top:1px solid #e6eaf0; }
+.alert-test-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; }
+.alert-test-button { height:38px; background:#d92d20; }
+.alert-test-row span { color:#667085; font-size:9px; }
+.alert-safety-note { margin-top:12px !important; }
+
+html[data-theme="dark"] .alert-center-card { background:#151b24; border-color:#2b333e; }
+html[data-theme="dark"] .alert-center-copy>strong,html[data-theme="dark"] .alert-center-eyebrow b { color:#edf1f6; }
+html[data-theme="dark"] .alert-sound-quick,html[data-theme="dark"] .alert-settings-button { background:#1b222d; border-color:#303846; color:#b7c0cd; }
+html[data-theme="dark"] .alert-setting-block { background:#111720; border-color:#2b333e; }
+html[data-theme="dark"] .alert-setting-row b { color:#edf1f6; }
+html[data-theme="dark"] .alert-city-input-row input { background:#151b24; border-color:#303846; color:#edf1f6; }
+html[data-theme="dark"] .alert-toggle-list .alert-setting-row + .alert-setting-row { border-color:#2b333e; }
+
+@media(max-width:700px){
+  .alert-center { margin-top:7px; padding-inline:8px; }
+  .alert-center-card { min-height:54px; border-radius:14px; padding:8px 8px; gap:8px; }
+  .alert-status-icon { width:31px; height:31px; flex-basis:31px; border-radius:10px; }
+  .alert-status-icon svg { width:17px; }
+  .alert-center-eyebrow { font-size:8px; gap:4px; }
+  .alert-center-eyebrow b { font-size:9px; }
+  .alert-center-copy>strong { font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .alert-center-card.alert-active { align-items:flex-start; padding:9px; }
+  .alert-center-card.alert-active .alert-center-copy>strong { font-size:14px; white-space:normal; }
+  .alert-areas { gap:4px; margin-top:5px; }
+  .alert-areas span { font-size:8px; padding:3px 6px; }
+  .alert-sound-quick { width:33px; padding:0; justify-content:center; }
+  .alert-sound-quick span { display:none; }
+  .alert-settings-button { width:33px; padding:0; justify-content:center; }
+  .alert-settings-button span { display:none; }
+  .alert-disclaimer { display:none; }
+  .alert-settings-card { max-height:88vh; overflow:auto; }
+  .alert-setting-row { align-items:flex-start; }
+}
+@media(prefers-reduced-motion:reduce){ .alert-center-card.alert-active .alert-status-icon,.alert-center-card.alert-active .alert-live-dot{animation:none!important;} }
+
+.alert-center.has-active-alert { position:sticky; top:73px; z-index:44; }
+@media(max-width:700px){ .alert-center.has-active-alert { top:58px; } }
+
+
+/* =========================================================
+   HADASHOTA V21 — final newsroom polish & smarter health UI
+   ========================================================= */
+@media (min-width: 1101px) {
+  .lead-story-label {
+    font-size: 16.5px !important;
+    line-height: 1.2 !important;
+    letter-spacing: .005em !important;
+  }
+  .lead-story-label i {
+    width: 10px !important;
+    height: 10px !important;
+  }
+}
+
+.data-status.is-major {
+  border-color:#efd397 !important;
+  background:linear-gradient(90deg,#fff8e6,#fffdf7) !important;
+  color:#6e531b !important;
+  box-shadow:0 6px 18px rgba(111,83,27,.045) !important;
+}
+html[data-theme="dark"] .data-status.is-major {
+  background:linear-gradient(90deg,#211d13,#1a1812) !important;
+  border-color:#59471e !important;
+  color:#ddc98c !important;
+}
+
+/* Slightly cleaner desktop hierarchy without changing mobile density. */
+@media (min-width: 901px) {
+  .hero-news-grid { margin-top:2px; }
+  .lead-story { box-shadow:0 14px 38px rgba(31,41,55,.075) !important; }
+  .lead-story-topline { padding-bottom:2px; }
+  .lead-story-signal { border-radius:999px !important; }
+}

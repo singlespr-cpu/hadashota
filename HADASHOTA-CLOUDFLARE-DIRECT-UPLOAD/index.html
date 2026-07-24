@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#f7f8fb" />
   <meta name="color-scheme" content="light dark" />
   <meta name="application-name" content="חדשותא" />
-  <meta name="generator" content="Hadashota 19.0.0" />
+  <meta name="generator" content="Hadashota 21.0.0" />
   <meta name="apple-mobile-web-app-title" content="חדשותא" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="canonical" href="__SITE_URL__/" />
-  <link rel="icon" href="/favicon.svg?v=19.0.0" type="image/svg+xml" />
-  <link rel="icon" href="/favicon-32.png?v=19.0.0" sizes="32x32" type="image/png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=19.0.0" sizes="180x180" />
-  <link rel="manifest" href="/site.webmanifest?v=19.0.0" />
+  <link rel="icon" href="/favicon.svg?v=21.0.0" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png?v=21.0.0" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=21.0.0" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest?v=21.0.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -52,7 +52,7 @@
     "description": "חדשות היום, מבזקים ועדכונים בזמן אמת מכלי תקשורת, מקורות רשמיים וערוצי Telegram ציבוריים בישראל."
   }
   </script>
-  <link rel="stylesheet" href="/styles.css?v=19.0.0" />
+  <link rel="stylesheet" href="/styles.css?v=21.0.0" />
 </head>
 <body>
   <a class="skip-link" href="#mainContent">דלג לתוכן הראשי</a>
@@ -115,6 +115,31 @@
       <button class="nav-item" type="button" data-quick-kind="official">רשמי</button>
     </div>
   </nav>
+
+  <section class="alert-center shell" id="alertCenter" aria-live="assertive" aria-atomic="true">
+    <div class="alert-center-card alert-idle" id="alertCenterCard">
+      <div class="alert-status-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3 2.8 19h18.4L12 3Z"></path><path d="M12 9v4.5M12 17h.01"></path></svg>
+      </div>
+      <div class="alert-center-copy">
+        <div class="alert-center-eyebrow"><span class="alert-live-dot"></span><b id="alertStateLabel">התרעות פיקוד העורף</b><span id="alertLastCheck">מתחבר…</span></div>
+        <strong id="alertHeadline">בודק התרעות פעילות</strong>
+        <div class="alert-areas hidden" id="alertAreas"></div>
+      </div>
+      <div class="alert-center-actions">
+        <button class="alert-sound-quick" id="alertSoundQuick" type="button" aria-pressed="false" title="הפעלת צליל התראה באתר">
+          <svg class="sound-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6h4l5 4V5L9 9H5Z"></path><path d="M17 9.5a4 4 0 0 1 0 5M19.5 7a7.5 7.5 0 0 1 0 10"></path></svg>
+          <svg class="sound-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6h4l5 4V5L9 9H5Z"></path><path d="m17 10 4 4m0-4-4 4"></path></svg>
+          <span id="alertSoundQuickLabel">צליל כבוי</span>
+        </button>
+        <button class="alert-settings-button" id="alertSettingsBtn" type="button" aria-haspopup="dialog" aria-controls="alertSettingsModal">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M8 15v4"></path></svg>
+          <span>הגדרות התרעה</span>
+        </button>
+      </div>
+    </div>
+    <p class="alert-disclaimer">מידע משלים בלבד — במקרה חירום יש לפעול לפי ההתרעות וההנחיות הרשמיות של פיקוד העורף.</p>
+  </section>
 
   <main class="shell page" id="mainContent" tabindex="-1">
     <section class="pulse-strip portal-strip" aria-label="מידע שימושי וחדשותא עכשיו">
@@ -351,6 +376,53 @@
     </div>
   </footer>
 
+  <div class="site-modal hidden alert-settings-modal" id="alertSettingsModal" role="dialog" aria-modal="true" aria-labelledby="alertSettingsTitle" aria-hidden="true">
+    <button class="modal-backdrop" type="button" data-modal-close aria-label="סגירת החלון"></button>
+    <section class="modal-card alert-settings-card" tabindex="-1">
+      <button class="modal-close" type="button" data-modal-close aria-label="סגירה">×</button>
+      <div class="alert-settings-heading">
+        <div class="modal-icon alert-modal-icon" aria-hidden="true">!</div>
+        <div><span class="modal-eyebrow">מרכז התרעות</span><h2 id="alertSettingsTitle">בחר איפה ואיך להתריע</h2></div>
+      </div>
+      <p class="alert-settings-intro">התרעות נבדקות אוטומטית בזמן שהאתר פתוח. אפשר לעקוב אחרי כל הארץ או רק אחרי יישובים שתבחר.</p>
+
+      <div class="alert-setting-block">
+        <div class="alert-setting-row">
+          <span><b>אזורי עניין</b><small id="alertCitiesSummary">כל הארץ</small></span>
+          <label class="mini-switch"><input id="alertAllIsrael" type="checkbox" checked><i></i><em>כל הארץ</em></label>
+        </div>
+        <div class="alert-city-picker" id="alertCityPicker">
+          <div class="alert-city-input-row">
+            <input id="alertCityInput" type="text" list="alertCitySuggestions" placeholder="הקלד עיר או יישוב, למשל תל אביב" autocomplete="off" aria-label="הוספת עיר להתרעות">
+            <button id="alertAddCity" type="button">הוסף</button>
+          </div>
+          <datalist id="alertCitySuggestions">
+            <option value="תל אביב"><option value="ירושלים"><option value="חיפה"><option value="באר שבע"><option value="אשדוד"><option value="אשקלון"><option value="ראשון לציון"><option value="פתח תקווה"><option value="נתניה"><option value="חולון"><option value="בת ים"><option value="רמת גן"><option value="גבעתיים"><option value="הרצליה"><option value="רעננה"><option value="כפר סבא"><option value="מודיעין"><option value="רחובות"><option value="יבנה"><option value="קריית גת"><option value="שדרות"><option value="אופקים"><option value="נתיבות"><option value="קריית שמונה"><option value="נהריה"><option value="עכו"><option value="טבריה"><option value="עפולה"><option value="אילת">
+          </datalist>
+          <div class="alert-city-chips" id="alertCityChips"></div>
+          <small class="field-help">אפשר להוסיף כמה יישובים. ההתאמה כוללת גם אזורי משנה, לדוגמה “תל אביב” תתאים לאזורי תל אביב שמופיעים בהתרעה.</small>
+        </div>
+      </div>
+
+      <div class="alert-setting-block alert-toggle-list">
+        <label class="alert-setting-row">
+          <span><b>צליל באתר</b><small>צליל קצר וייחודי של חדשותא — לא צליל האזעקה הרשמי</small></span>
+          <input id="alertSoundToggle" type="checkbox"><i class="toggle-ui"></i>
+        </label>
+        <label class="alert-setting-row">
+          <span><b>התראת דפדפן</b><small>הצג הודעה גם כשהכרטיסייה ברקע, בכפוף להרשאת הדפדפן</small></span>
+          <input id="alertDesktopToggle" type="checkbox"><i class="toggle-ui"></i>
+        </label>
+      </div>
+
+      <div class="alert-test-row">
+        <button class="alert-test-button" id="alertTestBtn" type="button">בדיקת תצוגה וצליל</button>
+        <span id="alertConnectionState">מקור: פיקוד העורף</span>
+      </div>
+      <div class="modal-note alert-safety-note"><strong>חשוב</strong><span>חדשותא אינו מערכת התרעה רשמית ואינו תחליף לצופרים, ליישומון פיקוד העורף או להנחיות הרשמיות.</span></div>
+    </section>
+  </div>
+
   <div class="site-modal hidden" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle" aria-hidden="true">
     <button class="modal-backdrop" type="button" data-modal-close aria-label="סגירת החלון"></button>
     <section class="modal-card" tabindex="-1">
@@ -377,10 +449,7 @@
     </section>
   </div>
 
-  <button class="back-to-top" id="backToTop" type="button" aria-label="חזרה לראש העמוד" title="חזרה למעלה">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6"/></svg>
-  </button>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=19.0.0" defer></script>
+  <script src="/app.js?v=21.0.0" defer></script>
 </body>
 </html>

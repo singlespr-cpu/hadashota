@@ -16,13 +16,23 @@ const state = {
   retryAttempt: 0,
   nextRefreshAt: 0,
   dataDelayed: false,
+  dataDelaySeverity: "ok",
+  delayedShards: [],
   lastDataGeneratedAt: null,
   city: localStorage.getItem("hadashota.city") || "telaviv",
   lastVisitAt: Number((localStorage.getItem("hadashota.lastVisitAt") ?? localStorage.getItem("pulse.lastVisitAt"))) || 0,
   notificationsEnabled: localStorage.getItem("hadashota.headlineNotifications") === "1",
   currentLeadFingerprint: localStorage.getItem("hadashota.lastLeadFingerprint") || "",
   leadNotificationPrimed: localStorage.getItem("hadashota.lastLeadFingerprint") ? true : false,
-  serviceWorkerRegistration: null
+  serviceWorkerRegistration: null,
+  alertTimer: null,
+  alertCities: readStoredAlertCities(),
+  alertAllIsrael: localStorage.getItem("hadashota.alertAllIsrael") !== "0",
+  alertSound: localStorage.getItem("hadashota.alertSound") === "1",
+  alertDesktop: localStorage.getItem("hadashota.alertDesktop") === "1",
+  lastAlertFingerprint: localStorage.getItem("hadashota.lastAlertFingerprint") || "",
+  alertAudioUnlocked: false,
+  alertAudioContext: null
 };
 
 const el = {
@@ -103,7 +113,27 @@ const el = {
   contactBtn: document.querySelector("#contactBtn"),
   aboutModal: document.querySelector("#aboutModal"),
   contactModal: document.querySelector("#contactModal"),
-  backToTop: document.querySelector("#backToTop")
+  backToTop: document.querySelector("#backToTop"),
+  alertCenter: document.querySelector("#alertCenter"),
+  alertCenterCard: document.querySelector("#alertCenterCard"),
+  alertStateLabel: document.querySelector("#alertStateLabel"),
+  alertLastCheck: document.querySelector("#alertLastCheck"),
+  alertHeadline: document.querySelector("#alertHeadline"),
+  alertAreas: document.querySelector("#alertAreas"),
+  alertSoundQuick: document.querySelector("#alertSoundQuick"),
+  alertSoundQuickLabel: document.querySelector("#alertSoundQuickLabel"),
+  alertSettingsBtn: document.querySelector("#alertSettingsBtn"),
+  alertSettingsModal: document.querySelector("#alertSettingsModal"),
+  alertAllIsrael: document.querySelector("#alertAllIsrael"),
+  alertCityPicker: document.querySelector("#alertCityPicker"),
+  alertCityInput: document.querySelector("#alertCityInput"),
+  alertAddCity: document.querySelector("#alertAddCity"),
+  alertCityChips: document.querySelector("#alertCityChips"),
+  alertCitiesSummary: document.querySelector("#alertCitiesSummary"),
+  alertSoundToggle: document.querySelector("#alertSoundToggle"),
+  alertDesktopToggle: document.querySelector("#alertDesktopToggle"),
+  alertTestBtn: document.querySelector("#alertTestBtn"),
+  alertConnectionState: document.querySelector("#alertConnectionState")
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
@@ -130,6 +160,7 @@ function init() {
   registerServiceWorker();
   restoreLocalLastGood();
   loadUtilities();
+  initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
   loadNews();
   restartAutoRefresh();
@@ -192,6 +223,25 @@ function bindEvents() {
 
   el.refreshBtn.addEventListener("click", () => { loadNews(true); loadUtilities(); });
   el.backToTop?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  el.alertSettingsBtn?.addEventListener("click", () => openSiteModal(el.alertSettingsModal, el.alertSettingsBtn));
+  el.alertSoundQuick?.addEventListener("click", () => setAlertSound(!state.alertSound, true));
+  el.alertSoundToggle?.addEventListener("change", () => setAlertSound(el.alertSoundToggle.checked, true));
+  el.alertDesktopToggle?.addEventListener("change", () => setAlertDesktop(el.alertDesktopToggle.checked));
+  el.alertAllIsrael?.addEventListener("change", () => {
+    state.alertAllIsrael = el.alertAllIsrael.checked;
+    localStorage.setItem("hadashota.alertAllIsrael", state.alertAllIsrael ? "1" : "0");
+    syncAlertSettings();
+  });
+  el.alertAddCity?.addEventListener("click", addAlertCityFromInput);
+  el.alertCityInput?.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); addAlertCityFromInput(); } });
+  el.alertCityChips?.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-alert-city]");
+    if (!button) return;
+    state.alertCities = state.alertCities.filter((city) => city !== button.dataset.alertCity);
+    localStorage.setItem("hadashota.alertCities", JSON.stringify(state.alertCities));
+    syncAlertSettings();
+  });
+  el.alertTestBtn?.addEventListener("click", runAlertTest);
   window.addEventListener("scroll", () => {
     el.backToTop?.classList.toggle("visible", window.scrollY > 700);
   }, { passive: true });
@@ -295,6 +345,7 @@ function bindEvents() {
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) loadUtilities();
+    scheduleAlertPoll(250);
     if (state.autoRefresh) restartAutoRefresh();
     if (!document.hidden && state.dataDelayed) loadNews(false, true);
   });
@@ -355,22 +406,29 @@ async function loadNews(force = false, fromRetry = false) {
     const payloads = [];
     let delayed = false;
     let freshShards = 0;
+    const delayedShards = [];
 
     results.forEach((result, index) => {
       const shard = NEWS_SHARDS[index];
       if (result.status === "fulfilled" && Array.isArray(result.value?.items) && result.value.items.length) {
         payloads.push(result.value);
         persistShardLastGood(shard, result.value);
-        freshShards += result.value.stale ? 0 : 1;
-        if (result.value.stale) delayed = true;
+        if (result.value.stale) {
+          delayed = true;
+          delayedShards.push({ shard, reason: result.value.staleReason || "stale", localFallback: !!result.value.localFallback });
+        } else {
+          freshShards += 1;
+        }
         return;
       }
 
       const cached = readShardLastGood(shard);
       if (cached?.items?.length) {
         payloads.push({ ...cached, stale: true, localFallback: true });
+        delayedShards.push({ shard, reason: "local_fallback", localFallback: true });
         delayed = true;
       } else {
+        delayedShards.push({ shard, reason: "unavailable", localFallback: false });
         delayed = true;
       }
     });
@@ -384,13 +442,20 @@ async function loadNews(force = false, fromRetry = false) {
     state.sources = data.sources;
     state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
     state.dataDelayed = delayed || freshShards < NEWS_SHARDS.length;
-    el.lastUpdated.textContent = state.dataDelayed
-      ? `נתונים אחרונים · ${formatClock(data.generatedAt)}`
-      : `עודכן ${formatClock(data.generatedAt)}`;
+    state.delayedShards = delayedShards;
+    state.dataDelaySeverity = getDataDelaySeverity({ delayed: state.dataDelayed, freshShards, delayedShards, generatedAt: data.generatedAt });
+
+    if (!state.dataDelayed) {
+      el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
+    } else if (state.dataDelaySeverity === "minor") {
+      el.lastUpdated.textContent = `עדכון חלקי · ${formatClock(data.generatedAt)} · ${formatDelayedShardShort(delayedShards)}`;
+    } else {
+      el.lastUpdated.textContent = `נתונים אחרונים · ${formatClock(data.generatedAt)}`;
+    }
 
     renderStats(data);
     render();
-    setDataStatus(state.dataDelayed);
+    setDataStatus(state.dataDelayed, true, state.dataDelaySeverity);
 
     if (state.autoRefresh) scheduleNextRefresh(Math.max(Number(data.refreshAfterSeconds) || 30, getRefreshInterval()));
     else updateRefreshCountdown();
@@ -402,13 +467,16 @@ async function loadNews(force = false, fromRetry = false) {
       if (force && !fromRetry) showToast("החדשות רועננו עכשיו");
     } else {
       scheduleNewsRetry();
-      if (force) showToast("חלק מהמקורות מתעכבים — מוצגים הנתונים האחרונים");
+      if (force && state.dataDelaySeverity === "major") showToast("העדכון חלקי — מוצגים הנתונים האחרונים התקינים");
+      else if (force) showToast("מקור חדשות אחד מתעדכן ברקע");
     }
   } catch (error) {
     console.error(error);
     state.dataDelayed = true;
+    state.dataDelaySeverity = "major";
+    state.delayedShards = NEWS_SHARDS.map((shard) => ({ shard, reason: "request_failed", localFallback: true }));
     const restored = state.items.length > 0 || restoreLocalLastGood();
-    setDataStatus(true, restored);
+    setDataStatus(true, restored, "major");
     scheduleNewsRetry();
 
     if (!restored) {
@@ -475,10 +543,12 @@ function restoreLocalLastGood() {
   state.sources = data.sources;
   state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
   state.dataDelayed = true;
+  state.dataDelaySeverity = "major";
+  state.delayedShards = NEWS_SHARDS.map((shard) => ({ shard, reason: "local_fallback", localFallback: true }));
   el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
   renderStats(data);
   render();
-  setDataStatus(true);
+  setDataStatus(true, true, "major");
   return true;
 }
 
@@ -490,20 +560,42 @@ function scheduleNewsRetry() {
   state.retryTimer = setTimeout(() => loadNews(true, true), seconds * 1000);
 }
 
-function setDataStatus(delayed, hasData = state.items.length > 0) {
+function getDataDelaySeverity({ delayed, freshShards, delayedShards, generatedAt }) {
+  if (!delayed) return "ok";
+  if (freshShards <= 0 || delayedShards.length >= NEWS_SHARDS.length) return "major";
+
+  const generatedMs = Date.parse(generatedAt || "");
+  const ageSeconds = Number.isFinite(generatedMs) ? Math.max(0, (Date.now() - generatedMs) / 1000) : 999;
+  const hasHardFailure = delayedShards.some((entry) => entry.reason === "unavailable" || entry.reason === "request_failed");
+  if (hasHardFailure || ageSeconds > 180) return "major";
+  return "minor";
+}
+
+function formatDelayedShardShort(entries = state.delayedShards) {
+  const names = [...new Set(entries.map((entry) => entry.shard === "telegram" ? "Telegram מתעדכן" : "אתרי חדשות מתעדכנים"))];
+  return names.join(" + ") || "מקור מתעדכן";
+}
+
+function setDataStatus(delayed, hasData = state.items.length > 0, severity = state.dataDelaySeverity) {
   if (!el.dataStatus || !el.dataStatusText) return;
-  el.dataStatus.classList.toggle("hidden", !delayed);
-  if (!delayed) return;
+
+  // A single fresh-vs-stale shard is retried in the background, but does not deserve
+  // a large warning banner. The compact status remains visible in the header timestamp.
+  const showBanner = delayed && (severity === "major" || !hasData);
+  el.dataStatus.classList.toggle("hidden", !showBanner);
+  el.dataStatus.classList.toggle("is-major", showBanner && severity === "major");
+  if (!showBanner) return;
 
   if (!hasData) {
-    el.dataStatusText.textContent = "מתחבר למקורות — מתבצע ניסיון נוסף אוטומטית";
+    el.dataStatusText.textContent = "מתחבר למקורות החדשות — מתבצע ניסיון נוסף אוטומטית";
     return;
   }
 
   const clock = state.lastDataGeneratedAt ? formatClock(state.lastDataGeneratedAt) : "";
+  const delayedPart = formatDelayedShardShort();
   el.dataStatusText.textContent = clock
-    ? `חלק מהמקורות מתעכבים — מוצגים הנתונים האחרונים מ־${clock}. המערכת מנסה שוב אוטומטית.`
-    : "חלק מהמקורות מתעכבים — מוצגים הנתונים האחרונים. המערכת מנסה שוב אוטומטית.";
+    ? `העדכון חלקי — ${delayedPart}. מוצגים הנתונים האחרונים התקינים מ־${clock}, והמערכת מנסה שוב אוטומטית.`
+    : `העדכון חלקי — ${delayedPart}. מוצגים הנתונים האחרונים התקינים והמערכת מנסה שוב אוטומטית.`;
 }
 
 function mergeNewsPayloads(payloads) {
@@ -1535,4 +1627,186 @@ function showToast(message) {
   el.toast.textContent = message;
   el.toast.classList.add("show");
   toastTimer = setTimeout(() => el.toast.classList.remove("show"), 2300);
+}
+
+
+// ===== V20 real-time emergency alert center =====
+function readStoredAlertCities() {
+  try {
+    const value = JSON.parse(localStorage.getItem("hadashota.alertCities") || "[]");
+    return Array.isArray(value) ? value.map((city) => String(city || "").trim()).filter(Boolean).slice(0, 30) : [];
+  } catch { return []; }
+}
+
+function initAlertCenter() {
+  syncAlertSettings();
+  scheduleAlertPoll(100);
+}
+
+function syncAlertSettings() {
+  if (el.alertAllIsrael) el.alertAllIsrael.checked = state.alertAllIsrael;
+  if (el.alertCityPicker) el.alertCityPicker.classList.toggle("disabled", state.alertAllIsrael);
+  if (el.alertSoundToggle) el.alertSoundToggle.checked = state.alertSound;
+  if (el.alertDesktopToggle) el.alertDesktopToggle.checked = state.alertDesktop;
+  if (el.alertSoundQuick) {
+    el.alertSoundQuick.setAttribute("aria-pressed", state.alertSound ? "true" : "false");
+    el.alertSoundQuickLabel.textContent = state.alertSound ? "צליל פעיל" : "צליל כבוי";
+  }
+  if (el.alertCitiesSummary) el.alertCitiesSummary.textContent = state.alertAllIsrael ? "כל הארץ" : (state.alertCities.length ? state.alertCities.join(", ") : "לא נבחרו יישובים");
+  if (el.alertCityChips) {
+    el.alertCityChips.innerHTML = state.alertCities.map((city) => `<span class="alert-city-chip">${escapeHtml(city)}<button type="button" data-alert-city="${escapeHtml(city)}" aria-label="הסר ${escapeHtml(city)}">×</button></span>`).join("");
+  }
+}
+
+function addAlertCityFromInput() {
+  const city = String(el.alertCityInput?.value || "").trim().replace(/\\s+/g, " ");
+  if (!city) return;
+  if (!state.alertCities.some((value) => value.localeCompare(city, "he", { sensitivity: "base" }) === 0)) state.alertCities.push(city);
+  state.alertAllIsrael = false;
+  localStorage.setItem("hadashota.alertCities", JSON.stringify(state.alertCities));
+  localStorage.setItem("hadashota.alertAllIsrael", "0");
+  if (el.alertCityInput) el.alertCityInput.value = "";
+  syncAlertSettings();
+}
+
+async function setAlertSound(enabled, userGesture = false) {
+  state.alertSound = !!enabled;
+  localStorage.setItem("hadashota.alertSound", state.alertSound ? "1" : "0");
+  syncAlertSettings();
+  if (state.alertSound && userGesture) {
+    state.alertAudioUnlocked = true;
+    playAlertTone(true);
+  }
+}
+
+async function setAlertDesktop(enabled) {
+  if (!enabled) {
+    state.alertDesktop = false;
+  } else if (!("Notification" in window)) {
+    state.alertDesktop = false;
+    showToast("הדפדפן הזה לא תומך בהתראות מערכת");
+  } else {
+    let permission = Notification.permission;
+    if (permission === "default") permission = await Notification.requestPermission();
+    state.alertDesktop = permission === "granted";
+    if (!state.alertDesktop) showToast("לא ניתנה הרשאה להתראות דפדפן");
+  }
+  localStorage.setItem("hadashota.alertDesktop", state.alertDesktop ? "1" : "0");
+  syncAlertSettings();
+}
+
+function scheduleAlertPoll(delay) {
+  clearTimeout(state.alertTimer);
+  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : (document.hidden ? 5000 : 2000));
+}
+
+async function pollEmergencyAlerts() {
+  try {
+    const response = await fetch(`/api/alerts?t=${Date.now()}`, { cache:"no-store", headers:{ Accept:"application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (el.alertConnectionState) el.alertConnectionState.textContent = payload.source ? `מקור: ${payload.source}` : "מקור: פיקוד העורף";
+    renderEmergencyAlerts(Array.isArray(payload.alerts) ? payload.alerts : [], payload);
+  } catch (error) {
+    console.warn("Emergency alerts:", error);
+    renderAlertConnectionError();
+  } finally {
+    scheduleAlertPoll(document.hidden ? 5000 : 2000);
+  }
+}
+
+function normalizeAlertSearch(value) {
+  return String(value || "").normalize("NFKD").replace(/[־–—-]/g," ").replace(/[״׳'\"]/g,"").replace(/\\s+/g," ").trim().toLowerCase();
+}
+
+function alertMatchesPreferences(alert) {
+  if (state.alertAllIsrael) return true;
+  if (!state.alertCities.length) return false;
+  const areas = Array.isArray(alert.areas) ? alert.areas : [];
+  return areas.some((area) => {
+    const normalizedArea = normalizeAlertSearch(area);
+    return state.alertCities.some((city) => {
+      const normalizedCity = normalizeAlertSearch(city);
+      return normalizedArea.includes(normalizedCity) || normalizedCity.includes(normalizedArea);
+    });
+  });
+}
+
+function renderEmergencyAlerts(alerts, payload = {}) {
+  const matching = alerts.filter(alertMatchesPreferences);
+  const nowLabel = new Intl.DateTimeFormat("he-IL", { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date());
+  if (el.alertLastCheck) el.alertLastCheck.textContent = `נבדק ${nowLabel}`;
+  if (!matching.length) {
+    el.alertCenterCard?.classList.remove("alert-active");
+    el.alertCenterCard?.classList.add("alert-idle");
+    el.alertCenter?.classList.remove("has-active-alert");
+    if (el.alertStateLabel) el.alertStateLabel.textContent = "התרעות פיקוד העורף";
+    if (el.alertHeadline) el.alertHeadline.textContent = state.alertAllIsrael ? "אין התרעות פעילות כרגע" : (state.alertCities.length ? `אין התרעות פעילות ב${state.alertCities.join(", ")}` : "בחר יישובים לקבלת התרעות");
+    if (el.alertAreas) { el.alertAreas.classList.add("hidden"); el.alertAreas.innerHTML = ""; }
+    return;
+  }
+
+  const primary = matching[0];
+  const allAreas = [...new Set(matching.flatMap((item) => item.areas || []))];
+  const title = primary.title || "התרעה פעילה";
+  el.alertCenterCard?.classList.add("alert-active");
+  el.alertCenterCard?.classList.remove("alert-idle");
+  el.alertCenter?.classList.add("has-active-alert");
+  if (el.alertStateLabel) el.alertStateLabel.textContent = "התרעה פעילה עכשיו";
+  if (el.alertHeadline) el.alertHeadline.textContent = `${title}${allAreas.length ? ` — ${allAreas.slice(0,6).join(", ")}${allAreas.length>6 ? ` ועוד ${allAreas.length-6}` : ""}` : ""}`;
+  if (el.alertAreas) {
+    el.alertAreas.innerHTML = allAreas.slice(0,12).map((area) => `<span>${escapeHtml(area)}</span>`).join("");
+    el.alertAreas.classList.toggle("hidden", !allAreas.length);
+  }
+  const fingerprint = matching.map((a) => a.id || `${a.title}|${(a.areas||[]).join("|")}`).sort().join("::");
+  if (fingerprint && fingerprint !== state.lastAlertFingerprint) {
+    state.lastAlertFingerprint = fingerprint;
+    localStorage.setItem("hadashota.lastAlertFingerprint", fingerprint);
+    if (state.alertSound) playAlertTone(false);
+    if (state.alertDesktop) showEmergencyNotification(title, allAreas);
+  }
+}
+
+function renderAlertConnectionError() {
+  if (el.alertLastCheck) el.alertLastCheck.textContent = "חיבור מתעכב";
+  if (el.alertConnectionState) el.alertConnectionState.textContent = "מקור ההתרעות לא זמין כרגע";
+  if (!el.alertCenterCard?.classList.contains("alert-active") && el.alertHeadline) el.alertHeadline.textContent = "לא ניתן לאמת כרגע אם קיימת התרעה פעילה";
+}
+
+function playAlertTone(isTest = false) {
+  if (!state.alertSound && !isTest) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = state.alertAudioContext || new AudioCtx();
+    state.alertAudioContext = ctx;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(isTest ? 0.07 : 0.11, ctx.currentTime + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.9);
+    [740, 990].forEach((frequency, index) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine"; osc.frequency.value = frequency; osc.connect(gain);
+      osc.start(ctx.currentTime + index * 0.22); osc.stop(ctx.currentTime + 0.35 + index * 0.22);
+    });
+  } catch (error) { console.warn("Alert audio:", error); }
+}
+
+function showEmergencyNotification(title, areas) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const body = areas?.length ? areas.slice(0,8).join(", ") : "התקבלה התרעה חדשה";
+  try { new Notification(`חדשותא • ${title}`, { body, icon:"/apple-touch-icon.png", tag:`hadashota-alert-${state.lastAlertFingerprint.slice(0,60)}`, renotify:true }); } catch {}
+}
+
+function runAlertTest() {
+  const original = { headline: el.alertHeadline?.textContent || "", state: el.alertStateLabel?.textContent || "" };
+  el.alertCenterCard?.classList.add("alert-active");
+  if (el.alertStateLabel) el.alertStateLabel.textContent = "בדיקת התרעה";
+  if (el.alertHeadline) el.alertHeadline.textContent = "בדיקה בלבד — התרעת חדשותא פועלת";
+  if (el.alertAreas) { el.alertAreas.innerHTML = '<span>עיר לדוגמה</span>'; el.alertAreas.classList.remove("hidden"); }
+  if (state.alertSound) playAlertTone(true);
+  showToast("זו בדיקה בלבד — לא התקבלה התרעה אמיתית");
+  setTimeout(() => { scheduleAlertPoll(0); }, 2600);
 }
