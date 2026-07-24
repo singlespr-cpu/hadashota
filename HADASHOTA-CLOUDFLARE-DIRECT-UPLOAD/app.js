@@ -1157,12 +1157,12 @@ function renderLeadStory() {
   const spreadLabel = Number(winner.spreadMinutes) <= 1 ? "כמעט במקביל" : `תוך ${Number(winner.spreadMinutes) || 0} דק׳`;
   if (el.leadStoryLabelText) el.leadStoryLabelText.textContent = "הסיפור המרכזי עכשיו";
   if (el.leadStoryLiveBadge) el.leadStoryLiveBadge.classList.remove("hidden");
-  if (Number(winner.uniqueSources) >= 3) {
-    el.leadStorySignal.textContent = `${winner.uniqueSources} מקורות · ${spreadLabel}${winner.hasOfficial ? " · כולל רשמי" : ""}`;
-    el.leadStorySignal.title = "הסיפור נשמר כמרכזי עד שסיפור חדש יאומת בשלושה מקורות שונים לפחות";
-  } else {
-    el.leadStorySignal.textContent = "ממתין ל־3 מקורות כדי להחליף סיפור";
-    el.leadStorySignal.title = "הסיפור המרכזי נשאר מוצג; הוא יוחלף רק כאשר סיפור חדש יאומת בשלושה מקורות שונים לפחות";
+  // The qualification logic stays internal. Keep the lead card editorially clean:
+  // source names remain visible below the story, without status/explanation text.
+  if (el.leadStorySignal) {
+    el.leadStorySignal.textContent = "";
+    el.leadStorySignal.removeAttribute("title");
+    el.leadStorySignal.classList.add("hidden");
   }
 
   setOptionalLink(el.leadStoryLink, sourceTarget?.url);
