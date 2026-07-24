@@ -36,6 +36,7 @@ const state = {
   alertWasActive: false,
   displayedLeadFingerprint: "",
   displayedLeadSince: 0,
+  lastQualifiedLead: readStoredLeadSnapshot(),
   flashDeckExpanded: false,
   flashDeckPaused: false,
   flashDeckTimer: null
@@ -75,6 +76,8 @@ const el = {
   leadStory: document.querySelector("#leadStory"),
   leadStoryLink: document.querySelector("#leadStoryLink"),
   leadStoryTitle: document.querySelector("#leadStoryTitle"),
+  leadStoryLabelText: document.querySelector("#leadStoryLabelText"),
+  leadStoryLiveBadge: document.querySelector("#leadStoryLiveBadge"),
   leadStoryPreview: document.querySelector("#leadStoryPreview"),
   leadStorySource: document.querySelector("#leadStorySource"),
   leadStoryAge: document.querySelector("#leadStoryAge"),
@@ -948,72 +951,184 @@ function renderSources() {
   el.showAllSources.textContent = state.allSourcesVisible ? "הצג פחות" : `הצג את כל ${sources.length} המקורות`;
 }
 
+const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
+const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
+
+function readStoredLeadSnapshot() {
+  try {
+    const raw = localStorage.getItem(LEAD_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.entry?.item || !Number(parsed.savedAt)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function readDisplayedLeadSnapshot() {
+  try {
+    const raw = localStorage.getItem(DISPLAYED_LEAD_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.entry?.item || !Number(parsed.savedAt)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function storyImageUrl(entry) {
+  if (!entry?.item) return "";
+  return entry.item.imageUrl
+    || (entry.recentReports || []).find((report) => report?.imageUrl)?.imageUrl
+    || (entry.reports || []).find((report) => report?.imageUrl)?.imageUrl
+    || "";
+}
+
+function persistQualifiedLeadSnapshot(entry) {
+  if (!entry?.item || Number(entry.uniqueSources) < 3) return;
+  const snapshot = buildLeadSnapshot(entry);
+  state.lastQualifiedLead = snapshot;
+  try { localStorage.setItem(LEAD_SNAPSHOT_KEY, JSON.stringify(snapshot)); } catch {}
+}
+
+function persistDisplayedLeadSnapshot(entry) {
+  if (!entry?.item || !storyImageUrl(entry)) return;
+  const snapshot = buildLeadSnapshot(entry);
+  state.displayedLeadSnapshot = snapshot;
+  try { localStorage.setItem(DISPLAYED_LEAD_SNAPSHOT_KEY, JSON.stringify(snapshot)); } catch {}
+}
+
+function buildLeadSnapshot(entry) {
+  return {
+    savedAt: Date.now(),
+    entry: {
+      item: structuredCloneSafe(entry.item),
+      reports: structuredCloneSafe(entry.reports || []),
+      recentReports: structuredCloneSafe(entry.recentReports || []),
+      uniqueSources: Number(entry.uniqueSources) || 1,
+      ageMinutes: Number(entry.ageMinutes) || 0,
+      latestAt: entry.latestAt || entry.item?.latestReportAt || entry.item?.publishedAt,
+      score: Number(entry.score) || 0,
+      hasOfficial: !!entry.hasOfficial,
+      spreadMinutes: Number(entry.spreadMinutes) || 0
+    }
+  };
+}
+
+function buildFallbackLeadCandidate() {
+  const now = Date.now();
+  const item = state.items
+    .filter((entry) => entry && storyImageUrl({ item: entry, reports: normalizeClusterReports(entry) }))
+    .sort((a, b) => Date.parse(clusterLatestAt(b) || 0) - Date.parse(clusterLatestAt(a) || 0))[0];
+  if (!item) return null;
+
+  const reports = normalizeClusterReports(item);
+  const latestAt = clusterLatestAt(item);
+  const latestMs = Date.parse(latestAt || 0);
+  const ageMinutes = Number.isFinite(latestMs) ? Math.max(0, (now - latestMs) / 60_000) : 0;
+  const reportTimes = reports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
+  const spreadMinutes = reportTimes.length > 1 ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000)) : 0;
+  return {
+    item,
+    reports,
+    recentReports: reports,
+    uniqueSources: Math.max(1, reports.length),
+    ageMinutes,
+    latestAt,
+    score: 0,
+    hasOfficial: reports.some((report) => report.official),
+    spreadMinutes,
+    fallback: true
+  };
+}
+
 function renderLeadStory() {
   const now = Date.now();
-  const corroborationWindowMs = 45 * 60 * 1000;
-  const candidates = state.items
-    .map((item) => {
-      const latestAt = clusterLatestAt(item);
-      const latestMs = Date.parse(latestAt);
-      const ageMinutes = Math.max(0, (now - latestMs) / 60_000);
-      const reports = normalizeClusterReports(item);
-      // The lead story must be corroborated by distinct sources reporting roughly
-      // the same event in the same time window, not by old reports accumulated for hours.
-      const recentReports = reports.filter((report) => {
-        const reportMs = Date.parse(report.publishedAt || 0);
-        if (!Number.isFinite(reportMs) || !Number.isFinite(latestMs)) return false;
-        const delta = latestMs - reportMs;
-        return delta >= -5 * 60 * 1000 && delta <= corroborationWindowMs;
-      });
-      const uniqueSources = recentReports.length;
-      const hasOfficial = recentReports.some((report) => report.official);
-      const hasVerified = recentReports.some((report) => report.verified);
-      const reportTimes = recentReports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
-      const spreadMinutes = reportTimes.length > 1 ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000)) : 0;
+  const corroborationWindowMs = 90 * 60 * 1000;
+  const allEntries = state.items.map((item) => {
+    const latestAt = clusterLatestAt(item);
+    const latestMs = Date.parse(latestAt);
+    const ageMinutes = Math.max(0, (now - latestMs) / 60_000);
+    const reports = normalizeClusterReports(item);
+    const recentReports = reports.filter((report) => {
+      const reportMs = Date.parse(report.publishedAt || 0);
+      if (!Number.isFinite(reportMs) || !Number.isFinite(latestMs)) return false;
+      const delta = latestMs - reportMs;
+      return delta >= -5 * 60 * 1000 && delta <= corroborationWindowMs;
+    });
+    const uniqueSources = recentReports.length;
+    const hasOfficial = recentReports.some((report) => report.official);
+    const hasVerified = recentReports.some((report) => report.verified);
+    const reportTimes = recentReports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
+    const spreadMinutes = reportTimes.length > 1 ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000)) : 0;
 
-      let freshness = 0;
-      if (ageMinutes <= 15) freshness = 10;
-      else if (ageMinutes <= 30) freshness = 8.5;
-      else if (ageMinutes <= 60) freshness = 6;
-      else if (ageMinutes <= 90) freshness = 3.2;
-      else if (ageMinutes <= 120) freshness = 1.2;
-      else freshness = 0;
+    let freshness = 0;
+    if (ageMinutes <= 15) freshness = 10;
+    else if (ageMinutes <= 30) freshness = 8.5;
+    else if (ageMinutes <= 60) freshness = 6;
+    else if (ageMinutes <= 90) freshness = 3.2;
+    else if (ageMinutes <= 120) freshness = 1.2;
 
-      const sourceScore = Math.min(uniqueSources, 9) * 1.2;
-      const authority = hasOfficial ? 1.8 : hasVerified ? 0.55 : 0;
-      const activity = ageMinutes <= 12 ? 1.8 : ageMinutes <= 25 ? 1 : 0;
-      const velocity = spreadMinutes <= 10 && uniqueSources >= 4 ? 1.2 : spreadMinutes <= 20 && uniqueSources >= 3 ? 0.55 : 0;
-      const oldPenalty = ageMinutes > 75 ? (ageMinutes - 75) / 11 : 0;
-      const score = freshness + sourceScore + authority + activity + velocity - oldPenalty;
-      return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, score, hasOfficial, spreadMinutes };
-    })
-    // A lead story always requires at least 3 distinct corroborating sources.
-    .filter((entry) => entry.ageMinutes <= 150 && entry.uniqueSources >= 3)
+    const sourceScore = Math.min(uniqueSources, 9) * 1.2;
+    const authority = hasOfficial ? 1.8 : hasVerified ? 0.55 : 0;
+    const activity = ageMinutes <= 12 ? 1.8 : ageMinutes <= 25 ? 1 : 0;
+    const velocity = spreadMinutes <= 10 && uniqueSources >= 4 ? 1.2 : spreadMinutes <= 20 && uniqueSources >= 3 ? 0.55 : 0;
+    const oldPenalty = ageMinutes > 75 ? (ageMinutes - 75) / 11 : 0;
+    const score = freshness + sourceScore + authority + activity + velocity - oldPenalty;
+    return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, score, hasOfficial, spreadMinutes };
+  });
+
+  // A NEW lead can replace the visible one only when at least three distinct
+  // sources corroborate it in the same time window and it has a usable image.
+  const candidates = allEntries
+    .filter((entry) => entry.ageMinutes <= 240 && entry.uniqueSources >= 3 && !!storyImageUrl(entry))
     .sort((a, b) => b.score - a.score || Date.parse(b.latestAt) - Date.parse(a.latestAt));
 
-  let winner = candidates[0];
-  if (!winner) {
-    state.displayedLeadFingerprint = "";
-    state.displayedLeadSince = 0;
-    el.leadStory.classList.add("hidden");
-    return;
+  const storedDisplay = state.displayedLeadSnapshot || readDisplayedLeadSnapshot();
+  let current = null;
+  if (state.displayedLeadFingerprint) {
+    current = allEntries.find((entry) => leadFingerprint(entry) === state.displayedLeadFingerprint) || null;
+  }
+  if (!current && storedDisplay?.entry?.item && storyImageUrl(storedDisplay.entry)) current = storedDisplay.entry;
+
+  // On a first visit there may not yet be a 3-source cluster. Seed the box with
+  // the newest real story that has an image, then keep it until a qualified
+  // 3-source challenger earns the right to replace it.
+  if (!current) current = buildFallbackLeadCandidate();
+
+  let winner = current;
+  const challenger = candidates[0] || null;
+
+  if (!winner && challenger) winner = challenger;
+  else if (winner && challenger) {
+    const currentKey = leadFingerprint(winner);
+    const challengerKey = leadFingerprint(challenger);
+    if (challengerKey === currentKey) {
+      // Use the fresh in-memory version so source count, time and preview continue updating.
+      winner = challenger;
+    } else {
+      const currentMs = Date.parse(winner.latestAt || winner.item?.latestReportAt || winner.item?.publishedAt || 0);
+      const challengerMs = Date.parse(challenger.latestAt || challenger.item?.latestReportAt || challenger.item?.publishedAt || 0);
+      // Exact product rule: the visible headline stays put. A different story may
+      // replace it only after 3+ distinct sources corroborate that NEWER event.
+      if (Number(challenger.uniqueSources) >= 3 && Number.isFinite(challengerMs)
+          && (!Number.isFinite(currentMs) || challengerMs > currentMs)) {
+        winner = challenger;
+      }
+    }
   }
 
-  // Prevent headline ping-pong: keep the visible lead while it remains competitive.
-  // A challenger replaces it when materially stronger, when the current lead is aging,
-  // or when a very fresh officially corroborated story breaks through.
-  if (state.displayedLeadFingerprint) {
-    const current = candidates.find((entry) => leadFingerprint(entry) === state.displayedLeadFingerprint);
-    const challengerKey = leadFingerprint(winner);
-    if (current && challengerKey !== state.displayedLeadFingerprint) {
-      const absoluteAdvantage = winner.score - current.score;
-      const relativeAdvantage = current.score > 0 ? winner.score / current.score : Infinity;
-      const urgentBreakthrough = winner.hasOfficial && winner.uniqueSources >= 4 && winner.ageMinutes <= 15;
-      const currentAging = current.ageMinutes > 70;
-      const currentYoung = Date.now() - Number(state.displayedLeadSince || 0) < 3 * 60 * 1000;
-      const clearlyStronger = absoluteAdvantage >= 2.1 || relativeAdvantage >= 1.14;
-      if (!urgentBreakthrough && !currentAging && (!clearlyStronger || currentYoung)) winner = current;
-    }
+  // Absolute safety net: the lead module remains visible. In practice the feed
+  // should always provide a story; this branch preserves the previous snapshot.
+  if (!winner) {
+    const saved = state.lastQualifiedLead || readStoredLeadSnapshot();
+    if (saved?.entry?.item && storyImageUrl(saved.entry)) winner = saved.entry;
+  }
+  if (!winner) {
+    el.leadStory.classList.remove("hidden");
+    return;
   }
 
   const winnerFingerprint = leadFingerprint(winner);
@@ -1022,8 +1137,11 @@ function renderLeadStory() {
     state.displayedLeadSince = Date.now();
   }
 
+  if (Number(winner.uniqueSources) >= 3) persistQualifiedLeadSnapshot(winner);
+  persistDisplayedLeadSnapshot(winner);
+
   const item = winner.item;
-  const sources = winner.recentReports;
+  const sources = (winner.recentReports?.length ? winner.recentReports : winner.reports?.length ? winner.reports : normalizeClusterReports(item));
   const sourceTarget = sources.find((source) => source.sourceKind === "site" && source.url)
     || sources.find((source) => source.url)
     || (item.url ? item : null);
@@ -1032,13 +1150,20 @@ function renderLeadStory() {
   const leadTitle = cleanDisplayTitle(item.title);
   el.leadStoryTitle.textContent = leadTitle;
   el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
-  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? cleanDisplayText(item.preview) : "הידיעה מתקדמת במהירות ומופיעה בכמה מקורות בזמן קצר.";
+  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? cleanDisplayText(item.preview) : "הידיעה המרכזית שנבחרה כרגע במערכת חדשותא.";
   el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName;
-  el.leadStoryAge.textContent = formatAge(winner.latestAt);
-  el.leadStoryCount.textContent = `${winner.uniqueSources} מקורות מדווחים`;
-  const spreadLabel = winner.spreadMinutes <= 1 ? "כמעט במקביל" : `תוך ${winner.spreadMinutes} דק׳`;
-  el.leadStorySignal.textContent = `${winner.uniqueSources} מקורות · ${spreadLabel}${winner.hasOfficial ? " · כולל רשמי" : ""}`;
-  el.leadStorySignal.title = "הסיפור נבחר לפי מספר מקורות שונים, טריות וקצב הופעת הדיווחים";
+  el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
+  el.leadStoryCount.textContent = `${Math.max(1, Number(winner.uniqueSources) || unique.length || 1)} מקורות מדווחים`;
+  const spreadLabel = Number(winner.spreadMinutes) <= 1 ? "כמעט במקביל" : `תוך ${Number(winner.spreadMinutes) || 0} דק׳`;
+  if (el.leadStoryLabelText) el.leadStoryLabelText.textContent = "הסיפור המרכזי עכשיו";
+  if (el.leadStoryLiveBadge) el.leadStoryLiveBadge.classList.remove("hidden");
+  if (Number(winner.uniqueSources) >= 3) {
+    el.leadStorySignal.textContent = `${winner.uniqueSources} מקורות · ${spreadLabel}${winner.hasOfficial ? " · כולל רשמי" : ""}`;
+    el.leadStorySignal.title = "הסיפור נשמר כמרכזי עד שסיפור חדש יאומת בשלושה מקורות שונים לפחות";
+  } else {
+    el.leadStorySignal.textContent = "ממתין ל־3 מקורות כדי להחליף סיפור";
+    el.leadStorySignal.title = "הסיפור המרכזי נשאר מוצג; הוא יוחלף רק כאשר סיפור חדש יאומת בשלושה מקורות שונים לפחות";
+  }
 
   setOptionalLink(el.leadStoryLink, sourceTarget?.url);
   const leadHref = safeHttpHref(sourceTarget?.url);
@@ -1049,26 +1174,26 @@ function renderLeadStory() {
     el.leadStoryCta.removeAttribute("href");
     el.leadStoryCta.classList.add("hidden");
   }
-  if (item.imageUrl) {
-    el.leadStoryImage.src = item.imageUrl;
+
+  const imageUrl = storyImageUrl(winner);
+  if (imageUrl) {
+    el.leadStoryImage.src = imageUrl;
     el.leadStoryImage.alt = leadTitle;
     setOptionalLink(el.leadStoryMedia, leadHref);
     el.leadStoryMedia.classList.remove("hidden");
     el.leadStory.classList.add("has-media");
     el.leadStoryImage.onerror = () => {
-      el.leadStoryMedia.classList.add("hidden");
-      el.leadStory.classList.remove("has-media");
+      // Keep the lead box itself visible even if an external image host fails.
+      el.leadStoryImage.removeAttribute("src");
+      el.leadStoryMedia.classList.add("image-unavailable");
     };
-  } else {
-    el.leadStoryImage.removeAttribute("src");
-    el.leadStoryMedia.classList.add("hidden");
-    el.leadStory.classList.remove("has-media");
   }
+
   el.leadStorySources.innerHTML = unique.map((source) => source.url
     ? `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanDisplayText(source.sourceName))}</a>`
     : `<span>${escapeHtml(cleanDisplayText(source.sourceName))}</span>`).join("");
   el.leadStory.classList.remove("hidden");
-  updateLeadHeadlineTracking(winner);
+  if (Number(winner.uniqueSources) >= 3) updateLeadHeadlineTracking(winner);
 }
 
 function renderBreaking() {

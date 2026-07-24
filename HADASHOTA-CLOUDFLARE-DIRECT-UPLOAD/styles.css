@@ -2885,3 +2885,41 @@ html[data-theme="dark"] .lead-story-label > em {
     bottom:calc(14px + env(safe-area-inset-bottom));
   }
 }
+
+
+/* =========================================================
+   HADASHOTA V26 — lead story must never disappear
+   ========================================================= */
+.lead-story #leadStoryLiveBadge.hidden { display:none !important; }
+.lead-story-signal { max-width:100%; white-space:normal; text-align:center; }
+@media (min-width:701px) {
+  .lead-story-label { font-size:13.5px !important; }
+}
+
+/* =========================================================
+   HADASHOTA V27 — persistent lead story with image
+   ========================================================= */
+.lead-story-media.image-unavailable {
+  position:relative;
+  display:grid !important;
+  place-items:center;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(255,59,48,.16), transparent 38%),
+    radial-gradient(circle at 78% 82%, rgba(23,105,255,.14), transparent 42%),
+    linear-gradient(135deg,#f7f9fc,#eef2f7);
+}
+.lead-story-media.image-unavailable img { display:none !important; }
+.lead-story-media.image-unavailable::after {
+  content:"חדשותא";
+  font-size:clamp(18px,2vw,28px);
+  font-weight:900;
+  letter-spacing:.08em;
+  color:#98a2b3;
+}
+html[data-theme="dark"] .lead-story-media.image-unavailable {
+  background:
+    radial-gradient(circle at 22% 18%, rgba(255,59,48,.14), transparent 38%),
+    radial-gradient(circle at 78% 82%, rgba(23,105,255,.13), transparent 42%),
+    linear-gradient(135deg,#151b24,#10151c);
+}
+html[data-theme="dark"] .lead-story-media.image-unavailable::after { color:#667085; }
