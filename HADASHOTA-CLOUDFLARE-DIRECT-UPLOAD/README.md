@@ -80,7 +80,7 @@
 - The central lead headline is smaller and can show up to four lines on desktop (five on mobile).
 
 
-## V9 changes
+## V10 changes
 
 - The persistent newsroom navigation is now true primary navigation: category tabs reset source-type filters, source tabs reset category filters, and `ראשי` returns to the full feed.
 - Clicking a newsroom tab smoothly lands at the filtered news feed while preserving the sticky header/navigation.
@@ -89,3 +89,14 @@
 - Repaired escaped-newline CSS left by the V8 append so V8 source-link/lead-headline rules are valid CSS.
 - Nested HTML entities from feeds are decoded twice, removing artifacts such as `&amp;#8226;` from visible previews.
 - Added `content-visibility` to long feed cards for smoother rendering on large feeds.
+
+
+## V10 typography
+- Unified Heebo font across the full UI.
+- Editorial headline weights: lead 900, story headlines 800, navigation 700, body copy 400.
+- Google Fonts preconnect + display=swap with system fallbacks.
+
+
+## V11
+- Mobile Shabbat card now has a dedicated compact line that always shows candle-lighting and havdalah times.
+- The Shabbat side receives slightly more width on narrow screens to prevent clipping.

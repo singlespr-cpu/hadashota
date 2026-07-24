@@ -68,6 +68,8 @@ const el = {
   weatherRange: document.querySelector("#weatherRange"),
   shabbatIn: document.querySelector("#shabbatIn"),
   shabbatOut: document.querySelector("#shabbatOut"),
+  shabbatMobileIn: document.querySelector("#shabbatMobileIn"),
+  shabbatMobileOut: document.querySelector("#shabbatMobileOut"),
   shabbatCity: document.querySelector("#shabbatCity"),
   shabbatParasha: document.querySelector("#shabbatParasha"),
   trendingStrip: document.querySelector("#trendingStrip"),
@@ -1080,6 +1082,8 @@ async function loadUtilities() {
     if (el.weatherRange) el.weatherRange.textContent = "נסה שוב מאוחר יותר";
     if (el.shabbatIn) el.shabbatIn.textContent = "—";
     if (el.shabbatOut) el.shabbatOut.textContent = "—";
+    if (el.shabbatMobileIn) el.shabbatMobileIn.textContent = "—";
+    if (el.shabbatMobileOut) el.shabbatMobileOut.textContent = "—";
   }
 }
 
@@ -1101,9 +1105,13 @@ function renderUtilities(data) {
 
   const shabbat = data?.shabbat;
   if (shabbat) {
-    el.shabbatIn.textContent = formatUtilityTime(shabbat.candleLighting);
-    el.shabbatOut.textContent = formatUtilityTime(shabbat.havdalah);
-    el.shabbatParasha.textContent = shabbat.parasha ? `· ${shabbat.parasha}` : "";
+    const candleLighting = formatUtilityTime(shabbat.candleLighting);
+    const havdalah = formatUtilityTime(shabbat.havdalah);
+    if (el.shabbatIn) el.shabbatIn.textContent = candleLighting;
+    if (el.shabbatOut) el.shabbatOut.textContent = havdalah;
+    if (el.shabbatMobileIn) el.shabbatMobileIn.textContent = candleLighting;
+    if (el.shabbatMobileOut) el.shabbatMobileOut.textContent = havdalah;
+    if (el.shabbatParasha) el.shabbatParasha.textContent = shabbat.parasha ? `· ${shabbat.parasha}` : "";
   }
 }
 

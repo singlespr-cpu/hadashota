@@ -1771,3 +1771,175 @@ html[data-theme="dark"] .nav-item[aria-current="page"] {
   .news-title { font-size: 17px !important; }
   .lead-story h2 { font-size: 18px !important; }
 }
+
+
+/* =========================================================
+   HADASHOTA V10 — Heebo editorial typography
+   ========================================================= */
+:root {
+  --hadashota-ui-font: "Heebo", Arial, "Segoe UI", sans-serif;
+}
+
+html, body, button, input, select, textarea,
+body h1, body h2, body h3, body h4, body h5, body h6,
+body p, body a, body span, body strong, body b, body small,
+body label, body summary, body time {
+  font-family: var(--hadashota-ui-font) !important;
+}
+
+/* Strong Israeli-news hierarchy: bold headlines, calm readable body copy. */
+.brand-copy strong { font-weight: 900 !important; }
+.nav-item,
+.filter-chip,
+.segmented button,
+.header-action-button,
+.auto-refresh-pill,
+.live-pill { font-weight: 700 !important; }
+
+.lead-story h2,
+.lead-story h2 a {
+  font-weight: 900 !important;
+  letter-spacing: -.035em !important;
+}
+
+.news-title,
+.news-title a,
+.flash-item strong,
+.sidebar-card h3,
+.section-head h2 {
+  font-weight: 800 !important;
+  letter-spacing: -.025em !important;
+}
+
+.news-preview,
+.lead-story-summary,
+.footer-copy,
+.modal-card p {
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+}
+
+.news-meta,
+.source-name,
+.section-kicker,
+.trending-label,
+.utility-label {
+  font-family: var(--hadashota-ui-font) !important;
+}
+
+.source-name { font-weight: 700 !important; }
+.news-meta { font-weight: 400 !important; }
+.section-kicker, .trending-label, .utility-label { font-weight: 700 !important; }
+
+/* Prevent legacy fallback stacks from creating visibly different Hebrew glyphs. */
+.news-card *,
+.lead-story *,
+.flash-deck *,
+.sidebar-card *,
+.primary-nav *,
+.filters-panel *,
+.topbar *,
+.utility-strip *,
+.trending-strip *,
+.modal-card *,
+.site-footer * {
+  font-family: var(--hadashota-ui-font) !important;
+}
+
+
+/* =========================================================
+   HADASHOTA V11 — guaranteed mobile Shabbat visibility
+   ========================================================= */
+.shabbat-mobile-line {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  /* Give Shabbat slightly more room than weather on narrow screens. */
+  .portal-strip {
+    grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr) !important;
+  }
+
+  .portal-strip > .shabbat-card {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  .shabbat-card .utility-head {
+    min-height: 15px !important;
+    height: 15px !important;
+    overflow: hidden !important;
+  }
+
+  .shabbat-card .utility-icon {
+    display: none !important;
+  }
+
+  .shabbat-card .utility-label {
+    display: block !important;
+    width: 100% !important;
+    font-size: 9.5px !important;
+    line-height: 1 !important;
+    color: #667085 !important;
+    white-space: nowrap !important;
+  }
+
+  .shabbat-card .shabbat-times {
+    display: none !important;
+  }
+
+  .shabbat-mobile-line {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: flex-start !important;
+    gap: 4px !important;
+    direction: rtl !important;
+    width: 100% !important;
+    margin-top: 5px !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    line-height: 1 !important;
+    color: #101828 !important;
+  }
+
+  .shabbat-mobile-line span {
+    font-size: 9.5px !important;
+    font-weight: 600 !important;
+    color: #667085 !important;
+  }
+
+  .shabbat-mobile-line strong {
+    font-size: 15px !important;
+    line-height: 1 !important;
+    font-weight: 800 !important;
+    letter-spacing: -.02em !important;
+    color: #101828 !important;
+  }
+
+  .shabbat-mobile-line i {
+    font-style: normal !important;
+    font-size: 10px !important;
+    color: #98a2b3 !important;
+  }
+
+  html[data-theme="dark"] .shabbat-card .utility-label,
+  html[data-theme="dark"] .shabbat-mobile-line span {
+    color: #a5afbd !important;
+  }
+
+  html[data-theme="dark"] .shabbat-mobile-line strong {
+    color: #f7f8fb !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .portal-strip {
+    grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr) !important;
+  }
+  .shabbat-mobile-line { gap: 3px !important; }
+  .shabbat-mobile-line span { font-size: 9px !important; }
+  .shabbat-mobile-line strong { font-size: 14px !important; }
+}

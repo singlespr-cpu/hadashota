@@ -15,6 +15,9 @@
   <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <script>
     (() => {
       const saved = localStorage.getItem("hadashota.theme") || localStorage.getItem("pulse.theme");
@@ -144,6 +147,9 @@
         <div class="utility-head">
           <span class="utility-icon">✦</span>
           <span class="utility-label">השבת הקרובה</span>
+        </div>
+        <div class="shabbat-mobile-line" aria-label="זמני כניסת ויציאת שבת">
+          <span>כניסה</span><strong id="shabbatMobileIn">—</strong><i>·</i><span>יציאה</span><strong id="shabbatMobileOut">—</strong>
         </div>
         <div class="shabbat-times">
           <div><span>כניסה</span><strong id="shabbatIn">—</strong></div>
