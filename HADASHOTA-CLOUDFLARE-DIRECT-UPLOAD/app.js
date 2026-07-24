@@ -102,7 +102,8 @@ const el = {
   aboutBtn: document.querySelector("#aboutBtn"),
   contactBtn: document.querySelector("#contactBtn"),
   aboutModal: document.querySelector("#aboutModal"),
-  contactModal: document.querySelector("#contactModal")
+  contactModal: document.querySelector("#contactModal"),
+  backToTop: document.querySelector("#backToTop")
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
@@ -189,7 +190,11 @@ function bindEvents() {
     }, 120);
   });
 
-  el.refreshBtn.addEventListener("click", () => loadNews(true));
+  el.refreshBtn.addEventListener("click", () => { loadNews(true); loadUtilities(); });
+  el.backToTop?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  window.addEventListener("scroll", () => {
+    el.backToTop?.classList.toggle("visible", window.scrollY > 700);
+  }, { passive: true });
   el.themeToggle.addEventListener("click", () => {
     const isDark = document.documentElement.dataset.theme === "dark";
     if (isDark) {
@@ -1297,7 +1302,10 @@ async function loadUtilities() {
   if (!el.citySelect) return;
   el.citySelect.value = state.city;
   try {
-    const response = await fetch(`/api/utilities?city=${encodeURIComponent(state.city)}`, { headers: { Accept: "application/json" } });
+    const response = await fetch(`/api/utilities?city=${encodeURIComponent(state.city)}&t=${Date.now()}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" }
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     renderUtilities(data);
@@ -1311,10 +1319,13 @@ async function loadUtilities() {
     if (el.shabbatMobileOut) el.shabbatMobileOut.textContent = "—";
     if (el.usdRate) el.usdRate.textContent = "—";
     if (el.eurRate) el.eurRate.textContent = "—";
-    if (el.currencyMeta) el.currencyMeta.textContent = "לא זמין כרגע";
-    if (el.currencyCredit) {
-      el.currencyCredit.textContent = "שערי שוק: לא זמין כרגע";
-      el.currencyCredit.href = "https://finance.yahoo.com/markets/currencies/";
+    const restored = restoreLastGoodCurrency();
+    if (!restored) {
+      if (el.currencyMeta) el.currencyMeta.textContent = "לא זמין כרגע";
+      if (el.currencyCredit) {
+        el.currencyCredit.textContent = "שערי שוק: לא זמין כרגע";
+        el.currencyCredit.href = "https://finance.yahoo.com/markets/currencies/";
+      }
     }
   }
 }
@@ -1350,24 +1361,62 @@ function renderUtilities(data) {
   if (exchangeRates) {
     if (el.usdRate) el.usdRate.textContent = formatExchangeRate(exchangeRates.USD);
     if (el.eurRate) el.eurRate.textContent = formatExchangeRate(exchangeRates.EUR);
-    if (el.currencyMeta) {
-      if (exchangeRates.live) {
-        const time = formatExchangeRateTime(exchangeRates.date);
-        el.currencyMeta.textContent = time ? `שוק עולמי · ${time}` : "שוק עולמי · אונליין";
-      } else {
-        const date = formatExchangeRateDate(exchangeRates.date);
-        el.currencyMeta.textContent = date ? `בנק ישראל · ${date}` : "בנק ישראל · גיבוי";
-      }
+    renderCurrencySource(exchangeRates);
+    persistLastGoodCurrency(exchangeRates);
+  }
+}
+
+
+function renderCurrencySource(exchangeRates, cached = false) {
+  if (!exchangeRates) return;
+  const source = String(exchangeRates.source || "");
+  if (el.currencyMeta) {
+    if (exchangeRates.live) {
+      const time = formatExchangeRateTime(exchangeRates.date);
+      el.currencyMeta.textContent = time ? `שוק עולמי · ${time}` : "שוק עולמי · אונליין";
+    } else if (source === "Frankfurter") {
+      const date = formatExchangeRateDate(exchangeRates.date);
+      el.currencyMeta.textContent = `${cached ? "נתון אחרון · " : "אונליין · "}${date || "שער גלובלי"}`;
+    } else {
+      const date = formatExchangeRateDate(exchangeRates.date);
+      el.currencyMeta.textContent = `${cached ? "נתון אחרון · " : "בנק ישראל · "}${date || "גיבוי"}`;
     }
-    if (el.currencyCredit) {
-      if (exchangeRates.live) {
-        el.currencyCredit.textContent = "שערי שוק: Yahoo Finance";
-        el.currencyCredit.href = "https://finance.yahoo.com/markets/currencies/";
-      } else {
-        el.currencyCredit.textContent = "שערים יציגים: בנק ישראל";
-        el.currencyCredit.href = "https://www.boi.org.il/roles/markets/exchangerates/";
-      }
+  }
+  if (el.currencyCredit) {
+    if (exchangeRates.live) {
+      el.currencyCredit.textContent = "שערי שוק: Yahoo Finance";
+      el.currencyCredit.href = "https://finance.yahoo.com/markets/currencies/";
+    } else if (source === "Frankfurter") {
+      el.currencyCredit.textContent = "שערי מטבע: Frankfurter";
+      el.currencyCredit.href = "https://frankfurter.dev/";
+    } else {
+      el.currencyCredit.textContent = "שערים יציגים: בנק ישראל";
+      el.currencyCredit.href = "https://www.boi.org.il/roles/markets/exchangerates/";
     }
+  }
+}
+
+function persistLastGoodCurrency(exchangeRates) {
+  if (!exchangeRates) return;
+  const USD = Number(exchangeRates.USD);
+  const EUR = Number(exchangeRates.EUR);
+  if (!Number.isFinite(USD) || !Number.isFinite(EUR)) return;
+  try {
+    localStorage.setItem("hadashota.lastGoodCurrency.v1", JSON.stringify({ ...exchangeRates, USD, EUR, savedAt: Date.now() }));
+  } catch {}
+}
+
+function restoreLastGoodCurrency() {
+  try {
+    const cached = JSON.parse(localStorage.getItem("hadashota.lastGoodCurrency.v1") || "null");
+    if (!cached || !Number.isFinite(Number(cached.USD)) || !Number.isFinite(Number(cached.EUR))) return false;
+    if (Date.now() - Number(cached.savedAt || 0) > 7 * 24 * 60 * 60 * 1000) return false;
+    if (el.usdRate) el.usdRate.textContent = formatExchangeRate(cached.USD);
+    if (el.eurRate) el.eurRate.textContent = formatExchangeRate(cached.EUR);
+    renderCurrencySource(cached, true);
+    return true;
+  } catch {
+    return false;
   }
 }
 

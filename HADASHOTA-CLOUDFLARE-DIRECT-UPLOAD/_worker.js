@@ -187,32 +187,37 @@ async function handleUtilities(request, ctx) {
   const usdMarketUrl = "https://query1.finance.yahoo.com/v8/finance/chart/USDILS=X?interval=1m&range=1d";
   const eurMarketUrl = "https://query1.finance.yahoo.com/v8/finance/chart/EURILS=X?interval=1m&range=1d";
   const exchangeRatesUrl = "https://boi.org.il/PublicApi/GetExchangeRates?asXML=true";
+  const frankfurterUrl = "https://api.frankfurter.dev/v1/latest?base=USD&symbols=ILS,EUR";
 
-  const [weatherResult, shabbatResult, usdMarketResult, eurMarketResult, boiResult] = await Promise.allSettled([
+  const [weatherResult, shabbatResult, usdMarketResult, eurMarketResult, frankfurterResult, boiResult] = await Promise.allSettled([
     fetchJsonWithTimeout(weatherUrl.toString(), 4500),
     fetchJsonWithTimeout(shabbatUrl.toString(), 4500),
-    fetchJsonFreshWithTimeout(usdMarketUrl, 4500),
-    fetchJsonFreshWithTimeout(eurMarketUrl, 4500),
-    fetchTextWithTimeout(exchangeRatesUrl, 4500)
+    fetchJsonFreshWithTimeout(usdMarketUrl, 5000),
+    fetchJsonFreshWithTimeout(eurMarketUrl, 5000),
+    fetchJsonWithTimeout(frankfurterUrl, 5000),
+    fetchTextWithTimeout(exchangeRatesUrl, 5000)
   ]);
 
   const weather = weatherResult.status === "fulfilled" ? normalizeWeather(weatherResult.value) : null;
   const shabbat = shabbatResult.status === "fulfilled" ? normalizeShabbat(shabbatResult.value) : null;
   const usdMarket = usdMarketResult.status === "fulfilled" ? normalizeYahooFx(usdMarketResult.value) : null;
   const eurMarket = eurMarketResult.status === "fulfilled" ? normalizeYahooFx(eurMarketResult.value) : null;
+  const frankfurterRates = frankfurterResult.status === "fulfilled" ? normalizeFrankfurterFx(frankfurterResult.value) : null;
   const boiRates = boiResult.status === "fulfilled" ? normalizeBoiExchangeRates(boiResult.value) : null;
 
   let exchangeRates = null;
   if (Number.isFinite(usdMarket?.rate) || Number.isFinite(eurMarket?.rate)) {
     exchangeRates = {
-      USD: Number.isFinite(usdMarket?.rate) ? usdMarket.rate : boiRates?.USD ?? null,
-      EUR: Number.isFinite(eurMarket?.rate) ? eurMarket.rate : boiRates?.EUR ?? null,
+      USD: Number.isFinite(usdMarket?.rate) ? usdMarket.rate : frankfurterRates?.USD ?? boiRates?.USD ?? null,
+      EUR: Number.isFinite(eurMarket?.rate) ? eurMarket.rate : frankfurterRates?.EUR ?? boiRates?.EUR ?? null,
       date: usdMarket?.timestamp || eurMarket?.timestamp || new Date().toISOString(),
       source: "Yahoo Finance",
       live: true
     };
+  } else if (frankfurterRates) {
+    exchangeRates = { ...frankfurterRates, live: false, online: true };
   } else if (boiRates) {
-    exchangeRates = { ...boiRates, live: false };
+    exchangeRates = { ...boiRates, live: false, online: false };
   }
 
   return json({
@@ -266,6 +271,21 @@ async function fetchJsonFreshWithTimeout(url, timeoutMs) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+
+function normalizeFrankfurterFx(data) {
+  const ilsPerUsd = Number(data?.rates?.ILS);
+  const eurPerUsd = Number(data?.rates?.EUR);
+  const USD = Number.isFinite(ilsPerUsd) ? ilsPerUsd : null;
+  const EUR = Number.isFinite(ilsPerUsd) && Number.isFinite(eurPerUsd) && eurPerUsd > 0 ? ilsPerUsd / eurPerUsd : null;
+  if (!Number.isFinite(USD) && !Number.isFinite(EUR)) return null;
+  return {
+    USD,
+    EUR,
+    date: data?.date || null,
+    source: "Frankfurter"
+  };
 }
 
 function normalizeYahooFx(data) {
