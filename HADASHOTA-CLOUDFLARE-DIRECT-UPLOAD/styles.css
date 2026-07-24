@@ -2616,3 +2616,116 @@ html[data-theme="dark"] .data-status.is-major {
   .lead-story-topline { padding-bottom:2px; }
   .lead-story-signal { border-radius:999px !important; }
 }
+
+
+/* =========================================================
+   HADASHOTA V22 — live latest-news wire
+   ========================================================= */
+.hero-news-grid .flash-deck {
+  overflow:hidden !important;
+}
+.hero-news-grid .flash-deck-label {
+  position:relative;
+  z-index:2;
+}
+.hero-news-grid .flash-deck-label b {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  direction:ltr;
+  letter-spacing:.04em;
+}
+.flash-live-dot {
+  width:8px;
+  height:8px;
+  display:inline-block;
+  border-radius:50%;
+  background:#ef2c2c;
+  box-shadow:0 0 0 4px rgba(239,44,44,.10);
+  animation:flashLivePulse 1.7s ease-in-out infinite;
+}
+@keyframes flashLivePulse { 50% { opacity:.45; box-shadow:0 0 0 7px rgba(239,44,44,0); } }
+.hero-news-grid .flash-deck-viewport {
+  position:relative;
+  flex:1 1 auto;
+  min-height:0;
+  max-height:326px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:#d0d5dd transparent;
+  scroll-behavior:smooth;
+}
+.hero-news-grid .flash-deck-viewport::-webkit-scrollbar { width:5px; }
+.hero-news-grid .flash-deck-viewport::-webkit-scrollbar-thumb { background:#d0d5dd; border-radius:999px; }
+.hero-news-grid .flash-deck-viewport::after {
+  content:"";
+  position:sticky;
+  display:block;
+  pointer-events:none;
+  bottom:0;
+  height:34px;
+  margin-top:-34px;
+  background:linear-gradient(to bottom,rgba(255,255,255,0),rgba(255,255,255,.96));
+}
+.hero-news-grid .flash-deck-items { display:flex !important; flex-direction:column !important; }
+.hero-news-grid .flash-item {
+  flex:0 0 auto !important;
+  min-height:58px !important;
+  padding:10px 14px !important;
+}
+.hero-news-grid .flash-item:first-child {
+  background:linear-gradient(90deg,rgba(239,44,44,.045),transparent 65%);
+}
+.hero-news-grid .flash-item span {
+  font-variant-numeric:tabular-nums;
+}
+.flash-more-button {
+  display:none;
+  width:100%;
+  min-height:38px;
+  border:0;
+  border-top:1px solid #edf0f4;
+  background:#fafbfc;
+  color:#475467;
+  font:inherit;
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer;
+}
+.flash-more-button:hover { background:#f4f6f8; color:#101828; }
+html[data-theme="dark"] .hero-news-grid .flash-deck-viewport { scrollbar-color:#3b4655 transparent; }
+html[data-theme="dark"] .hero-news-grid .flash-deck-viewport::after { background:linear-gradient(to bottom,rgba(21,27,36,0),rgba(21,27,36,.97)); }
+html[data-theme="dark"] .hero-news-grid .flash-item:first-child { background:linear-gradient(90deg,rgba(239,68,68,.08),transparent 65%); }
+html[data-theme="dark"] .flash-more-button { background:#171e27; border-top-color:#29313c; color:#b7c0cd; }
+html[data-theme="dark"] .flash-more-button:hover { background:#1c2430; color:#fff; }
+
+@media (max-width:700px) {
+  /* On mobile, keep the wire still while the user reads. */
+  .hero-news-grid .flash-deck { display:block !important; }
+  .hero-news-grid .flash-deck-viewport {
+    max-height:292px;
+    overflow:hidden;
+    scroll-behavior:auto;
+  }
+  .hero-news-grid .flash-deck-items .flash-item:nth-child(n+6) { display:none !important; }
+  .hero-news-grid .flash-deck.flash-expanded .flash-deck-viewport {
+    max-height:min(62vh, 540px);
+    overflow-y:auto;
+  }
+  .hero-news-grid .flash-deck.flash-expanded .flash-deck-items .flash-item { display:flex !important; }
+  .hero-news-grid .flash-deck-viewport::after { display:none; }
+  .flash-more-button:not(.hidden) { display:block; }
+  .hero-news-grid .flash-deck-label { min-height:44px !important; padding:0 12px !important; }
+  .hero-news-grid .flash-deck-label span { font-size:13px !important; }
+  .hero-news-grid .flash-deck-label b { font-size:12px !important; }
+  .flash-live-dot { width:7px; height:7px; }
+  .hero-news-grid .flash-item { min-height:58px !important; padding:9px 12px !important; }
+  .hero-news-grid .flash-item strong { font-size:13.5px !important; line-height:1.35 !important; -webkit-line-clamp:2 !important; }
+  .hero-news-grid .flash-item span { font-size:10.5px !important; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .flash-live-dot { animation:none !important; }
+  .hero-news-grid .flash-deck-viewport { scroll-behavior:auto !important; }
+}

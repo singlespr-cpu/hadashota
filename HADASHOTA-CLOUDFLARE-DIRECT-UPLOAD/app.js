@@ -97,6 +97,8 @@ const el = {
   refreshCountdown: document.querySelector("#refreshCountdown"),
   flashDeck: document.querySelector("#flashDeck"),
   flashDeckItems: document.querySelector("#flashDeckItems"),
+  flashDeckViewport: document.querySelector("#flashDeckViewport"),
+  flashMoreButton: document.querySelector("#flashMoreButton"),
   locateBtn: document.querySelector("#locateBtn"),
   autoRefreshPill: document.querySelector("#autoRefreshPill"),
   quickMenu: document.querySelector("#quickMenu"),
@@ -307,6 +309,22 @@ function bindEvents() {
   });
 
   el.locateBtn?.addEventListener("click", locateNearestCity);
+
+  el.flashMoreButton?.addEventListener("click", () => {
+    state.flashDeckExpanded = !state.flashDeckExpanded;
+    el.flashDeck.classList.toggle("flash-expanded", state.flashDeckExpanded);
+    el.flashMoreButton.setAttribute("aria-expanded", state.flashDeckExpanded ? "true" : "false");
+    el.flashMoreButton.innerHTML = state.flashDeckExpanded
+      ? 'פחות אחרונים <span aria-hidden="true">↑</span>'
+      : 'עוד אחרונים <span aria-hidden="true">↓</span>';
+  });
+
+  ["mouseenter", "focusin", "touchstart"].forEach((eventName) => {
+    el.flashDeckViewport?.addEventListener(eventName, () => pauseFlashDeck());
+  });
+  ["mouseleave", "focusout"].forEach((eventName) => {
+    el.flashDeckViewport?.addEventListener(eventName, () => resumeFlashDeckSoon());
+  });
 
   el.resetFilters.addEventListener("click", resetFilters);
   el.filtersToggle.addEventListener("click", () => {
@@ -1026,34 +1044,80 @@ function renderBreaking() {
 
 function renderFlashDeck() {
   if (!el.flashDeck || !el.flashDeckItems) return;
-  const cutoff = Date.now() - 3 * 60 * 60 * 1000;
-  const seen = new Set();
+  const cutoff = Date.now() - 6 * 60 * 60 * 1000;
   const preferred = state.items
     .filter((item) => item.sourceKind === "site" && item.url && Date.parse(item.latestReportAt || item.publishedAt) >= cutoff)
-    .sort((a, b) => {
-      const aMajor = MAINSTREAM_PUBLISHERS.includes(a.publisher) ? 1 : 0;
-      const bMajor = MAINSTREAM_PUBLISHERS.includes(b.publisher) ? 1 : 0;
-      const timeDiff = Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt);
-      if (Math.abs(timeDiff) > 20 * 60 * 1000) return timeDiff;
-      return bMajor - aMajor || timeDiff;
-    })
-    .filter((item) => {
-      const key = item.publisher || item.sourceName;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 5);
+    .sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt))
+    .slice(0, 20);
+
+  clearFlashDeckTimer();
 
   if (preferred.length < 2) {
     el.flashDeck.classList.add("hidden");
     return;
   }
-  el.flashDeckItems.innerHTML = preferred.map((item) => `<a class="flash-item" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">
+
+  el.flashDeckItems.innerHTML = preferred.map((item, index) => `<a class="flash-item" data-flash-index="${index}" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">
     <span>${escapeHtml(cleanDisplayText(item.sourceName))} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
     <strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
   </a>`).join("");
+
   el.flashDeck.classList.remove("hidden");
+  el.flashDeck.classList.toggle("flash-expanded", state.flashDeckExpanded);
+  if (el.flashMoreButton) {
+    el.flashMoreButton.classList.toggle("hidden", preferred.length <= 5);
+    el.flashMoreButton.setAttribute("aria-expanded", state.flashDeckExpanded ? "true" : "false");
+    el.flashMoreButton.innerHTML = state.flashDeckExpanded
+      ? 'פחות אחרונים <span aria-hidden="true">↑</span>'
+      : 'עוד אחרונים <span aria-hidden="true">↓</span>';
+  }
+
+  if (el.flashDeckViewport) el.flashDeckViewport.scrollTop = 0;
+  startFlashDeckAutoscroll();
+}
+
+function clearFlashDeckTimer() {
+  if (state.flashDeckTimer) clearTimeout(state.flashDeckTimer);
+  state.flashDeckTimer = null;
+}
+
+function pauseFlashDeck() {
+  state.flashDeckPaused = true;
+  clearFlashDeckTimer();
+}
+
+function resumeFlashDeckSoon() {
+  state.flashDeckPaused = false;
+  clearFlashDeckTimer();
+  state.flashDeckTimer = setTimeout(startFlashDeckAutoscroll, 2200);
+}
+
+function startFlashDeckAutoscroll() {
+  clearFlashDeckTimer();
+  if (!el.flashDeckViewport || !el.flashDeckItems || state.flashDeckPaused) return;
+  if (window.matchMedia("(max-width: 700px)").matches || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const items = [...el.flashDeckItems.querySelectorAll(".flash-item")];
+  if (items.length <= 5) return;
+
+  const tick = () => {
+    if (state.flashDeckPaused || document.hidden || window.matchMedia("(max-width: 700px)").matches) {
+      state.flashDeckTimer = setTimeout(tick, 4500);
+      return;
+    }
+    const viewport = el.flashDeckViewport;
+    const first = items[0];
+    const step = first ? first.getBoundingClientRect().height : 58;
+    const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    const next = viewport.scrollTop + step;
+    if (next >= maxScroll - 2) {
+      viewport.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      viewport.scrollTo({ top: next, behavior: "smooth" });
+    }
+    state.flashDeckTimer = setTimeout(tick, 4800);
+  };
+
+  state.flashDeckTimer = setTimeout(tick, 4800);
 }
 
 function openStorySource(url) {
