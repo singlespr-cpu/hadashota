@@ -1603,4 +1603,171 @@ html[data-theme="dark"] .connection-state { background:#141a22; border-color:#2b
 html[data-theme="dark"] .connection-state strong { color:#edf1f6; }
 html[data-theme="dark"] .connection-state small { color:#8995a5; }
 html[data-theme="dark"] .connection-spinner { border-color:#303946; border-top-color:#ff7770; }
-\n\n/* =========================================================\n   HADASHOTA V8 — source links + fuller lead headline\n   ========================================================= */\n\n/* The whole story card is an accessible link, including Telegram reports. */\n.news-card[data-story-url] { cursor: pointer !important; }\n.news-card[data-story-url]:focus-visible {\n  outline: 3px solid rgba(239,68,68,.22);\n  outline-offset: 3px;\n  border-color: #f2a29e !important;\n}\n.news-card[data-story-url] .news-title a {\n  color: inherit;\n  text-decoration: none;\n}\n.news-card[data-story-url] .news-title a:hover { color: #d83d36; }\n.telegram-story .news-title a { cursor: pointer !important; }\n.telegram-image { cursor: pointer !important; }\n\n/* Fit substantially more of the central headline without making it feel small. */\n.lead-story h2 {\n  font-size: clamp(21px, 1.65vw, 28px) !important;\n  line-height: 1.16 !important;\n  letter-spacing: -.028em !important;\n  max-width: none !important;\n}\n.lead-story h2 a {\n  display: -webkit-box !important;\n  -webkit-line-clamp: 4 !important;\n  -webkit-box-orient: vertical !important;\n  overflow: hidden !important;\n}\n\n@media (max-width: 900px) {\n  .lead-story h2 { font-size: 23px !important; line-height: 1.18 !important; }\n}\n\n@media (max-width: 700px) {\n  .lead-story h2 { font-size: 19.5px !important; line-height: 1.2 !important; }\n  .lead-story h2 a { -webkit-line-clamp: 5 !important; }\n}\n\n@media (max-width: 470px) {\n  .lead-story h2 { font-size: 18px !important; }\n}\n
+
+
+/* =========================================================
+   HADASHOTA V8 — source links + fuller lead headline
+   ========================================================= */
+
+/* The whole story card is an accessible link, including Telegram reports. */
+.news-card[data-story-url] { cursor: pointer !important; }
+.news-card[data-story-url]:focus-visible {
+  outline: 3px solid rgba(239,68,68,.22);
+  outline-offset: 3px;
+  border-color: #f2a29e !important;
+}
+.news-card[data-story-url] .news-title a {
+  color: inherit;
+  text-decoration: none;
+}
+.news-card[data-story-url] .news-title a:hover { color: #d83d36; }
+.telegram-story .news-title a { cursor: pointer !important; }
+.telegram-image { cursor: pointer !important; }
+
+/* Fit substantially more of the central headline without making it feel small. */
+.lead-story h2 {
+  font-size: clamp(21px, 1.65vw, 28px) !important;
+  line-height: 1.16 !important;
+  letter-spacing: -.028em !important;
+  max-width: none !important;
+}
+.lead-story h2 a {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 4 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+@media (max-width: 900px) {
+  .lead-story h2 { font-size: 23px !important; line-height: 1.18 !important; }
+}
+
+@media (max-width: 700px) {
+  .lead-story h2 { font-size: 19.5px !important; line-height: 1.2 !important; }
+  .lead-story h2 a { -webkit-line-clamp: 5 !important; }
+}
+
+@media (max-width: 470px) {
+  .lead-story h2 { font-size: 18px !important; }
+}
+
+/* =========================================================
+   HADASHOTA V9 — newsroom navigation, unified Hebrew type & polish
+   ========================================================= */
+
+:root {
+  --hadashota-ui-font: Arial, "Segoe UI", sans-serif;
+}
+
+/* One local/system font stack everywhere: no external font dependency and no
+   visual jump between section headings, navigation and news cards. */
+html, body, button, input, select, textarea,
+body h1, body h2, body h3, body h4, body h5, body h6,
+body p, body a, body span, body strong, body b, body small,
+body label, body summary, body time {
+  font-family: var(--hadashota-ui-font) !important;
+  font-synthesis: none;
+}
+
+.nav-item,
+.section-head h2,
+.news-title,
+.lead-story h2,
+.flash-item strong,
+.sidebar-card h3,
+.modal-card h2 {
+  font-weight: 700 !important;
+}
+
+/* Primary newsroom navigation now lands exactly at the filtered feed. */
+.feed-column {
+  scroll-margin-top: 142px;
+}
+.nav-item[aria-current="page"] {
+  box-shadow: inset 0 0 0 1px rgba(239,62,62,.10);
+}
+
+/* Cleaner editorial rhythm: a little less "boxed", clearer hierarchy. */
+.section-head {
+  padding: 4px 2px 13px !important;
+  border-bottom: 1px solid #e7eaf0;
+  margin-bottom: 12px !important;
+}
+.section-kicker {
+  color: #87909d !important;
+  font-weight: 700 !important;
+}
+.section-head h2 {
+  font-size: 27px !important;
+  letter-spacing: -.018em !important;
+}
+.news-card {
+  border-radius: 16px !important;
+  box-shadow: 0 5px 18px rgba(17,24,39,.035) !important;
+  content-visibility: auto;
+  contain-intrinsic-size: 185px;
+}
+.news-card:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 11px 28px rgba(17,24,39,.075) !important;
+}
+.news-title {
+  font-size: 20px !important;
+  line-height: 1.38 !important;
+  letter-spacing: 0 !important;
+}
+.news-preview {
+  font-size: 14.5px !important;
+  line-height: 1.62 !important;
+}
+.news-meta {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+.source-name { font-weight: 700 !important; }
+
+/* Preserve V8 source-link behavior and fuller lead headline (the original V8
+   append contained escaped newlines, now repaired in this full build). */
+.news-card[data-story-url] { cursor: pointer !important; }
+.news-card[data-story-url]:focus-visible {
+  outline: 3px solid rgba(239,68,68,.22);
+  outline-offset: 3px;
+  border-color: #f2a29e !important;
+}
+.news-card[data-story-url] .news-title a { color: inherit; text-decoration: none; }
+.news-card[data-story-url] .news-title a:hover { color: #d83d36; }
+.telegram-story .news-title a, .telegram-image { cursor: pointer !important; }
+.lead-story h2 {
+  font-size: clamp(21px, 1.65vw, 28px) !important;
+  line-height: 1.18 !important;
+  letter-spacing: -.018em !important;
+}
+.lead-story h2 a {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 4 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+html[data-theme="dark"] .section-head { border-bottom-color: #29323d; }
+html[data-theme="dark"] .section-kicker { color: #8f9aaa !important; }
+html[data-theme="dark"] .nav-item[aria-current="page"] {
+  box-shadow: inset 0 0 0 1px rgba(255,139,132,.12);
+}
+
+@media (max-width: 900px) {
+  .feed-column { scroll-margin-top: 132px; }
+  .lead-story h2 { font-size: 23px !important; }
+}
+@media (max-width: 700px) {
+  .feed-column { scroll-margin-top: 118px; }
+  .section-head h2 { font-size: 23px !important; }
+  .news-title { font-size: 18px !important; }
+  .news-preview { font-size: 13px !important; }
+  .lead-story h2 { font-size: 19.5px !important; line-height: 1.22 !important; }
+  .lead-story h2 a { -webkit-line-clamp: 5 !important; }
+}
+@media (max-width: 470px) {
+  .news-title { font-size: 17px !important; }
+  .lead-story h2 { font-size: 18px !important; }
+}

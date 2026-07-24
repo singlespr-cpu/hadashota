@@ -212,17 +212,24 @@ function bindEvents() {
   document.querySelector(".news-nav")?.addEventListener("click", (event) => {
     const cat = event.target.closest("[data-quick-category]");
     const kind = event.target.closest("[data-quick-kind]");
+    if (!cat && !kind) return;
+
+    // The newsroom bar behaves like primary navigation, not like an extra AND filter.
+    // Category tabs show that category across all sources; source tabs show that source
+    // type across all categories. "ראשי" always returns to the complete feed.
     if (cat) {
       state.category = cat.dataset.quickCategory;
-      localStorage.setItem("hadashota.category", state.category);
-      syncControlsFromState();
-      render();
-    } else if (kind) {
+      state.kind = "all";
+    } else {
       state.kind = kind.dataset.quickKind;
-      localStorage.setItem("hadashota.kind", state.kind);
-      syncControlsFromState();
-      render();
+      state.category = "all";
     }
+
+    localStorage.setItem("hadashota.category", state.category);
+    localStorage.setItem("hadashota.kind", state.kind);
+    syncControlsFromState();
+    render();
+    scrollToFeedFromNewsroomNav();
   });
 
   el.locateBtn?.addEventListener("click", locateNearestCity);
@@ -634,7 +641,7 @@ function renderFeed() {
   const items = filteredItems();
   el.resultsCount.textContent = `${items.length} עדכונים`;
   const timeLabel = state.hours === 1 ? "השעה האחרונה" : state.hours === 3 ? "3 השעות האחרונות" : "24 השעות האחרונות";
-  el.feedTitle.textContent = `${CATEGORY_LABELS[state.category] || "כל העדכונים"} · ${timeLabel}`;
+  el.feedTitle.textContent = `${currentFeedLabel()} · ${timeLabel}`;
   el.emptyState.classList.toggle("hidden", items.length > 0);
   el.feed.classList.toggle("hidden", items.length === 0);
 
@@ -644,6 +651,23 @@ function renderFeed() {
   }
 
   el.feed.innerHTML = items.map(newsCardHtml).join("");
+}
+
+function currentFeedLabel() {
+  const categoryLabel = CATEGORY_LABELS[state.category] || "כל העדכונים";
+  const kindLabels = { site: "אתרי חדשות", telegram: "Telegram", official: "רשמי בלבד" };
+  const kindLabel = kindLabels[state.kind] || "";
+  if (state.category === "all" && kindLabel) return kindLabel;
+  if (state.category !== "all" && kindLabel) return `${categoryLabel} · ${kindLabel}`;
+  return categoryLabel;
+}
+
+function scrollToFeedFromNewsroomNav() {
+  const target = document.querySelector(".feed-column");
+  if (!target) return;
+  requestAnimationFrame(() => {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 function filteredItems() {
@@ -961,8 +985,16 @@ function syncControlsFromState() {
   if (el.autoRefreshPill) el.autoRefreshPill.querySelector("span").textContent = state.autoRefresh ? "רענון אוטומטי" : "רענון כבוי";
   if (el.quickAutoStatus) el.quickAutoStatus.textContent = state.autoRefresh ? "פעיל — מתעדכן כל דקה" : "רענון כבוי";
   if (el.citySelect) el.citySelect.value = state.city;
-  document.querySelectorAll("[data-quick-category]").forEach((button) => button.classList.toggle("active", button.dataset.quickCategory === state.category));
-  document.querySelectorAll("[data-quick-kind]").forEach((button) => button.classList.toggle("active", button.dataset.quickKind === state.kind));
+  document.querySelectorAll("[data-quick-category]").forEach((button) => {
+    const active = state.kind === "all" && button.dataset.quickCategory === state.category;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  document.querySelectorAll("[data-quick-kind]").forEach((button) => {
+    const active = state.category === "all" && button.dataset.quickKind === state.kind;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
 }
 
 function syncTheme() {

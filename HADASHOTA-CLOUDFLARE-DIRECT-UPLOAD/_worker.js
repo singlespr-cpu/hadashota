@@ -830,15 +830,18 @@ function decodeEntities(value) {
   const entities = {
     amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—", hellip: "…", laquo: "«", raquo: "»"
   };
-  return String(value || "")
-    .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (_, code) => {
-      if (code[0] === "#") {
-        const hex = code[1]?.toLowerCase() === "x";
-        const n = parseInt(code.slice(hex ? 2 : 1), hex ? 16 : 10);
-        return Number.isFinite(n) ? String.fromCodePoint(n) : _;
-      }
-      return entities[code.toLowerCase()] ?? _;
-    });
+  const decodePass = (input) => String(input || "").replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, code) => {
+    if (code[0] === "#") {
+      const hex = code[1]?.toLowerCase() === "x";
+      const n = parseInt(code.slice(hex ? 2 : 1), hex ? 16 : 10);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : match;
+    }
+    return entities[code.toLowerCase()] ?? match;
+  });
+
+  // A few publishers double-encode punctuation (for example &amp;#8226;).
+  // Two passes clean it without fetching or parsing the article page itself.
+  return decodePass(decodePass(value));
 }
 
 function normalizeSpace(value) {

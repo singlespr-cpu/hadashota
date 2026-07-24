@@ -78,3 +78,14 @@
 - Telegram-only lead and breaking stories now link to their Telegram source message.
 - Related cluster reports, including Telegram, expose their source links.
 - The central lead headline is smaller and can show up to four lines on desktop (five on mobile).
+
+
+## V9 changes
+
+- The persistent newsroom navigation is now true primary navigation: category tabs reset source-type filters, source tabs reset category filters, and `ראשי` returns to the full feed.
+- Clicking a newsroom tab smoothly lands at the filtered news feed while preserving the sticky header/navigation.
+- The feed heading now reflects source tabs too (`אתרי חדשות`, `Telegram`, `רשמי בלבד`).
+- Unified typography across navigation, headlines, metadata, cards, modals and controls using a self-contained system font stack (no third-party font dependency).
+- Repaired escaped-newline CSS left by the V8 append so V8 source-link/lead-headline rules are valid CSS.
+- Nested HTML entities from feeds are decoded twice, removing artifacts such as `&amp;#8226;` from visible previews.
+- Added `content-visibility` to long feed cards for smoother rendering on large feeds.
