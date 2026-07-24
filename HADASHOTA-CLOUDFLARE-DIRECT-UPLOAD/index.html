@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f8fb" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="application-name" content="חדשותא" />
+  <meta name="apple-mobile-web-app-title" content="חדשותא" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="canonical" href="__SITE_URL__/" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <script>
+    (() => {
+      const saved = localStorage.getItem("hadashota.theme") || localStorage.getItem("pulse.theme");
+      if (saved === "dark") document.documentElement.dataset.theme = "dark";
+    })();
+  </script>
+  <meta name="description" content="חדשותא — חדשות היום, מבזקים ועדכונים בזמן אמת מכלי התקשורת, מקורות רשמיים וערוצי Telegram ציבוריים בישראל. הכל במקום אחד, מסונן לפי שעה ונושא." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="keywords" content="חדשות, חדשות היום, מבזקי חדשות, חדשות בזמן אמת, חדשות ישראל, חדשות ביטחוניות, חדשות פוליטיות, חדשות מדיניות, מבזקים, טלגרם חדשות, חדשותא" />
+  <meta property="og:locale" content="he_IL" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="חדשותא" />
+  <meta property="og:url" content="__SITE_URL__/" />
+  <meta property="og:title" content="חדשותא | חדשות היום ומבזקים בזמן אמת" />
+  <meta property="og:description" content="כל החדשות והמבזקים החשובים בישראל במקום אחד — אתרי חדשות, מקורות רשמיים וערוצי Telegram ציבוריים, עם סינון לפי זמן ונושא." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="חדשותא | חדשות היום ומבזקים בזמן אמת" />
+  <meta name="twitter:description" content="חדשות ועדכונים בזמן אמת מכלי תקשורת, מקורות רשמיים ו-Telegram — במסך אחד." />
+  <title>חדשותא | חדשות היום ומבזקים בזמן אמת</title>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "חדשותא",
+    "alternateName": "חדשותא - חדשות בזמן אמת",
+    "url": "__SITE_URL__/",
+    "inLanguage": "he-IL",
+    "description": "חדשות היום, מבזקים ועדכונים בזמן אמת מכלי תקשורת, מקורות רשמיים וערוצי Telegram ציבוריים בישראל."
+  }
+  </script>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner shell">
+      <a class="brand" href="/" aria-label="חדשותא - דף הבית">
+        <span class="brand-mark"><span></span></span>
+        <span class="brand-copy">
+          <strong>חדשותא</strong>
+          <small>חדשות בזמן אמת</small>
+        </span>
+      </a>
+
+      <div class="topbar-actions">
+        <span class="live-pill"><i></i> LIVE</span>
+        <button class="icon-button theme-toggle" id="themeToggle" type="button" title="מעבר למצב כהה" aria-label="מעבר למצב כהה" aria-pressed="false">
+          <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
+          <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"></path></svg>
+        </button>
+        <button class="icon-button" id="refreshBtn" type="button" title="רענון עכשיו" aria-label="רענון עכשיו">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
+        </button>
+        <button class="icon-button mobile-only" id="filtersToggle" type="button" title="סינון" aria-label="פתיחת סינון">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell page">
+    <section class="hero">
+      <div>
+        <div class="eyebrow"><span id="currentDate">היום</span><b>•</b><span id="lastUpdated">טוען עדכונים...</span></div>
+        <h1>כל מה שקורה.<br><span>במסך אחד.</span></h1>
+        <p>כותרות ועדכונים מאתרי חדשות, מקורות רשמיים וערוצי Telegram ציבוריים — מאוחדים, מסוננים ומסודרים לפי זמן.</p>
+      </div>
+
+      <div class="stats-grid" aria-label="נתוני מערכת">
+        <article class="stat-card">
+          <span>מקורות פעילים</span>
+          <strong id="statSources">—</strong>
+          <small id="statSourceDetail">בודק מקורות</small>
+        </article>
+        <article class="stat-card">
+          <span>בשעה האחרונה</span>
+          <strong id="statHour">—</strong>
+          <small>עדכונים מאוחדים</small>
+        </article>
+        <article class="stat-card">
+          <span>דיווחים רשמיים</span>
+          <strong id="statOfficial">—</strong>
+          <small>צה״ל, פיקוד העורף ועוד</small>
+        </article>
+      </div>
+    </section>
+
+    <section class="lead-story hidden" id="leadStory" aria-live="polite">
+      <div class="lead-story-topline">
+        <span class="lead-story-label"><i></i> הכותרת המרכזית עכשיו</span>
+        <span class="lead-story-signal" id="leadStorySignal"></span>
+      </div>
+      <div class="lead-story-body">
+        <div class="lead-story-copy">
+          <h2><a id="leadStoryLink" href="#" target="_blank" rel="noopener noreferrer"><span id="leadStoryTitle"></span></a></h2>
+          <p id="leadStoryPreview"></p>
+          <div class="lead-story-meta">
+            <span id="leadStorySource"></span>
+            <span>•</span>
+            <span id="leadStoryAge"></span>
+            <span>•</span>
+            <strong id="leadStoryCount"></strong>
+          </div>
+          <div class="lead-story-sources" id="leadStorySources"></div>
+        </div>
+        <a class="lead-story-cta" id="leadStoryCta" href="#" target="_blank" rel="noopener noreferrer">לידיעה המלאה <span>←</span></a>
+      </div>
+    </section>
+
+    <section class="breaking-banner hidden" id="breakingBanner" aria-live="polite">
+      <div class="breaking-label"><span></span> מתעדכן עכשיו</div>
+      <a id="breakingLink" href="#" target="_blank" rel="noopener noreferrer">
+        <strong id="breakingTitle"></strong>
+        <span id="breakingMeta"></span>
+      </a>
+      <span class="breaking-arrow">←</span>
+    </section>
+
+    <section class="control-panel" id="controlPanel">
+      <div class="control-row control-row-main">
+        <label class="search-box">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input id="searchInput" type="search" placeholder="חיפוש בכותרות ובעדכונים..." autocomplete="off" />
+          <kbd>/</kbd>
+        </label>
+
+        <div class="segmented" id="timeFilters" aria-label="טווח זמן">
+          <button type="button" class="active" data-hours="1">שעה אחרונה</button>
+          <button type="button" data-hours="3">3 שעות</button>
+          <button type="button" data-hours="24">24 שעות</button>
+        </div>
+      </div>
+
+      <div class="control-row filter-scroll" id="categoryFilters" aria-label="קטגוריות">
+        <button class="filter-chip active" data-category="all"><span class="chip-dot all"></span>הכל</button>
+        <button class="filter-chip" data-category="security"><span class="chip-dot security"></span>ביטחוני</button>
+        <button class="filter-chip" data-category="politics"><span class="chip-dot politics"></span>פוליטי</button>
+        <button class="filter-chip" data-category="diplomatic"><span class="chip-dot diplomatic"></span>מדיני</button>
+        <span class="filter-divider"></span>
+        <button class="filter-chip source-kind active" data-kind="all">כל המקורות</button>
+        <button class="filter-chip source-kind" data-kind="site">אתרי חדשות</button>
+        <button class="filter-chip source-kind" data-kind="telegram">Telegram</button>
+        <button class="filter-chip source-kind" data-kind="official">רשמי בלבד</button>
+      </div>
+    </section>
+
+    <div class="content-grid">
+      <section class="feed-column">
+        <div class="section-head">
+          <div>
+            <span class="section-kicker">הפיד שלך</span>
+            <h2 id="feedTitle">כל העדכונים</h2>
+          </div>
+          <div class="section-actions">
+            <span id="resultsCount">— עדכונים</span>
+            <button class="text-button" id="compactToggle" type="button">תצוגה קומפקטית</button>
+          </div>
+        </div>
+
+        <div class="feed" id="feed" aria-live="polite">
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        </div>
+
+        <div class="empty-state hidden" id="emptyState">
+          <div class="empty-icon">⌁</div>
+          <h3>לא נמצאו עדכונים מתאימים</h3>
+          <p>נסה להרחיב את טווח הזמן או לשנות את הסינון.</p>
+          <button type="button" id="resetFilters">איפוס סינון</button>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="sidebar-card source-card">
+          <div class="sidebar-title-row">
+            <div>
+              <span class="section-kicker">מקורות חיים</span>
+              <h3>מחוברים עכשיו</h3>
+            </div>
+            <span class="status-badge"><i></i><b id="activeSourceCount">—</b></span>
+          </div>
+          <div class="source-list" id="sourceList">
+            <div class="source-skeleton"></div>
+            <div class="source-skeleton"></div>
+            <div class="source-skeleton"></div>
+          </div>
+          <button class="show-more" id="showAllSources" type="button">הצג את כל המקורות</button>
+        </section>
+
+        <section class="sidebar-card settings-card">
+          <span class="section-kicker">שליטה</span>
+          <h3>העדפות תצוגה</h3>
+          <label class="switch-row">
+            <span><b>רענון אוטומטי</b><small>בדיקה כל 60 שניות</small></span>
+            <input id="autoRefresh" type="checkbox" checked />
+            <i></i>
+          </label>
+          <label class="switch-row">
+            <span><b>הצגת מקורות מקבילים</b><small>קישורים נוספים לאותה ידיעה</small></span>
+            <input id="clusterToggle" type="checkbox" checked />
+            <i></i>
+          </label>
+        </section>
+
+        <section class="sidebar-card note-card">
+          <div class="note-icon">i</div>
+          <p><strong>חשוב לדעת:</strong> כותרות מאתרי חדשות מוצגות עם קישור למקור. ערוצי Telegram פרטיים עשויים לפרסם דיווחים ראשוניים שטרם אומתו; מקורות רשמיים מסומנים בנפרד.</p>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="footer shell">
+    <div><strong>חדשותא</strong><span>מרכז חדשות ישראלי בזמן אמת</span></div>
+    <div class="footer-copy">
+      <p>האתר נבנה כשירות לציבור.</p>
+      <p>לפרטים נוספים ויצירת קשר: <a href="mailto:singles.pr@gmail.com">singles.pr@gmail.com</a></p>
+      <small>המערכת אינה מעתיקה כתבות מלאות. כל פריט מפנה למקור המקורי.</small>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

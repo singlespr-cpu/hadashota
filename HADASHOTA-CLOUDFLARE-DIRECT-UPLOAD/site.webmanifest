@@ -1,0 +1,14 @@
+{
+  "name": "חדשותא",
+  "short_name": "חדשותא",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fb",
+  "theme_color": "#f7f8fb",
+  "icons": [
+    {"src":"/favicon-32.png","sizes":"32x32","type":"image/png"},
+    {"src":"/apple-touch-icon.png","sizes":"180x180","type":"image/png"}
+  ]
+}
