@@ -64,6 +64,14 @@ const DIPLOMATIC_WORDS = [
 
 const STOP_WORDS = new Set(["של", "את", "על", "עם", "לא", "גם", "זה", "זו", "כי", "כך", "הוא", "היא", "הם", "הן", "כל", "אל", "לפי", "אחרי", "לפני", "עוד", "היום", "עכשיו", "חדש", "חדשה", "חדשות", "דיווח", "דיווחים", "עדכון", "עדכונים", "ראשוני", "ישראל", "ישראלי", "ישראלית", "the", "a", "an", "of", "to", "in", "on", "for", "and", "is", "are", "with", "after", "before", "breaking", "report", "reports", "update"]);
 
+const CITIES = {
+  telaviv: { name: "תל אביב", latitude: 32.0853, longitude: 34.7818, candleMinutes: 18 },
+  jerusalem: { name: "ירושלים", latitude: 31.7683, longitude: 35.2137, candleMinutes: 40 },
+  haifa: { name: "חיפה", latitude: 32.7940, longitude: 34.9896, candleMinutes: 30 },
+  beersheva: { name: "באר שבע", latitude: 31.25297, longitude: 34.79146, candleMinutes: 18 },
+  eilat: { name: "אילת", latitude: 29.5577, longitude: 34.9519, candleMinutes: 18 }
+};
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -72,6 +80,12 @@ export default {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
       return handleNews(request, ctx);
+    }
+
+    if (url.pathname === "/api/utilities") {
+      if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handleUtilities(request, ctx);
     }
 
     if (url.pathname === "/api/health") {
@@ -131,6 +145,106 @@ function sitemapResponse(origin) {
 
 function escapeXml(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[ch]));
+}
+
+async function handleUtilities(request, ctx) {
+  const requestUrl = new URL(request.url);
+  const cityKey = CITIES[requestUrl.searchParams.get("city")] ? requestUrl.searchParams.get("city") : "telaviv";
+  const city = CITIES[cityKey];
+  const cacheUrl = new URL(request.url);
+  cacheUrl.pathname = "/api/utilities";
+  cacheUrl.search = `?city=${cityKey}`;
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
+  const cache = caches.default;
+  const cached = await cache.match(cacheKey);
+  if (cached) return cors(cached);
+
+  const weatherUrl = new URL("https://api.open-meteo.com/v1/forecast");
+  weatherUrl.searchParams.set("latitude", String(city.latitude));
+  weatherUrl.searchParams.set("longitude", String(city.longitude));
+  weatherUrl.searchParams.set("current", "temperature_2m,apparent_temperature,weather_code,wind_speed_10m");
+  weatherUrl.searchParams.set("daily", "temperature_2m_max,temperature_2m_min,precipitation_probability_max");
+  weatherUrl.searchParams.set("timezone", "Asia/Jerusalem");
+  weatherUrl.searchParams.set("forecast_days", "2");
+
+  const shabbatUrl = new URL("https://www.hebcal.com/shabbat");
+  shabbatUrl.searchParams.set("cfg", "json");
+  shabbatUrl.searchParams.set("latitude", String(city.latitude));
+  shabbatUrl.searchParams.set("longitude", String(city.longitude));
+  shabbatUrl.searchParams.set("tzid", "Asia/Jerusalem");
+  shabbatUrl.searchParams.set("b", String(city.candleMinutes));
+  shabbatUrl.searchParams.set("M", "on");
+  shabbatUrl.searchParams.set("leyning", "off");
+
+  const [weatherResult, shabbatResult] = await Promise.allSettled([
+    fetchJsonWithTimeout(weatherUrl.toString(), 4500),
+    fetchJsonWithTimeout(shabbatUrl.toString(), 4500)
+  ]);
+
+  const weather = weatherResult.status === "fulfilled" ? normalizeWeather(weatherResult.value) : null;
+  const shabbat = shabbatResult.status === "fulfilled" ? normalizeShabbat(shabbatResult.value) : null;
+
+  const response = json({
+    ok: !!(weather || shabbat),
+    city: { key: cityKey, name: city.name },
+    generatedAt: new Date().toISOString(),
+    weather,
+    shabbat
+  }, 200, {
+    "Cache-Control": "public, max-age=120, s-maxage=600, stale-while-revalidate=1800"
+  });
+  ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/1.0; +news-aggregator)",
+        "Accept": "application/json"
+      },
+      cf: { cacheEverything: true, cacheTtl: 600 }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeWeather(data) {
+  if (!data?.current) return null;
+  return {
+    temperature: numberOrNull(data.current.temperature_2m),
+    apparentTemperature: numberOrNull(data.current.apparent_temperature),
+    weatherCode: numberOrNull(data.current.weather_code),
+    windSpeed: numberOrNull(data.current.wind_speed_10m),
+    max: numberOrNull(data.daily?.temperature_2m_max?.[0]),
+    min: numberOrNull(data.daily?.temperature_2m_min?.[0]),
+    rainChance: numberOrNull(data.daily?.precipitation_probability_max?.[0])
+  };
+}
+
+function normalizeShabbat(data) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const candles = items.find((item) => item.category === "candles");
+  const havdalah = items.find((item) => item.category === "havdalah");
+  const parasha = items.find((item) => item.category === "parashat");
+  return {
+    candleLighting: candles?.date || null,
+    havdalah: havdalah?.date || null,
+    parasha: cleanText(parasha?.hebrew || parasha?.title || "")
+  };
+}
+
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 async function handleNews(request, ctx) {
@@ -276,14 +390,14 @@ function parseTelegram(html, source) {
     const dataPost = chunk.match(/data-post=["']([^"']+)["']/i)?.[1];
     const datetime = chunk.match(/<time\b[^>]*datetime=["']([^"']+)["']/i)?.[1];
     const textHtml = chunk.match(/<div class=["'][^"']*tgme_widget_message_text[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1];
-    const text = cleanText(textHtml || "");
+    const text = cleanTelegramText(cleanText(textHtml || ""));
     const publishedAt = safeIso(datetime);
     if (!dataPost || !text || !publishedAt) continue;
 
     const url = `https://t.me/${dataPost}`;
     const title = telegramTitle(text);
     const imageUrl = extractTelegramImage(chunk);
-    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(text, 260), imageUrl }));
+    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(text, 240), imageUrl }));
   }
   return items;
 }
@@ -567,10 +681,19 @@ function trimPreview(value, max = 220) {
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
 }
 
+function cleanTelegramText(text) {
+  return normalizeSpace(String(text || "")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/(?:www\.)\S+/gi, " ")
+    .replace(/[<>]{2,}/g, " ")
+    .replace(/\s*[|•]\s*להצטרפות.*$/i, " ")
+    .replace(/\s+/g, " "));
+}
+
 function telegramTitle(text) {
-  const clean = normalizeSpace(text);
+  const clean = cleanTelegramText(text);
   const first = clean.split(/(?<=[.!?…])\s+/)[0] || clean;
-  return first.length > 180 ? `${first.slice(0, 179).trim()}…` : first;
+  return first.length > 150 ? `${first.slice(0, 149).trim()}…` : first;
 }
 
 function safeIso(value) {

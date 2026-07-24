@@ -78,28 +78,51 @@
   </header>
 
   <main class="shell page">
-    <section class="pulse-strip" aria-label="מצב חדשותא עכשיו">
-      <div class="pulse-intro">
+    <section class="pulse-strip portal-strip" aria-label="מידע שימושי וחדשותא עכשיו">
+      <article class="pulse-intro portal-status">
         <div class="eyebrow"><span id="currentDate">היום</span><b>•</b><span id="lastUpdated">טוען עדכונים...</span></div>
-        <div class="pulse-title"><span class="pulse-live-dot"></span><strong>חדשותא עכשיו</strong><small>התמונה המלאה, בלי לעבור בין עשרות מקורות</small></div>
-      </div>
-      <div class="stats-grid" aria-label="נתוני מערכת">
-        <article class="stat-card">
-          <span>מקורות פעילים</span>
-          <strong id="statSources">—</strong>
-          <small id="statSourceDetail">בודק מקורות</small>
-        </article>
-        <article class="stat-card accent-blue">
-          <span>בשעה האחרונה</span>
-          <strong id="statHour">—</strong>
-          <small>עדכונים מאוחדים</small>
-        </article>
-        <article class="stat-card accent-red">
-          <span>דיווחים רשמיים</span>
-          <strong id="statOfficial">—</strong>
-          <small>צה״ל, פיקוד העורף ועוד</small>
-        </article>
-      </div>
+        <div class="pulse-title"><span class="pulse-live-dot"></span><strong>חדשותא עכשיו</strong><small>חדשות חיות מכל המקורות במקום אחד</small></div>
+        <div class="status-metrics" aria-label="נתוני מערכת">
+          <span><b id="statSources">—</b> מקורות</span>
+          <span><b id="statHour">—</b> בשעה האחרונה</span>
+          <span><b id="statOfficial">—</b> רשמיים</span>
+        </div>
+        <small class="status-detail" id="statSourceDetail">בודק מקורות</small>
+      </article>
+
+      <article class="utility-card weather-card">
+        <div class="utility-head">
+          <span class="utility-icon">☀</span>
+          <label class="city-picker" title="בחירת עיר">
+            <select id="citySelect" aria-label="בחירת עיר למזג אוויר וזמני שבת">
+              <option value="telaviv">תל אביב</option>
+              <option value="jerusalem">ירושלים</option>
+              <option value="haifa">חיפה</option>
+              <option value="beersheva">באר שבע</option>
+              <option value="eilat">אילת</option>
+            </select>
+          </label>
+        </div>
+        <div class="weather-main">
+          <strong id="weatherTemp">—°</strong>
+          <div><b id="weatherText">טוען מזג אוויר</b><small id="weatherRange">—</small></div>
+        </div>
+        <a class="utility-credit" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">מזג אוויר: Open‑Meteo</a>
+      </article>
+
+      <article class="utility-card shabbat-card">
+        <div class="utility-head">
+          <span class="utility-icon">✦</span>
+          <span class="utility-label">השבת הקרובה</span>
+        </div>
+        <div class="shabbat-times">
+          <div><span>כניסה</span><strong id="shabbatIn">—</strong></div>
+          <i></i>
+          <div><span>יציאה</span><strong id="shabbatOut">—</strong></div>
+        </div>
+        <div class="shabbat-meta"><span id="shabbatCity">תל אביב</span><span id="shabbatParasha"></span></div>
+        <a class="utility-credit" href="https://www.hebcal.com/" target="_blank" rel="noopener noreferrer">זמני שבת: Hebcal</a>
+      </article>
     </section>
 
     <section class="lead-story hidden" id="leadStory" aria-live="polite">
@@ -134,6 +157,12 @@
         <span id="breakingMeta"></span>
       </a>
       <span class="breaking-arrow">←</span>
+    </section>
+
+    <section class="trending-strip hidden" id="trendingStrip" aria-label="נושאים חמים עכשיו">
+      <span class="trending-label"><i></i> עכשיו מדברים על</span>
+      <div class="trending-topics" id="trendingTopics"></div>
+      <span class="refresh-countdown" id="refreshCountdown">רענון בעוד 60 שנ׳</span>
     </section>
 
     <section class="control-panel" id="controlPanel">

@@ -11,6 +11,9 @@ const state = {
   allSourcesVisible: false,
   loading: false,
   timer: null,
+  countdownTimer: null,
+  nextRefreshAt: 0,
+  city: localStorage.getItem("hadashota.city") || "telaviv",
   lastVisitAt: Number((localStorage.getItem("hadashota.lastVisitAt") ?? localStorage.getItem("pulse.lastVisitAt"))) || 0
 };
 
@@ -55,7 +58,18 @@ const el = {
   leadStorySources: document.querySelector("#leadStorySources"),
   leadStoryCta: document.querySelector("#leadStoryCta"),
   leadStoryMedia: document.querySelector("#leadStoryMedia"),
-  leadStoryImage: document.querySelector("#leadStoryImage")
+  leadStoryImage: document.querySelector("#leadStoryImage"),
+  citySelect: document.querySelector("#citySelect"),
+  weatherTemp: document.querySelector("#weatherTemp"),
+  weatherText: document.querySelector("#weatherText"),
+  weatherRange: document.querySelector("#weatherRange"),
+  shabbatIn: document.querySelector("#shabbatIn"),
+  shabbatOut: document.querySelector("#shabbatOut"),
+  shabbatCity: document.querySelector("#shabbatCity"),
+  shabbatParasha: document.querySelector("#shabbatParasha"),
+  trendingStrip: document.querySelector("#trendingStrip"),
+  trendingTopics: document.querySelector("#trendingTopics"),
+  refreshCountdown: document.querySelector("#refreshCountdown")
 };
 
 const CATEGORY_LABELS = {
@@ -73,6 +87,7 @@ function init() {
   syncTheme();
   syncControlsFromState();
   bindEvents();
+  loadUtilities();
   loadNews();
   restartAutoRefresh();
 }
@@ -150,6 +165,12 @@ function bindEvents() {
     renderSources();
   });
 
+  el.citySelect?.addEventListener("change", () => {
+    state.city = el.citySelect.value;
+    localStorage.setItem("hadashota.city", state.city);
+    loadUtilities();
+  });
+
   el.resetFilters.addEventListener("click", resetFilters);
   el.filtersToggle.addEventListener("click", () => el.controlPanel.classList.toggle("mobile-collapsed"));
 
@@ -181,6 +202,8 @@ async function loadNews(force = false) {
     el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
     renderStats(data);
     render();
+    if (state.autoRefresh) scheduleNextRefresh(Number(data.refreshAfterSeconds) || 60);
+    else updateRefreshCountdown();
     localStorage.setItem("hadashota.lastVisitAt", String(Date.now()));
     if (force) showToast("החדשות רועננו עכשיו");
   } catch (error) {
@@ -198,6 +221,7 @@ function render() {
   renderFeed();
   renderSources();
   renderBreaking();
+  renderTrending();
 }
 
 function renderStats(data = null) {
@@ -341,7 +365,7 @@ function renderLeadStory() {
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 6);
+  }).slice(0, 4);
 
   el.leadStoryTitle.textContent = item.title;
   el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? item.preview : "הידיעה זוהתה כמובילה לאחר שפורסמה במקביל במספר מקורות שונים בזמן קצר.";
@@ -390,6 +414,7 @@ function syncControlsFromState() {
   el.compactToggle.textContent = state.compact ? "תצוגה מרווחת" : "תצוגה קומפקטית";
   el.clusterToggle.checked = state.cluster;
   el.autoRefresh.checked = state.autoRefresh;
+  if (el.citySelect) el.citySelect.value = state.city;
 }
 
 function syncTheme() {
@@ -415,7 +440,118 @@ function resetFilters() {
 
 function restartAutoRefresh() {
   clearInterval(state.timer);
-  if (state.autoRefresh) state.timer = setInterval(() => loadNews(false), 60_000);
+  clearInterval(state.countdownTimer);
+  if (state.autoRefresh) {
+    scheduleNextRefresh(60);
+    state.timer = setInterval(() => loadNews(false), 60_000);
+  } else {
+    state.nextRefreshAt = 0;
+    updateRefreshCountdown();
+  }
+  state.countdownTimer = setInterval(updateRefreshCountdown, 1000);
+}
+
+function scheduleNextRefresh(seconds = 60) {
+  state.nextRefreshAt = Date.now() + Math.max(15, seconds) * 1000;
+  updateRefreshCountdown();
+}
+
+function updateRefreshCountdown() {
+  if (!el.refreshCountdown) return;
+  if (!state.autoRefresh) {
+    el.refreshCountdown.textContent = "רענון אוטומטי כבוי";
+    return;
+  }
+  const seconds = Math.max(0, Math.ceil((state.nextRefreshAt - Date.now()) / 1000));
+  el.refreshCountdown.textContent = seconds > 0 ? `רענון בעוד ${seconds} שנ׳` : "מרענן עכשיו…";
+}
+
+async function loadUtilities() {
+  if (!el.citySelect) return;
+  el.citySelect.value = state.city;
+  try {
+    const response = await fetch(`/api/utilities?city=${encodeURIComponent(state.city)}`, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    renderUtilities(data);
+  } catch (error) {
+    console.error("Utilities:", error);
+    if (el.weatherText) el.weatherText.textContent = "לא זמין כרגע";
+    if (el.weatherRange) el.weatherRange.textContent = "נסה שוב מאוחר יותר";
+    if (el.shabbatIn) el.shabbatIn.textContent = "—";
+    if (el.shabbatOut) el.shabbatOut.textContent = "—";
+  }
+}
+
+function renderUtilities(data) {
+  if (data?.city?.name) {
+    if (el.shabbatCity) el.shabbatCity.textContent = data.city.name;
+  }
+
+  const weather = data?.weather;
+  if (weather) {
+    el.weatherTemp.textContent = Number.isFinite(weather.temperature) ? `${Math.round(weather.temperature)}°` : "—°";
+    el.weatherText.textContent = weatherLabel(weather.weatherCode);
+    const min = Number.isFinite(weather.min) ? Math.round(weather.min) : null;
+    const max = Number.isFinite(weather.max) ? Math.round(weather.max) : null;
+    const rain = Number.isFinite(weather.rainChance) ? Math.round(weather.rainChance) : null;
+    const range = min !== null && max !== null ? `${min}°–${max}°` : "";
+    el.weatherRange.textContent = rain !== null ? `${range}${range ? " · " : ""}${rain}% סיכוי לגשם` : range || "תחזית להיום";
+  }
+
+  const shabbat = data?.shabbat;
+  if (shabbat) {
+    el.shabbatIn.textContent = formatUtilityTime(shabbat.candleLighting);
+    el.shabbatOut.textContent = formatUtilityTime(shabbat.havdalah);
+    el.shabbatParasha.textContent = shabbat.parasha ? `· ${shabbat.parasha}` : "";
+  }
+}
+
+function formatUtilityTime(iso) {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function weatherLabel(code) {
+  const n = Number(code);
+  if (n === 0) return "בהיר";
+  if ([1, 2].includes(n)) return "מעונן חלקית";
+  if (n === 3) return "מעונן";
+  if ([45, 48].includes(n)) return "ערפל";
+  if ([51, 53, 55, 56, 57].includes(n)) return "טפטוף";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(n)) return "גשם";
+  if ([71, 73, 75, 77, 85, 86].includes(n)) return "שלג";
+  if ([95, 96, 99].includes(n)) return "סופות רעמים";
+  return "מזג אוויר נעים";
+}
+
+function renderTrending() {
+  if (!el.trendingStrip || !el.trendingTopics) return;
+  const cutoff = Date.now() - 3 * 60 * 60 * 1000;
+  const counts = new Map();
+  const stop = new Set(["ישראל", "ישראלי", "חדשות", "דיווח", "עדכון", "עכשיו", "היום", "אחרי", "לפני", "בעקבות", "במהלך", "ראשוני", "אמר", "אומר", "כוחות", "הודעה", "המשטרה", "צה״ל", "של", "את", "על", "עם", "לא", "גם", "כי", "זה", "זו", "כל"]);
+  for (const item of state.items) {
+    if (Date.parse(item.publishedAt) < cutoff) continue;
+    const words = String(item.title || "").replace(/https?:\/\/\S+/g, " ").match(/[\u0590-\u05FF]{3,}/g) || [];
+    const unique = new Set(words.filter((word) => !stop.has(word) && word.length >= 3));
+    for (const word of unique) counts.set(word, (counts.get(word) || 0) + 1);
+  }
+  const topics = [...counts.entries()].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  if (!topics.length) {
+    el.trendingStrip.classList.add("hidden");
+    return;
+  }
+  el.trendingTopics.innerHTML = topics.map(([topic, count]) => `<button type="button" data-topic="${escapeHtml(topic)}">${escapeHtml(topic)} <small>${count}</small></button>`).join("");
+  el.trendingStrip.classList.remove("hidden");
+  el.trendingTopics.querySelectorAll("button[data-topic]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const topic = button.dataset.topic || "";
+      state.query = topic.toLowerCase();
+      el.searchInput.value = topic;
+      render();
+      el.controlPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 }
 
 function formatAge(iso) {

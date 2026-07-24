@@ -538,3 +538,200 @@ html:not([data-theme="dark"]) .lead-story-cta { background:linear-gradient(135de
   .news-image img { min-height:82px; }
   .news-card.has-image .news-preview { display:none; }
 }
+
+/* ===== חדשותא V3 — portal-first, denser and more addictive ===== */
+:root {
+  --brand-red: #ff3b30;
+  --brand-blue: #1769ff;
+  --brand-violet: #7457ff;
+  --brand-cyan: #16a6ff;
+  --brand-amber: #f59e0b;
+}
+
+.page { padding-top: 16px; }
+.portal-strip {
+  display: grid;
+  grid-template-columns: minmax(390px, 1.45fr) minmax(230px, .72fr) minmax(270px, .83fr);
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+.portal-status,
+.utility-card {
+  min-height: 112px;
+  border: 1px solid rgba(17,24,39,.10);
+  border-radius: 20px;
+  background: rgba(255,255,255,.93);
+  box-shadow: 0 10px 30px rgba(31,41,55,.065);
+}
+.portal-status {
+  padding: 15px 17px;
+  background:
+    radial-gradient(circle at 8% 5%, rgba(255,59,48,.13), transparent 12rem),
+    radial-gradient(circle at 92% 95%, rgba(23,105,255,.13), transparent 13rem),
+    #fff;
+}
+.portal-status .eyebrow { margin: 0 0 8px; font-size: 10px; }
+.portal-status .pulse-title { gap: 8px; }
+.portal-status .pulse-title strong { font-size: 19px; }
+.portal-status .pulse-title small { font-size: 10px; }
+.status-metrics { display:flex; flex-wrap:wrap; gap:7px; margin-top:11px; }
+.status-metrics span { padding:5px 9px; border:1px solid rgba(17,24,39,.085); background:rgba(255,255,255,.76); border-radius:999px; color:#667085; font-size:9px; }
+.status-metrics b { color:#111827; font-size:11px; }
+.status-detail { display:block; margin-top:7px; color:#98a2b3; font-size:8px; }
+
+.utility-card { padding: 13px 14px 11px; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden; position:relative; }
+.utility-card::after { content:""; position:absolute; width:120px; height:120px; border-radius:50%; filter:blur(4px); opacity:.14; pointer-events:none; }
+.weather-card::after { background:#2f80ff; left:-55px; top:-58px; }
+.shabbat-card::after { background:#8b5cf6; left:-55px; bottom:-70px; }
+.utility-head { display:flex; align-items:center; justify-content:space-between; gap:8px; position:relative; z-index:1; }
+.utility-icon { width:28px; height:28px; display:grid; place-items:center; border-radius:9px; background:#eef4ff; color:#1769ff; font-size:15px; font-weight:800; }
+.shabbat-card .utility-icon { background:#f4efff; color:#7457ff; }
+.utility-label { font-size:10px; color:#667085; font-weight:800; }
+.city-picker select { max-width:105px; border:0; outline:0; background:transparent; color:#475467; font-size:10px; font-weight:800; cursor:pointer; text-align:right; }
+.weather-main { display:flex; align-items:center; gap:11px; position:relative; z-index:1; }
+.weather-main > strong { font-size:34px; letter-spacing:-.05em; line-height:1; color:#101828; }
+.weather-main > div { display:grid; gap:3px; min-width:0; }
+.weather-main b { font-size:11px; color:#101828; }
+.weather-main small { font-size:9px; color:#667085; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.utility-credit { position:relative; z-index:1; color:#98a2b3; font-size:7px; text-decoration:none; width:max-content; }
+.utility-credit:hover { color:#475467; text-decoration:underline; }
+.shabbat-times { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; position:relative; z-index:1; }
+.shabbat-times div { display:grid; gap:2px; }
+.shabbat-times div:first-child { text-align:right; }
+.shabbat-times div:last-child { text-align:left; }
+.shabbat-times span { font-size:9px; color:#667085; }
+.shabbat-times strong { font-size:22px; letter-spacing:-.035em; color:#101828; }
+.shabbat-times i { width:1px; height:30px; background:rgba(17,24,39,.10); }
+.shabbat-meta { display:flex; gap:4px; color:#98a2b3; font-size:8px; position:relative; z-index:1; min-height:10px; }
+
+/* The main story is now a compact newsroom splash instead of a full-screen billboard */
+.lead-story { padding: 14px 16px 15px; border-radius: 20px; margin: 0 0 9px; }
+.lead-story-topline { margin-bottom: 9px; }
+.lead-story-label { font-size: 9px; }
+.lead-story-signal { padding:4px 8px; font-size:8px; }
+.lead-story-body { grid-template-columns: minmax(215px, 30%) minmax(0,1fr) auto; gap:16px; align-items:center; }
+.lead-story-media { min-height: 150px; max-height: 196px; border-radius: 14px; }
+.lead-story-media img { min-height:150px; max-height:196px; }
+.lead-story h2 { font-size: clamp(23px, 2.25vw, 34px); line-height:1.08; letter-spacing:-.035em; }
+.lead-story h2 a { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.lead-story-copy > p { margin:8px 0 8px; font-size:10px; line-height:1.55; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.lead-story-meta { font-size:8px; gap:5px; }
+.lead-story-sources { margin-top:8px; gap:4px; max-height:25px; overflow:hidden; }
+.lead-story-sources a { font-size:7px; padding:4px 7px; }
+.lead-story-cta { padding:9px 11px; border-radius:10px; font-size:9px; box-shadow:none; }
+
+.breaking-banner { min-height: 48px; padding: 8px 12px; border-radius: 14px; margin-bottom: 8px; gap:12px; }
+.breaking-label { font-size:9px; }
+.breaking-banner strong { font-size:11px; }
+.breaking-banner a span { font-size:8px; }
+
+.trending-strip { min-height:42px; margin-bottom:8px; border:1px solid rgba(17,24,39,.10); background:rgba(255,255,255,.91); border-radius:14px; padding:7px 10px; display:flex; align-items:center; gap:9px; box-shadow:0 6px 20px rgba(31,41,55,.035); overflow:hidden; }
+.trending-label { flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; color:#475467; font-size:9px; font-weight:800; }
+.trending-label i { width:7px; height:7px; border-radius:50%; background:#ff3b30; box-shadow:0 0 0 4px rgba(255,59,48,.09); }
+.trending-topics { display:flex; gap:5px; min-width:0; overflow-x:auto; scrollbar-width:none; }
+.trending-topics::-webkit-scrollbar { display:none; }
+.trending-topics button { flex:0 0 auto; border:1px solid rgba(17,24,39,.085); background:#f7f9fc; border-radius:999px; padding:5px 9px; color:#344054; font-size:9px; font-weight:800; cursor:pointer; }
+.trending-topics button:hover { border-color:rgba(23,105,255,.25); background:#eef5ff; color:#0958bd; }
+.trending-topics small { margin-right:3px; color:#98a2b3; font-size:7px; }
+.refresh-countdown { flex:0 0 auto; margin-right:auto; color:#667085; font-size:8px; border-right:1px solid rgba(17,24,39,.08); padding-right:10px; }
+
+.control-panel { top:86px; border-radius:16px; padding:9px; margin-bottom:15px; box-shadow:0 10px 32px rgba(31,41,55,.08); }
+.search-box { height:42px; border-radius:11px; }
+.segmented { border-radius:11px; }
+.segmented button { height:32px; min-width:65px; font-size:10px; }
+.filter-chip { height:30px; font-size:9px; padding:0 9px; }
+.filter-scroll { margin-top:7px; }
+
+.content-grid { grid-template-columns:minmax(0,1fr) 276px; gap:16px; }
+.sidebar { top:156px; gap:10px; }
+.sidebar-card { padding:14px; border-radius:16px; }
+.feed { gap:7px; }
+.news-card { border-radius:15px; padding:14px 15px 13px; }
+.news-title { font-size:16px; line-height:1.38; }
+.news-preview { font-size:10px; line-height:1.55; margin-top:6px; }
+.news-card.has-image .news-main { grid-template-columns:150px minmax(0,1fr) auto; gap:13px; }
+.news-image { width:150px; min-height:100px; max-height:124px; border-radius:12px; }
+.news-image img { min-height:100px; }
+
+/* More confident light-mode color and contrast */
+html:not([data-theme="dark"]) body {
+  background:
+    radial-gradient(circle at 91% 0%, rgba(23,105,255,.16), transparent 25rem),
+    radial-gradient(circle at 5% 18%, rgba(255,59,48,.13), transparent 24rem),
+    linear-gradient(180deg,#f4f7fb 0%,#f8fafc 55%,#f4f7fb 100%);
+}
+html:not([data-theme="dark"]) .topbar { background:rgba(255,255,255,.94); }
+html:not([data-theme="dark"]) .lead-story { border-color:rgba(255,59,48,.22); background:linear-gradient(120deg,#fff 0%,#fff 58%,#fff0ed 100%); box-shadow:0 14px 40px rgba(31,41,55,.09); }
+html:not([data-theme="dark"]) .breaking-banner { background:linear-gradient(90deg,#fff0ed,#fff); }
+html:not([data-theme="dark"]) .news-card { background:#fff; box-shadow:0 7px 22px rgba(31,41,55,.055); }
+html:not([data-theme="dark"]) .news-card:hover { box-shadow:0 16px 38px rgba(31,41,55,.11); }
+
+/* Dark mode utility surfaces */
+html[data-theme="dark"] .portal-status,
+html[data-theme="dark"] .utility-card,
+html[data-theme="dark"] .trending-strip { background:rgba(20,23,31,.92); border-color:rgba(255,255,255,.085); box-shadow:0 12px 30px rgba(0,0,0,.18); }
+html[data-theme="dark"] .portal-status { background:radial-gradient(circle at 8% 5%, rgba(255,59,48,.13), transparent 12rem), radial-gradient(circle at 92% 95%, rgba(23,105,255,.12), transparent 13rem), #151821; }
+html[data-theme="dark"] .status-metrics span,
+html[data-theme="dark"] .trending-topics button { background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.08); color:#b4bac6; }
+html[data-theme="dark"] .status-metrics b,
+html[data-theme="dark"] .weather-main > strong,
+html[data-theme="dark"] .weather-main b,
+html[data-theme="dark"] .shabbat-times strong { color:#f7f8fb; }
+html[data-theme="dark"] .city-picker select { color:#b4bac6; }
+html[data-theme="dark"] .utility-icon { background:rgba(47,128,255,.14); }
+html[data-theme="dark"] .shabbat-card .utility-icon { background:rgba(116,87,255,.14); }
+html[data-theme="dark"] .trending-topics button:hover { background:rgba(23,105,255,.12); color:#9fc4ff; }
+
+@media (max-width: 1050px) {
+  .portal-strip { grid-template-columns:1.2fr .8fr; }
+  .shabbat-card { grid-column:1/-1; min-height:86px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:16px; }
+  .shabbat-card .utility-credit { position:absolute; left:14px; bottom:8px; }
+  .lead-story-body { grid-template-columns:minmax(210px,34%) minmax(0,1fr); }
+  .lead-story-cta { display:none; }
+  .content-grid { grid-template-columns:1fr; }
+}
+
+@media (max-width: 720px) {
+  .page { padding-top:10px; }
+  .portal-strip { grid-template-columns:1fr 1fr; gap:7px; }
+  .portal-status { grid-column:1/-1; min-height:92px; padding:12px 13px; }
+  .portal-status .pulse-title strong { font-size:17px; }
+  .utility-card { min-height:100px; padding:11px 12px 9px; border-radius:15px; }
+  .weather-main > strong { font-size:29px; }
+  .shabbat-card { grid-column:auto; min-height:100px; display:flex; }
+  .shabbat-card .utility-credit { position:relative; left:auto; bottom:auto; }
+  .shabbat-times strong { font-size:18px; }
+  .lead-story { padding:11px; border-radius:16px; }
+  .lead-story-topline { margin-bottom:7px; }
+  .lead-story-body { grid-template-columns:118px minmax(0,1fr); gap:10px; align-items:stretch; }
+  .lead-story-media { min-height:112px; max-height:148px; border-radius:11px; }
+  .lead-story-media img { min-height:112px; max-height:148px; }
+  .lead-story h2 { font-size:20px; -webkit-line-clamp:4; }
+  .lead-story-copy > p { display:none; }
+  .lead-story-sources { display:none; }
+  .lead-story-cta { display:none; }
+  .breaking-banner { min-height:43px; }
+  .trending-strip { border-radius:12px; padding:6px 8px; }
+  .refresh-countdown { display:none; }
+  .control-panel { top:76px; }
+  .news-card.has-image .news-main { grid-template-columns:102px minmax(0,1fr); }
+  .news-image { width:102px; min-height:88px; max-height:105px; }
+  .news-image img { min-height:88px; }
+}
+
+@media (max-width: 470px) {
+  .portal-strip { grid-template-columns:1fr; }
+  .weather-card, .shabbat-card { min-height:88px; }
+  .weather-card { display:grid; grid-template-columns:auto 1fr; column-gap:8px; }
+  .weather-card .utility-head { grid-column:1/-1; }
+  .weather-card .utility-credit { position:absolute; left:11px; bottom:8px; }
+  .shabbat-times { width:100%; }
+  .lead-story-body { grid-template-columns:95px minmax(0,1fr); }
+  .lead-story-media { min-height:96px; max-height:120px; }
+  .lead-story-media img { min-height:96px; max-height:120px; }
+  .lead-story h2 { font-size:18px; }
+  .news-card.has-image .news-main { grid-template-columns:88px minmax(0,1fr); }
+  .news-image { width:88px; min-height:78px; max-height:92px; }
+  .news-image img { min-height:78px; }
+}
