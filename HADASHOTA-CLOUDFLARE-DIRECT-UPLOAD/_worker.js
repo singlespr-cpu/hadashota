@@ -291,7 +291,7 @@ async function handleNews(request, ctx) {
     // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
     // even when an origin redirects or several sources fail at the same time.
     const retryBudget = { remaining: 4 };
-    const settled = await fetchSourcesWithLimit(shardSources, 8, retryBudget);
+    const settled = await fetchSourcesWithLimit(shardSources, 10, retryBudget);
     const rawItems = settled.flatMap((result) => result.items);
     const now = Date.now();
     const cutoff = now - 30 * 60 * 60 * 1000;
@@ -337,6 +337,14 @@ async function handleNews(request, ctx) {
     const failedSources = settled
       .filter((result) => result.error)
       .map((result) => ({ id: result.source.id, name: result.source.name, error: result.error }));
+
+    // A severely degraded refresh must never overwrite or replace a healthy feed.
+    // When only a handful of sources answered, serve the previous good shard and retry soon.
+    const minimumHealthySources = 4;
+    if (activeSources.length < minimumHealthySources) {
+      const previousGood = await cache.match(lastGoodKey);
+      if (previousGood) return await lastGoodOrError(cache, lastGoodKey, shard, `partial_refresh_${activeSources.length}_sources`);
+    }
 
     const payload = {
       generatedAt: new Date().toISOString(),

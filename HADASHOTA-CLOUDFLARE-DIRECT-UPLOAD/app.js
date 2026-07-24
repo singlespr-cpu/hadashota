@@ -83,13 +83,17 @@ const el = {
   quickFilters: document.querySelector("#quickFilters"),
   quickReset: document.querySelector("#quickReset"),
   dataStatus: document.querySelector("#dataStatus"),
-  dataStatusText: document.querySelector("#dataStatusText")
+  dataStatusText: document.querySelector("#dataStatusText"),
+  aboutBtn: document.querySelector("#aboutBtn"),
+  contactBtn: document.querySelector("#contactBtn"),
+  aboutModal: document.querySelector("#aboutModal"),
+  contactModal: document.querySelector("#contactModal")
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
 const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v6.";
-const CLIENT_NEWS_TIMEOUT_MS = 14_000;
+const CLIENT_NEWS_TIMEOUT_MS = 22_000;
 
 const CATEGORY_LABELS = {
   all: "כל העדכונים",
@@ -138,6 +142,24 @@ function bindEvents() {
       syncControlsFromState();
       render();
     }
+  });
+
+  // Every news item is a link to its exact source, including Telegram messages.
+  // Interactive controls inside a card keep their own behavior.
+  el.feed?.addEventListener("click", (event) => {
+    if (event.target.closest("a, button, summary, details, input, select, textarea, label")) return;
+    const card = event.target.closest(".news-card[data-story-url]");
+    if (!card) return;
+    openStorySource(card.dataset.storyUrl);
+  });
+
+  el.feed?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (event.target.closest("a, button, summary, details, input, select, textarea, label")) return;
+    const card = event.target.closest(".news-card[data-story-url]");
+    if (!card) return;
+    event.preventDefault();
+    openStorySource(card.dataset.storyUrl);
   });
 
   let searchTimer;
@@ -195,13 +217,11 @@ function bindEvents() {
       localStorage.setItem("hadashota.category", state.category);
       syncControlsFromState();
       render();
-      document.querySelector("#controlPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } else if (kind) {
       state.kind = kind.dataset.quickKind;
       localStorage.setItem("hadashota.kind", state.kind);
       syncControlsFromState();
       render();
-      document.querySelector("#controlPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   });
 
@@ -226,6 +246,13 @@ function bindEvents() {
     el.quickMenu.classList.add("hidden");
     el.filtersToggle.setAttribute("aria-expanded", "false");
   });
+
+  el.aboutBtn?.addEventListener("click", () => openSiteModal(el.aboutModal, el.aboutBtn));
+  el.contactBtn?.addEventListener("click", () => openSiteModal(el.contactModal, el.contactBtn));
+  document.querySelectorAll("[data-modal-close]").forEach((button) => {
+    button.addEventListener("click", () => closeSiteModal(button.closest(".site-modal")));
+  });
+
   document.addEventListener("click", (event) => {
     if (!el.quickMenu || el.quickMenu.classList.contains("hidden")) return;
     if (el.quickMenu.contains(event.target) || el.filtersToggle.contains(event.target)) return;
@@ -234,7 +261,14 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "/" && document.activeElement !== el.searchInput) {
+    if (event.key === "Escape") {
+      const openModal = document.querySelector(".site-modal:not(.hidden)");
+      if (openModal) {
+        closeSiteModal(openModal);
+        return;
+      }
+    }
+    if (event.key === "/" && document.activeElement !== el.searchInput && !document.querySelector(".site-modal:not(.hidden)")) {
       event.preventDefault();
       el.searchInput.focus();
     }
@@ -246,6 +280,27 @@ function bindEvents() {
     }
   });
 }
+
+let modalReturnFocus = null;
+
+function openSiteModal(modal, trigger) {
+  if (!modal) return;
+  modalReturnFocus = trigger || document.activeElement;
+  document.querySelectorAll(".site-modal:not(.hidden)").forEach((other) => closeSiteModal(other, false));
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  requestAnimationFrame(() => modal.querySelector(".modal-card")?.focus());
+}
+
+function closeSiteModal(modal, restoreFocus = true) {
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  if (!document.querySelector(".site-modal:not(.hidden)")) document.body.classList.remove("modal-open");
+  if (restoreFocus && modalReturnFocus instanceof HTMLElement) modalReturnFocus.focus();
+}
+
 
 async function loadNews(force = false, fromRetry = false) {
   if (state.loading) return;
@@ -309,13 +364,13 @@ async function loadNews(force = false, fromRetry = false) {
     console.error(error);
     state.dataDelayed = true;
     const restored = state.items.length > 0 || restoreLocalLastGood();
-    setDataStatus(restored);
+    setDataStatus(true, restored);
     scheduleNewsRetry();
 
     if (!restored) {
-      el.feed.innerHTML = `<div class="empty-state"><div class="empty-icon">!</div><h3>המקורות לא זמינים כרגע</h3><p>מתבצע ניסיון חיבור חוזר אוטומטי.</p></div>`;
+      el.feed.innerHTML = `<div class="connection-state" role="status"><span class="connection-spinner"></span><div><strong>מתחבר למקורות החדשות…</strong><small>מתבצע ניסיון נוסף אוטומטית בעוד מספר שניות.</small></div></div>`;
     }
-    if (force && !fromRetry) showToast("העדכון מתעכב — ננסה שוב אוטומטית");
+    if (force && !fromRetry) showToast(restored ? "העדכון מתעכב — מוצגים הנתונים האחרונים" : "מתחבר מחדש למקורות…");
   } finally {
     state.loading = false;
     el.refreshBtn.classList.remove("loading");
@@ -389,10 +444,14 @@ function scheduleNewsRetry() {
   state.retryTimer = setTimeout(() => loadNews(false, true), seconds * 1000);
 }
 
-function setDataStatus(delayed) {
+function setDataStatus(delayed, hasData = state.items.length > 0) {
   if (!el.dataStatus || !el.dataStatusText) return;
   el.dataStatus.classList.toggle("hidden", !delayed);
-  if (delayed) el.dataStatusText.textContent = "העדכון מתעכב — מוצגים הנתונים האחרונים";
+  if (delayed) {
+    el.dataStatusText.textContent = hasData
+      ? "העדכון מתעכב — מוצגים הנתונים האחרונים"
+      : "מתחבר למקורות — מתבצע ניסיון נוסף אוטומטית";
+  }
 }
 
 function mergeNewsPayloads(payloads) {
@@ -632,7 +691,7 @@ function mainstreamFirst(items) {
 
 function newsCardHtml(item) {
   const related = state.cluster
-    ? (item.related || []).filter((r) => r.url !== item.url && r.sourceKind === "site")
+    ? (item.related || []).filter((r) => r.url && r.url !== item.url)
     : [];
   const reportCount = state.cluster ? Math.max(Number(item.reportCount) || 1, (item.related || []).length || 1) : 1;
   const category = item.category || "other";
@@ -643,23 +702,22 @@ function newsCardHtml(item) {
   const independentBadge = item.independent ? `<span class="independent-badge">עצמאי</span>` : "";
   const clusterBadge = reportCount > 1 ? `<span class="cluster-badge">${reportCount} מקורות</span>` : "";
   const isSite = item.sourceKind === "site";
+  const storyUrl = safeUrl(item.url);
   const image = item.imageUrl ? `<img src="${safeUrl(item.imageUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.closest('.news-image').remove()" />` : "";
   const imageHtml = item.imageUrl
-    ? (isSite ? `<a class="news-image" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת הידיעה">${image}</a>` : `<div class="news-image telegram-image" aria-hidden="true">${image}</div>`)
+    ? `<a class="news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה">${image}</a>`
     : "";
-  const titleHtml = isSite
-    ? `<a href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`
-    : `<span>${escapeHtml(item.title)}</span>`;
+  const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`;
   const relatedHtml = related.length ? `
     <details class="related-wrap">
-      <summary>עוד דיווחים מאתרי חדשות (${related.length})</summary>
+      <summary>עוד דיווחים (${related.length})</summary>
       <div class="related-list">
         ${related.map((r) => `<a class="related-link" href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.sourceName)} · ${formatAge(r.publishedAt)}</a>`).join("")}
       </div>
     </details>` : "";
 
   return `
-    <article class="news-card ${state.compact ? "compact" : ""} ${item.imageUrl ? "has-image" : ""} ${isSite ? "clickable-story" : "telegram-story"}" data-category="${category}">
+    <article class="news-card clickable-story ${state.compact ? "compact" : ""} ${item.imageUrl ? "has-image" : ""} ${isSite ? "site-story" : "telegram-story"}" data-category="${category}" data-story-url="${storyUrl}" role="link" tabindex="0" aria-label="פתיחת המקור: ${escapeHtml(item.title)}">
       <div class="news-main">
         ${imageHtml}
         <div class="news-copy">
@@ -692,9 +750,9 @@ function renderSources() {
     const inner = `<span class="source-avatar">${escapeHtml(sourceInitial(source.name))}</span>
       <span class="source-info"><b>${escapeHtml(source.name)}</b><small>${type} · ${formatAge(source.lastItemAt)}</small></span>
       <i class="source-state" title="פעיל"></i>`;
-    return source.kind === "site"
-      ? `<a class="source-row" href="${safeUrl(source.home)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
-      : `<div class="source-row source-row-static" title="מקור Telegram — ללא קישור חיצוני">${inner}</div>`;
+    return source.home
+      ? `<a class="source-row" href="${safeUrl(source.home)}" target="_blank" rel="noopener noreferrer" title="פתיחת המקור">${inner}</a>`
+      : `<div class="source-row source-row-static">${inner}</div>`;
   }).join("");
 
   el.showAllSources.classList.toggle("hidden", sources.length <= 8);
@@ -738,7 +796,9 @@ function renderLeadStory() {
 
   const item = winner.item;
   const sources = normalizeClusterReports(item);
-  const siteTarget = sources.find((source) => source.sourceKind === "site" && source.url);
+  const sourceTarget = sources.find((source) => source.sourceKind === "site" && source.url)
+    || sources.find((source) => source.url)
+    || (item.url ? item : null);
   const unique = sources.slice(0, 5);
 
   el.leadStoryTitle.textContent = cleanDisplayTitle(item.title);
@@ -748,9 +808,9 @@ function renderLeadStory() {
   el.leadStoryCount.textContent = `${winner.uniqueSources} מקורות מדווחים`;
   el.leadStorySignal.textContent = winner.ageMinutes <= 20 ? "מתעדכן עכשיו" : winner.uniqueSources >= 6 ? "חם מאוד" : "בכמה מקורות במקביל";
 
-  setOptionalLink(el.leadStoryLink, siteTarget?.url);
-  if (siteTarget?.url) {
-    el.leadStoryCta.href = siteTarget.url;
+  setOptionalLink(el.leadStoryLink, sourceTarget?.url);
+  if (sourceTarget?.url) {
+    el.leadStoryCta.href = sourceTarget.url;
     el.leadStoryCta.classList.remove("hidden");
   } else {
     el.leadStoryCta.removeAttribute("href");
@@ -759,14 +819,14 @@ function renderLeadStory() {
   if (item.imageUrl) {
     el.leadStoryImage.src = item.imageUrl;
     el.leadStoryImage.alt = cleanDisplayTitle(item.title);
-    setOptionalLink(el.leadStoryMedia, siteTarget?.url);
+    setOptionalLink(el.leadStoryMedia, sourceTarget?.url);
     el.leadStoryMedia.classList.remove("hidden");
     el.leadStoryImage.onerror = () => el.leadStoryMedia.classList.add("hidden");
   } else {
     el.leadStoryImage.removeAttribute("src");
     el.leadStoryMedia.classList.add("hidden");
   }
-  el.leadStorySources.innerHTML = unique.map((source) => source.sourceKind === "site"
+  el.leadStorySources.innerHTML = unique.map((source) => source.url
     ? `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceName)}</a>`
     : `<span>${escapeHtml(source.sourceName)}</span>`).join("");
   el.leadStory.classList.remove("hidden");
@@ -787,7 +847,7 @@ function renderBreaking() {
 
   el.breakingTitle.textContent = cleanDisplayTitle(latest.title);
   el.breakingMeta.textContent = `${latest.sourceName} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
-  setOptionalLink(el.breakingLink, latest.sourceKind === "site" ? latest.url : null);
+  setOptionalLink(el.breakingLink, latest.url);
   el.breakingBanner.classList.remove("hidden");
 }
 
@@ -821,6 +881,17 @@ function renderFlashDeck() {
     <strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
   </a>`).join("");
   el.flashDeck.classList.remove("hidden");
+}
+
+function openStorySource(url) {
+  if (!url) return;
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (!/^https?:$/.test(parsed.protocol)) return;
+    window.open(parsed.href, "_blank", "noopener,noreferrer");
+  } catch {
+    // Ignore malformed source URLs; normal anchors remain protected by safeUrl().
+  }
 }
 
 function setOptionalLink(anchor, url) {
