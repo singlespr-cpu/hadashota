@@ -18,7 +18,10 @@
   <script>
     (() => {
       const saved = localStorage.getItem("hadashota.theme") || localStorage.getItem("pulse.theme");
-      if (saved === "dark") document.documentElement.dataset.theme = "dark";
+      if (saved === "dark") {
+        document.documentElement.dataset.theme = "dark";
+        document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#0b0f15");
+      }
     })();
   </script>
   <meta name="description" content="חדשותא — חדשות היום, מבזקים ועדכונים בזמן אמת מכלי התקשורת, מקורות רשמיים וערוצי Telegram ציבוריים בישראל. הכל במקום אחד, מסונן לפי שעה ונושא." />
@@ -63,7 +66,7 @@
 
       <div class="topbar-actions">
         <span class="live-pill"><i></i> LIVE</span>
-        <button class="auto-refresh-pill" id="autoRefreshPill" type="button" title="רענון אוטומטי כל 60 שניות"><i></i><span>60 שנ׳</span></button>
+        <button class="auto-refresh-pill" id="autoRefreshPill" type="button" title="רענון אוטומטי כל 60 שניות"><i></i><span>רענון אוטומטי</span></button>
         <button class="icon-button theme-toggle" id="themeToggle" type="button" title="מעבר למצב כהה" aria-label="מעבר למצב כהה" aria-pressed="false">
           <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
           <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"></path></svg>
@@ -78,7 +81,7 @@
     </div>
   </header>
   <div class="quick-menu hidden" id="quickMenu" role="dialog" aria-label="תפריט מהיר">
-    <button type="button" id="quickAutoRefresh"><span>רענון אוטומטי</span><b id="quickAutoStatus">פעיל · 60 שנ׳</b></button>
+    <button type="button" id="quickAutoRefresh"><span>רענון אוטומטי</span><b id="quickAutoStatus">פעיל — מתעדכן כל דקה</b></button>
     <button type="button" id="quickFilters"><span>סינון וחיפוש</span><b>פתח</b></button>
     <button type="button" id="quickReset"><span>איפוס סינונים</span><b>שעה אחרונה</b></button>
   </div>
@@ -144,35 +147,41 @@
       </article>
     </section>
 
-    <section class="flash-deck hidden" id="flashDeck" aria-label="מבזקים אחרונים מאתרי החדשות">
-      <div class="flash-deck-label"><span>מבזקים</span><b>עכשיו</b></div>
-      <div class="flash-deck-items" id="flashDeckItems"></div>
+    <section class="hero-news-grid" aria-label="החדשות המרכזיות עכשיו">
+      <section class="lead-story hidden" id="leadStory" aria-live="polite">
+        <div class="lead-story-topline">
+          <span class="lead-story-label"><i></i> הכותרת המרכזית עכשיו</span>
+          <span class="lead-story-signal" id="leadStorySignal"></span>
+        </div>
+        <div class="lead-story-body">
+          <a class="lead-story-media hidden" id="leadStoryMedia" href="#" target="_blank" rel="noopener noreferrer" aria-label="פתיחת הידיעה המרכזית">
+            <img id="leadStoryImage" alt="" loading="eager" referrerpolicy="no-referrer" />
+          </a>
+          <div class="lead-story-copy">
+            <h2><a id="leadStoryLink" href="#" target="_blank" rel="noopener noreferrer"><span id="leadStoryTitle"></span></a></h2>
+            <p id="leadStoryPreview"></p>
+            <div class="lead-story-meta">
+              <span id="leadStorySource"></span>
+              <span>•</span>
+              <span id="leadStoryAge"></span>
+              <span>•</span>
+              <strong id="leadStoryCount"></strong>
+            </div>
+            <div class="lead-story-sources" id="leadStorySources"></div>
+          </div>
+          <a class="lead-story-cta" id="leadStoryCta" href="#" target="_blank" rel="noopener noreferrer">לידיעה המלאה <span>←</span></a>
+        </div>
+      </section>
+
+      <section class="flash-deck hidden" id="flashDeck" aria-label="האחרונים עכשיו מאתרי החדשות">
+        <div class="flash-deck-label"><span>האחרונים</span><b>עכשיו</b></div>
+        <div class="flash-deck-items" id="flashDeckItems"></div>
+      </section>
     </section>
 
-    <section class="lead-story hidden" id="leadStory" aria-live="polite">
-      <div class="lead-story-topline">
-        <span class="lead-story-label"><i></i> הכותרת המרכזית עכשיו</span>
-        <span class="lead-story-signal" id="leadStorySignal"></span>
-      </div>
-      <div class="lead-story-body">
-        <a class="lead-story-media hidden" id="leadStoryMedia" href="#" target="_blank" rel="noopener noreferrer" aria-label="פתיחת הידיעה המרכזית">
-          <img id="leadStoryImage" alt="" loading="eager" referrerpolicy="no-referrer" />
-        </a>
-        <div class="lead-story-copy">
-          <h2><a id="leadStoryLink" href="#" target="_blank" rel="noopener noreferrer"><span id="leadStoryTitle"></span></a></h2>
-          <p id="leadStoryPreview"></p>
-          <div class="lead-story-meta">
-            <span id="leadStorySource"></span>
-            <span>•</span>
-            <span id="leadStoryAge"></span>
-            <span>•</span>
-            <strong id="leadStoryCount"></strong>
-          </div>
-          <div class="lead-story-sources" id="leadStorySources"></div>
-        </div>
-        <a class="lead-story-cta" id="leadStoryCta" href="#" target="_blank" rel="noopener noreferrer">לידיעה המלאה <span>←</span></a>
-      </div>
-    </section>
+    <div class="data-status hidden" id="dataStatus" role="status" aria-live="polite">
+      <span class="data-status-dot"></span><span id="dataStatusText">העדכון מתעכב — מוצגים הנתונים האחרונים</span>
+    </div>
 
     <section class="breaking-banner hidden" id="breakingBanner" aria-live="polite">
       <div class="breaking-label"><span></span> מתעדכן עכשיו</div>
@@ -279,7 +288,7 @@
 
         <section class="sidebar-card note-card">
           <div class="note-icon">i</div>
-          <p><strong>חשוב לדעת:</strong> כותרות מאתרי חדשות מוצגות עם קישור למקור. ערוצי Telegram פרטיים עשויים לפרסם דיווחים ראשוניים שטרם אומתו; מקורות רשמיים מסומנים בנפרד.</p>
+          <p><strong>חשוב לדעת:</strong> כותרות מאתרי חדשות מוצגות עם קישור למקור. ערוצי Telegram ציבוריים עשויים לפרסם דיווחים ראשוניים שטרם אומתו; מקורות רשמיים מסומנים בנפרד.</p>
         </section>
       </aside>
     </div>
@@ -290,7 +299,7 @@
     <div class="footer-copy">
       <p>האתר נבנה כשירות לציבור.</p>
       <p>לפרטים נוספים ויצירת קשר: <a href="mailto:singles.pr@gmail.com">singles.pr@gmail.com</a></p>
-      <small>המערכת אינה מעתיקה כתבות מלאות. כל פריט מפנה למקור המקורי.</small>
+      <small>המערכת אינה מעתיקה כתבות מלאות. כתבות מאתרי חדשות מפנות למקור; דיווחי Telegram מוצגים ללא קישור חיצוני.</small>
     </div>
   </footer>
 

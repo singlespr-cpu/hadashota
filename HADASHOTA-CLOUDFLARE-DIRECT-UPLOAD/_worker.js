@@ -15,7 +15,7 @@ const SOURCES = [
   { id: "israelhayom-news", publisher: "israelhayom", name: "ישראל היום", kind: "site", adapter: "jsonld", url: "https://www.israelhayom.co.il/israelnow", home: "https://www.israelhayom.co.il/israelnow", language: "he", verified: true },
   { id: "n12-breaking", publisher: "n12", name: "N12 מבזקים", kind: "site", adapter: "jsonld", url: "https://www.n12.co.il/Tagit/%D7%9E%D7%91%D7%96%D7%A7", home: "https://www.n12.co.il/Tagit/%D7%9E%D7%91%D7%96%D7%A7", language: "he", verified: true },
   { id: "kan-headlines", publisher: "kan", name: "כאן חדשות", kind: "site", adapter: "jsonld", url: "https://www.kan.org.il/headlines/", home: "https://www.kan.org.il/headlines/", language: "he", verified: true },
-  { id: "now14-breaking", publisher: "now14", name: "עכשיו 14 מבזקים", kind: "site", adapter: "jsonld", url: "https://www.now14.co.il/news-flash", home: "https://www.now14.co.il/news-flash", language: "he", verified: true },
+  { id: "now14-breaking", publisher: "now14", name: "עכשיו 14 מבזקים", kind: "site", adapter: "jsonld", url: "https://www.c14.co.il/news-flash", home: "https://www.c14.co.il/news-flash", language: "he", verified: true },
   { id: "0404", publisher: "0404", name: "חדשות 04", kind: "site", adapter: "jsonld", url: "https://0404.co.il/", home: "https://0404.co.il/", language: "he", verified: true },
   { id: "bhol-breaking", publisher: "bhol", name: "בחדרי חרדים מבזקים", kind: "site", adapter: "jsonld", url: "https://www.bhol.co.il/newsflash", home: "https://www.bhol.co.il/newsflash", language: "he", verified: true },
   { id: "bhol-news", publisher: "bhol", name: "בחדרי חרדים", kind: "site", adapter: "jsonld", url: "https://www.bhol.co.il/categories/1072/", home: "https://www.bhol.co.il/categories/1072/", language: "he", verified: true },
@@ -38,7 +38,7 @@ const SOURCES = [
 
   // ---------- Additional live Telegram newsrooms / journalists ----------
   { id: "maariv-flash", publisher: "maariv", name: "מעריב מבזקים", kind: "site", adapter: "rss", url: "https://www.maariv.co.il/Rss/RssFeedsMivzakiChadashot", home: "https://www.maariv.co.il/news", language: "he", verified: true },
-  { id: "calcalist", publisher: "calcalist", name: "כלכליסט", kind: "site", adapter: "jsonld", url: "https://www.calcalist.co.il/", home: "https://www.calcalist.co.il/", language: "he", verified: true },
+  { id: "calcalist", publisher: "calcalist", name: "כלכליסט", kind: "site", adapter: "jsonld", url: "https://www.calcalist.co.il/home/0,7340,L-8,00.html", home: "https://www.calcalist.co.il/", language: "he", verified: true },
   { id: "makorrishon", publisher: "makorrishon", name: "מקור ראשון", kind: "site", adapter: "jsonld", url: "https://www.makorrishon.co.il/", home: "https://www.makorrishon.co.il/", language: "he", verified: true },
   { id: "srugim", publisher: "srugim", name: "סרוגים", kind: "site", adapter: "rss", url: "https://www.srugim.co.il/feed", home: "https://www.srugim.co.il/", language: "he", verified: true },
   { id: "arutz7", publisher: "arutz7", name: "ערוץ 7", kind: "site", adapter: "jsonld", url: "https://www.inn.co.il/", home: "https://www.inn.co.il/", language: "he", verified: true },
@@ -89,9 +89,13 @@ export default {
     }
 
     if (url.pathname === "/api/health") {
-      if (url.searchParams.get("deep") === "1") {
+      const deep = url.searchParams.get("deep");
+      if (deep) {
+        const shard = deep === "telegram" || url.searchParams.get("shard") === "telegram" ? "telegram" : "sites";
         const checkedAt = new Date().toISOString();
-        const results = await Promise.all(SOURCES.map(fetchSource));
+        const retryBudget = { remaining: 2 };
+        const shardSources = getShardSources(shard);
+        const results = await fetchSourcesWithLimit(shardSources, 6, retryBudget);
         const sourceStatus = results.map((r) => ({
           id: r.source.id,
           name: r.source.name,
@@ -103,15 +107,24 @@ export default {
           error: r.error
         }));
         return json({
-          ok: sourceStatus.some((s) => s.ok),
+          ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
           checkedAt,
+          shard,
           configuredSources: SOURCES.length,
-          respondingSources: sourceStatus.filter((s) => s.ok).length,
+          configuredShardSources: shardSources.length,
+          respondingSources: sourceStatus.filter((item) => item.ok).length,
+          diagnosticShards: ["sites", "telegram"],
           sources: sourceStatus
         });
       }
-      return json({ ok: true, service: "hadashota-news", time: new Date().toISOString() });
+      return json({
+        ok: true,
+        service: "hadashota-news",
+        time: new Date().toISOString(),
+        configuredSources: SOURCES.length,
+        newsShards: ["sites", "telegram"]
+      });
     }
 
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
@@ -247,96 +260,219 @@ function numberOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function handleNews(request, ctx) {
-  const cacheUrl = new URL(request.url);
-  cacheUrl.search = "";
-  cacheUrl.pathname = "/api/news";
-  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
-  const cache = caches.default;
-
-  const cached = await cache.match(cacheKey);
-  if (cached) return cors(cached);
-
-  const started = Date.now();
-  const settled = await Promise.all(SOURCES.map(fetchSource));
-  const rawItems = settled.flatMap((r) => r.items);
-  const now = Date.now();
-  const cutoff = now - 30 * 60 * 60 * 1000;
-
-  const recent = rawItems
-    .filter((item) => {
-      const t = Date.parse(item.publishedAt);
-      return Number.isFinite(t) && t >= cutoff && t <= now + 10 * 60 * 1000;
-    })
-    .map((item) => ({ ...item, category: classify(item) }))
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
-
-  const clustered = clusterItems(recent).slice(0, 650);
-  const activeSources = settled
-    .map((s) => ({ ...s, recentItems: s.items.filter((item) => {
-      const t = Date.parse(item.publishedAt);
-      return Number.isFinite(t) && t >= cutoff && t <= now + 10 * 60 * 1000;
-    }) }))
-    .filter((s) => s.recentItems.length > 0)
-    .map((s) => ({
-      id: s.source.id,
-      publisher: s.source.publisher,
-      name: s.source.name,
-      kind: s.source.kind,
-      home: s.source.home,
-      verified: !!s.source.verified,
-      official: !!s.source.official,
-      independent: !!s.source.independent,
-      itemCount: s.recentItems.length,
-      latencyMs: s.latencyMs,
-      lastItemAt: s.recentItems[0]?.publishedAt || null
-    }))
-    .sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0));
-
-  const payload = {
-    generatedAt: new Date().toISOString(),
-    refreshAfterSeconds: 60,
-    tookMs: Date.now() - started,
-    items: clustered,
-    sources: activeSources,
-    stats: {
-      configuredSources: SOURCES.length,
-      activeSources: activeSources.length,
-      items: clustered.length,
-      officialSources: activeSources.filter((s) => s.official).length,
-      telegramSources: activeSources.filter((s) => s.kind === "telegram").length
-    }
-  };
-
-  const response = json(payload, 200, {
-    "Cache-Control": "public, max-age=20, s-maxage=55, stale-while-revalidate=120"
-  });
-
-  ctx.waitUntil(cache.put(cacheKey, response.clone()));
-  return response;
+function getShardSources(shard) {
+  return SOURCES.filter((source) => shard === "telegram" ? source.kind === "telegram" : source.kind !== "telegram");
 }
 
-async function fetchSource(source) {
+async function handleNews(request, ctx) {
+  const requestUrl = new URL(request.url);
+  const shard = requestUrl.searchParams.get("shard") === "telegram" ? "telegram" : "sites";
+  const force = requestUrl.searchParams.get("force") === "1";
+  const shardSources = getShardSources(shard);
+  const cache = caches.default;
+
+  const cacheUrl = new URL(request.url);
+  cacheUrl.pathname = "/api/news";
+  cacheUrl.search = `?shard=${shard}`;
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
+
+  const lastGoodUrl = new URL(request.url);
+  lastGoodUrl.pathname = "/api/news-last-good";
+  lastGoodUrl.search = `?shard=${shard}`;
+  const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
+
+  if (!force) {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cors(cached);
+  }
+
   const started = Date.now();
   try {
-    const response = await fetchWithTimeout(source.url, 5200);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const body = await response.text();
-    let items = [];
+    // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
+    // even when an origin redirects or several sources fail at the same time.
+    const retryBudget = { remaining: 4 };
+    const settled = await fetchSourcesWithLimit(shardSources, 8, retryBudget);
+    const rawItems = settled.flatMap((result) => result.items);
+    const now = Date.now();
+    const cutoff = now - 30 * 60 * 60 * 1000;
 
-    if (source.adapter === "rss") items = parseRss(body, source);
-    if (source.adapter === "telegram") items = parseTelegram(body, source);
-    if (source.adapter === "jsonld") items = parseJsonLd(body, source);
+    if (!rawItems.length) {
+      return await lastGoodOrError(cache, lastGoodKey, shard, "all_sources_failed");
+    }
 
-    items = dedupeSameSource(items)
-      .filter((i) => i.title && i.url && i.publishedAt)
-      .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-      .slice(0, 80);
+    const recent = rawItems
+      .filter((item) => {
+        const t = Date.parse(item.publishedAt);
+        return Number.isFinite(t) && t >= cutoff && t <= now + 10 * 60 * 1000;
+      })
+      .map((item) => ({ ...item, category: classify(item) }))
+      .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
 
-    return { source, items, latencyMs: Date.now() - started, error: null };
+    if (!recent.length) {
+      return await lastGoodOrError(cache, lastGoodKey, shard, "no_recent_items");
+    }
+
+    const clustered = clusterItems(recent).slice(0, shard === "telegram" ? 420 : 360);
+    const activeSources = settled
+      .map((result) => ({ ...result, recentItems: result.items.filter((item) => {
+        const t = Date.parse(item.publishedAt);
+        return Number.isFinite(t) && t >= cutoff && t <= now + 10 * 60 * 1000;
+      }) }))
+      .filter((result) => result.recentItems.length > 0)
+      .map((result) => ({
+        id: result.source.id,
+        publisher: result.source.publisher,
+        name: result.source.name,
+        kind: result.source.kind,
+        home: result.source.home,
+        verified: !!result.source.verified,
+        official: !!result.source.official,
+        independent: !!result.source.independent,
+        itemCount: result.recentItems.length,
+        latencyMs: result.latencyMs,
+        lastItemAt: result.recentItems[0]?.publishedAt || null
+      }))
+      .sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0));
+
+    const failedSources = settled
+      .filter((result) => result.error)
+      .map((result) => ({ id: result.source.id, name: result.source.name, error: result.error }));
+
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      refreshAfterSeconds: 60,
+      shard,
+      stale: false,
+      tookMs: Date.now() - started,
+      items: clustered,
+      sources: activeSources,
+      stats: {
+        configuredSources: SOURCES.length,
+        configuredShardSources: shardSources.length,
+        activeSources: activeSources.length,
+        items: clustered.length,
+        officialSources: activeSources.filter((source) => source.official).length,
+        telegramSources: activeSources.filter((source) => source.kind === "telegram").length,
+        failedSources: failedSources.length,
+        retriesUsed: 4 - retryBudget.remaining
+      },
+      failures: failedSources.slice(0, 12)
+    };
+
+    const response = json(payload, 200, {
+      "Cache-Control": "public, max-age=20, s-maxage=55, stale-while-revalidate=180"
+    });
+    const lastGoodResponse = json(payload, 200, {
+      "Cache-Control": "public, max-age=0, s-maxage=21600, stale-while-revalidate=86400"
+    });
+
+    ctx.waitUntil(Promise.all([
+      cache.put(cacheKey, response.clone()),
+      cache.put(lastGoodKey, lastGoodResponse)
+    ]));
+    return response;
   } catch (error) {
-    return { source, items: [], latencyMs: Date.now() - started, error: String(error?.message || error) };
+    return await lastGoodOrError(cache, lastGoodKey, shard, String(error?.message || error));
   }
+}
+
+async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
+  const cached = await cache.match(lastGoodKey);
+  if (cached) {
+    try {
+      const payload = await cached.json();
+      payload.stale = true;
+      payload.staleReason = reason;
+      payload.servedAt = new Date().toISOString();
+      return json(payload, 200, {
+        "Cache-Control": "no-store",
+        "X-Hadashota-Stale": "1"
+      });
+    } catch {
+      // A corrupt cache entry should never prevent a proper error response.
+    }
+  }
+  return json({
+    error: "News sources are temporarily unavailable",
+    shard,
+    stale: true,
+    staleReason: reason,
+    refreshAfterSeconds: 8
+  }, 503, { "Cache-Control": "no-store", "Retry-After": "8" });
+}
+
+async function fetchSourcesWithLimit(sources, concurrency = 8, retryBudget = { remaining: 0 }) {
+  const results = new Array(sources.length);
+  let cursor = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), sources.length || 1);
+
+  async function runner() {
+    while (true) {
+      const index = cursor++;
+      if (index >= sources.length) return;
+      results[index] = await fetchSource(sources[index], retryBudget);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, runner));
+  return results;
+}
+
+async function fetchSource(source, retryBudget = { remaining: 0 }) {
+  const started = Date.now();
+  let lastError = null;
+  let attempt = 0;
+
+  while (attempt < 2) {
+    try {
+      const timeoutMs = source.adapter === "telegram" ? 4200 : source.adapter === "jsonld" ? 4800 : 4400;
+      const response = await fetchWithTimeout(source.url, timeoutMs);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const contentLength = Number(response.headers.get("content-length") || 0);
+      if (contentLength > 5_500_000) throw new Error("BODY_TOO_LARGE");
+
+      const body = await response.text();
+      let items = [];
+      if (source.adapter === "rss") items = parseRss(body, source);
+      if (source.adapter === "telegram") items = parseTelegram(body, source);
+      if (source.adapter === "jsonld") items = parseJsonLd(body, source);
+
+      items = dedupeSameSource(items)
+        .filter((item) => item.title && item.url && item.publishedAt)
+        .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+        .slice(0, 80);
+
+      return { source, items, latencyMs: Date.now() - started, error: null, attempts: attempt + 1 };
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableSourceError(error);
+      if (attempt === 0 && retryable && retryBudget.remaining > 0) {
+        retryBudget.remaining -= 1;
+        attempt += 1;
+        await delay(140 + Math.floor(Math.random() * 180));
+        continue;
+      }
+      break;
+    }
+  }
+
+  return {
+    source,
+    items: [],
+    latencyMs: Date.now() - started,
+    error: String(lastError?.message || lastError || "unknown_error"),
+    attempts: attempt + 1
+  };
+}
+
+function isRetryableSourceError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return /timeout|abort|network|fetch|http 429|http 5\d\d|connection|econn|temporar/.test(message);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchWithTimeout(url, timeoutMs) {
@@ -539,9 +675,10 @@ function clusterItems(items) {
     const itemTime = Date.parse(item.publishedAt);
     let match = null;
 
-    for (let i = Math.max(0, clusters.length - 90); i < clusters.length; i++) {
+    for (let i = Math.max(0, clusters.length - 110); i < clusters.length; i++) {
       const cluster = clusters[i];
-      if (Math.abs(itemTime - Date.parse(cluster.publishedAt)) > 8 * 60 * 60 * 1000) continue;
+      const clusterTime = Date.parse(cluster.latestReportAt || cluster.publishedAt);
+      if (Math.abs(itemTime - clusterTime) > 8 * 60 * 60 * 1000) continue;
       if (item.category && cluster.category && item.category !== "other" && cluster.category !== "other" && item.category !== cluster.category) continue;
       if (sameEvent(item.title, cluster.title)) {
         match = cluster;
@@ -549,34 +686,58 @@ function clusterItems(items) {
       }
     }
 
+    const relatedEntry = {
+      sourceId: item.sourceId,
+      publisher: item.publisher,
+      sourceName: item.sourceName,
+      sourceKind: item.sourceKind,
+      verified: item.verified,
+      official: item.official,
+      independent: item.independent,
+      url: item.url,
+      publishedAt: item.publishedAt,
+      imageUrl: item.imageUrl || null
+    };
+
     if (!match) {
       clusters.push({
         ...item,
         reportCount: 1,
-        related: [{ sourceId: item.sourceId, publisher: item.publisher, sourceName: item.sourceName, sourceKind: item.sourceKind, verified: item.verified, official: item.official, independent: item.independent, url: item.url, publishedAt: item.publishedAt, imageUrl: item.imageUrl || null }]
+        firstReportAt: item.publishedAt,
+        latestReportAt: item.publishedAt,
+        related: [relatedEntry]
       });
       continue;
     }
 
-    const exists = match.related.some((r) => r.publisher === item.publisher);
-    if (!exists) {
-      match.related.push({ sourceId: item.sourceId, publisher: item.publisher, sourceName: item.sourceName, sourceKind: item.sourceKind, verified: item.verified, official: item.official, independent: item.independent, url: item.url, publishedAt: item.publishedAt, imageUrl: item.imageUrl || null });
-      match.reportCount = match.related.length;
-      if (!match.imageUrl && item.imageUrl) match.imageUrl = item.imageUrl;
+    const existing = match.related.find((related) => related.publisher === item.publisher);
+    if (!existing) {
+      match.related.push(relatedEntry);
+    } else if (Date.parse(item.publishedAt) > Date.parse(existing.publishedAt || 0)) {
+      Object.assign(existing, relatedEntry);
     }
 
-    // Prefer an official or verified representative, otherwise keep the newest one.
-    const representativeScore = Number(match.official) * 3 + Number(match.verified) * 2;
-    const candidateScore = Number(item.official) * 3 + Number(item.verified) * 2;
-    if (candidateScore > representativeScore) {
+    match.reportCount = match.related.length;
+    if (!match.imageUrl && item.imageUrl) match.imageUrl = item.imageUrl;
+    if (itemTime > Date.parse(match.latestReportAt || 0)) match.latestReportAt = item.publishedAt;
+    if (itemTime < Date.parse(match.firstReportAt || item.publishedAt)) match.firstReportAt = item.publishedAt;
+
+    // A mixed cluster must stay clickable. A news-site article always represents the
+    // cluster when one exists; official/verified priority is applied within the same kind.
+    const representativeScore = Number(match.sourceKind === "site") * 100 + Number(match.official) * 20 + Number(match.verified) * 5;
+    const candidateScore = Number(item.sourceKind === "site") * 100 + Number(item.official) * 20 + Number(item.verified) * 5;
+    if (candidateScore > representativeScore || (candidateScore === representativeScore && itemTime > Date.parse(match.publishedAt))) {
       const related = match.related;
-      Object.assign(match, item, { related, reportCount: related.length });
+      const reportCount = match.reportCount;
+      const latestReportAt = match.latestReportAt;
+      const firstReportAt = match.firstReportAt;
+      const clusterImage = match.imageUrl || item.imageUrl || null;
+      Object.assign(match, item, { related, reportCount, latestReportAt, firstReportAt, imageUrl: clusterImage });
     }
   }
 
-  return clusters.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+  return clusters.sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
 }
-
 
 function sameEvent(a, b) {
   const A = titleTokens(a);

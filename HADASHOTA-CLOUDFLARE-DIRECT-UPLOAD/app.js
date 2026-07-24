@@ -12,7 +12,10 @@ const state = {
   loading: false,
   timer: null,
   countdownTimer: null,
+  retryTimer: null,
+  retryAttempt: 0,
   nextRefreshAt: 0,
+  dataDelayed: false,
   city: localStorage.getItem("hadashota.city") || "telaviv",
   lastVisitAt: Number((localStorage.getItem("hadashota.lastVisitAt") ?? localStorage.getItem("pulse.lastVisitAt"))) || 0
 };
@@ -78,10 +81,15 @@ const el = {
   quickAutoRefresh: document.querySelector("#quickAutoRefresh"),
   quickAutoStatus: document.querySelector("#quickAutoStatus"),
   quickFilters: document.querySelector("#quickFilters"),
-  quickReset: document.querySelector("#quickReset")
+  quickReset: document.querySelector("#quickReset"),
+  dataStatus: document.querySelector("#dataStatus"),
+  dataStatusText: document.querySelector("#dataStatusText")
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
+const NEWS_SHARDS = ["sites", "telegram"];
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v6.";
+const CLIENT_NEWS_TIMEOUT_MS = 14_000;
 
 const CATEGORY_LABELS = {
   all: "כל העדכונים",
@@ -98,6 +106,7 @@ function init() {
   syncTheme();
   syncControlsFromState();
   bindEvents();
+  restoreLocalLastGood();
   loadUtilities();
   loadNews();
   restartAutoRefresh();
@@ -238,36 +247,309 @@ function bindEvents() {
   });
 }
 
-async function loadNews(force = false) {
+async function loadNews(force = false, fromRetry = false) {
   if (state.loading) return;
   state.loading = true;
   el.refreshBtn.classList.add("loading");
 
   try {
-    const response = await fetch(`/api/news`, { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    state.items = Array.isArray(data.items) ? data.items : [];
-    state.sources = Array.isArray(data.sources) ? data.sources : [];
-    el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
+    const results = await Promise.allSettled(NEWS_SHARDS.map((shard) => fetchNewsShard(shard, force)));
+    const payloads = [];
+    let delayed = false;
+    let freshShards = 0;
+
+    results.forEach((result, index) => {
+      const shard = NEWS_SHARDS[index];
+      if (result.status === "fulfilled" && Array.isArray(result.value?.items) && result.value.items.length) {
+        payloads.push(result.value);
+        persistShardLastGood(shard, result.value);
+        freshShards += result.value.stale ? 0 : 1;
+        if (result.value.stale) delayed = true;
+        return;
+      }
+
+      const cached = readShardLastGood(shard);
+      if (cached?.items?.length) {
+        payloads.push({ ...cached, stale: true, localFallback: true });
+        delayed = true;
+      } else {
+        delayed = true;
+      }
+    });
+
+    if (!payloads.length) throw new Error("No news shard returned usable data");
+
+    const data = mergeNewsPayloads(payloads);
+    if (!data.items.length) throw new Error("Merged news feed is empty");
+
+    state.items = data.items;
+    state.sources = data.sources;
+    state.dataDelayed = delayed || freshShards < NEWS_SHARDS.length;
+    el.lastUpdated.textContent = state.dataDelayed
+      ? `נתונים אחרונים · ${formatClock(data.generatedAt)}`
+      : `עודכן ${formatClock(data.generatedAt)}`;
+
     renderStats(data);
     render();
+    setDataStatus(state.dataDelayed);
+
     if (state.autoRefresh) scheduleNextRefresh(Number(data.refreshAfterSeconds) || 60);
     else updateRefreshCountdown();
-    localStorage.setItem("hadashota.lastVisitAt", String(Date.now()));
-    if (force) showToast("החדשות רועננו עכשיו");
+
+    if (!state.dataDelayed) {
+      state.retryAttempt = 0;
+      clearTimeout(state.retryTimer);
+      localStorage.setItem("hadashota.lastVisitAt", String(Date.now()));
+      if (force) showToast("החדשות רועננו עכשיו");
+    } else {
+      scheduleNewsRetry();
+      if (force) showToast("חלק מהמקורות מתעכבים — מוצגים הנתונים האחרונים");
+    }
   } catch (error) {
     console.error(error);
-    el.feed.innerHTML = `<div class="empty-state"><div class="empty-icon">!</div><h3>לא הצלחנו למשוך את המקורות</h3><p>בדוק שה‑Worker פעיל ונסה לרענן שוב.</p></div>`;
-    showToast("שגיאה בטעינת המקורות");
+    state.dataDelayed = true;
+    const restored = state.items.length > 0 || restoreLocalLastGood();
+    setDataStatus(restored);
+    scheduleNewsRetry();
+
+    if (!restored) {
+      el.feed.innerHTML = `<div class="empty-state"><div class="empty-icon">!</div><h3>המקורות לא זמינים כרגע</h3><p>מתבצע ניסיון חיבור חוזר אוטומטי.</p></div>`;
+    }
+    if (force && !fromRetry) showToast("העדכון מתעכב — ננסה שוב אוטומטית");
   } finally {
     state.loading = false;
     el.refreshBtn.classList.remove("loading");
   }
 }
 
+async function fetchNewsShard(shard, force = false) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("client_timeout"), CLIENT_NEWS_TIMEOUT_MS);
+  try {
+    const params = new URLSearchParams({ shard });
+    if (force) params.set("force", "1");
+    const response = await fetch(`/api/news?${params}`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+      cache: force ? "no-store" : "default"
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} (${shard})`);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function persistShardLastGood(shard, payload) {
+  if (!payload?.items?.length) return;
+  try {
+    const compact = {
+      ...payload,
+      items: payload.items.slice(0, shard === "telegram" ? 360 : 320),
+      failures: []
+    };
+    localStorage.setItem(`${LAST_GOOD_PREFIX}${shard}`, JSON.stringify(compact));
+  } catch (error) {
+    console.warn("Could not persist last good news", error);
+  }
+}
+
+function readShardLastGood(shard) {
+  try {
+    const raw = localStorage.getItem(`${LAST_GOOD_PREFIX}${shard}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.items) || !parsed.items.length) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function restoreLocalLastGood() {
+  const payloads = NEWS_SHARDS.map(readShardLastGood).filter(Boolean);
+  if (!payloads.length) return false;
+  const data = mergeNewsPayloads(payloads.map((payload) => ({ ...payload, stale: true, localFallback: true })));
+  if (!data.items.length) return false;
+  state.items = data.items;
+  state.sources = data.sources;
+  state.dataDelayed = true;
+  el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
+  renderStats(data);
+  render();
+  setDataStatus(true);
+  return true;
+}
+
+function scheduleNewsRetry() {
+  clearTimeout(state.retryTimer);
+  const delays = [5, 10, 20, 30];
+  const seconds = delays[Math.min(state.retryAttempt, delays.length - 1)];
+  state.retryAttempt += 1;
+  state.retryTimer = setTimeout(() => loadNews(false, true), seconds * 1000);
+}
+
+function setDataStatus(delayed) {
+  if (!el.dataStatus || !el.dataStatusText) return;
+  el.dataStatus.classList.toggle("hidden", !delayed);
+  if (delayed) el.dataStatusText.textContent = "העדכון מתעכב — מוצגים הנתונים האחרונים";
+}
+
+function mergeNewsPayloads(payloads) {
+  const items = payloads.flatMap((payload) => Array.isArray(payload.items) ? payload.items : []);
+  const sourcesById = new Map();
+  for (const payload of payloads) {
+    for (const source of Array.isArray(payload.sources) ? payload.sources : []) {
+      const current = sourcesById.get(source.id);
+      if (!current || Date.parse(source.lastItemAt || 0) > Date.parse(current.lastItemAt || 0)) sourcesById.set(source.id, source);
+    }
+  }
+
+  const mergedItems = mergeClustersClient(items)
+    .sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt))
+    .slice(0, 650);
+  const generatedAt = payloads
+    .map((payload) => payload.generatedAt)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || new Date().toISOString();
+
+  return {
+    generatedAt,
+    refreshAfterSeconds: 60,
+    items: mergedItems,
+    sources: [...sourcesById.values()].sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0)),
+    stats: {
+      configuredSources: Math.max(...payloads.map((payload) => Number(payload.stats?.configuredSources) || 0), 0)
+    }
+  };
+}
+
+function mergeClustersClient(items) {
+  const sorted = [...items].sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
+  const clusters = [];
+
+  for (const item of sorted) {
+    const itemTime = Date.parse(item.latestReportAt || item.publishedAt);
+    let match = null;
+    for (let i = Math.max(0, clusters.length - 120); i < clusters.length; i++) {
+      const candidate = clusters[i];
+      const candidateTime = Date.parse(candidate.latestReportAt || candidate.publishedAt);
+      if (Math.abs(itemTime - candidateTime) > 8 * 60 * 60 * 1000) continue;
+      if (item.category && candidate.category && item.category !== "other" && candidate.category !== "other" && item.category !== candidate.category) continue;
+      if (sameEventClient(item.title, candidate.title)) { match = candidate; break; }
+    }
+
+    if (!match) {
+      const clone = structuredCloneSafe(item);
+      clone.related = normalizeClusterReports(clone);
+      clone.reportCount = clone.related.length || 1;
+      clone.latestReportAt = clusterLatestAt(clone);
+      clone.firstReportAt = clusterFirstAt(clone);
+      clusters.push(clone);
+      continue;
+    }
+
+    const reports = dedupeReports([...normalizeClusterReports(match), ...normalizeClusterReports(item)]);
+    const preferred = representativeRank(item) > representativeRank(match) ? item : match;
+    const other = preferred === item ? match : item;
+    const latestReportAt = newestIso(reports.map((report) => report.publishedAt).concat([match.latestReportAt, item.latestReportAt]));
+    const firstReportAt = oldestIso(reports.map((report) => report.publishedAt).concat([match.firstReportAt, item.firstReportAt]));
+    const imageUrl = preferred.imageUrl || other.imageUrl || reports.find((report) => report.imageUrl)?.imageUrl || null;
+    const preserved = { ...preferred };
+    Object.assign(match, preserved, {
+      related: reports,
+      reportCount: reports.length,
+      latestReportAt,
+      firstReportAt,
+      imageUrl
+    });
+  }
+  return clusters;
+}
+
+function normalizeClusterReports(item) {
+  const base = {
+    sourceId: item.sourceId,
+    publisher: item.publisher,
+    sourceName: item.sourceName,
+    sourceKind: item.sourceKind,
+    verified: !!item.verified,
+    official: !!item.official,
+    independent: !!item.independent,
+    url: item.url,
+    publishedAt: item.publishedAt,
+    imageUrl: item.imageUrl || null
+  };
+  return dedupeReports([base, ...(Array.isArray(item.related) ? item.related : [])]);
+}
+
+function dedupeReports(reports) {
+  const byPublisher = new Map();
+  for (const report of reports) {
+    if (!report?.publisher && !report?.sourceId) continue;
+    const key = report.publisher || report.sourceId;
+    const current = byPublisher.get(key);
+    if (!current || Date.parse(report.publishedAt || 0) > Date.parse(current.publishedAt || 0)) byPublisher.set(key, report);
+  }
+  return [...byPublisher.values()].sort((a, b) => Date.parse(b.publishedAt || 0) - Date.parse(a.publishedAt || 0));
+}
+
+function representativeRank(item) {
+  const publishedMs = Date.parse(item?.publishedAt || 0);
+  const ageHours = Number.isFinite(publishedMs) ? Math.max(0, (Date.now() - publishedMs) / 3_600_000) : 24;
+  const recency = Math.max(0, 4 - ageHours);
+  // Mixed clusters must remain clickable: a real news-site report always wins
+  // the representative slot over a Telegram post. Official/verified still matter within a kind.
+  return Number(item?.sourceKind === "site") * 100
+    + Number(item?.official) * 20
+    + Number(item?.verified) * 5
+    + Number(MAINSTREAM_PUBLISHERS.includes(item?.publisher)) * 3
+    + recency;
+}
+
+function clusterLatestAt(item) {
+  return newestIso([item?.latestReportAt, item?.publishedAt, ...(item?.related || []).map((report) => report.publishedAt)]);
+}
+
+function clusterFirstAt(item) {
+  return oldestIso([item?.firstReportAt, item?.publishedAt, ...(item?.related || []).map((report) => report.publishedAt)]);
+}
+
+function newestIso(values) {
+  const valid = values.filter(Boolean).map((value) => Date.parse(value)).filter(Number.isFinite);
+  return valid.length ? new Date(Math.max(...valid)).toISOString() : new Date().toISOString();
+}
+
+function oldestIso(values) {
+  const valid = values.filter(Boolean).map((value) => Date.parse(value)).filter(Number.isFinite);
+  return valid.length ? new Date(Math.min(...valid)).toISOString() : new Date().toISOString();
+}
+
+function structuredCloneSafe(value) {
+  try { return structuredClone(value); } catch { return JSON.parse(JSON.stringify(value)); }
+}
+
+function sameEventClient(a, b) {
+  const A = clientTitleTokens(a);
+  const B = clientTitleTokens(b);
+  if (!A.size || !B.size) return false;
+  let intersection = 0;
+  for (const token of A) if (B.has(token)) intersection += 1;
+  const union = A.size + B.size - intersection;
+  const jaccard = union ? intersection / union : 0;
+  const containment = intersection / Math.max(1, Math.min(A.size, B.size));
+  return jaccard >= 0.58 || (intersection >= 3 && containment >= 0.52) || (intersection >= 4 && containment >= 0.44);
+}
+
+function clientTitleTokens(value) {
+  const stop = new Set(["של","את","על","עם","לא","גם","זה","זו","כי","כך","הוא","היא","הם","כל","אל","לפי","אחרי","לפני","עוד","היום","עכשיו","חדש","חדשה","חדשות","דיווח","דיווחים","עדכון","עדכונים","ראשוני","ישראל","ישראלי","ישראלית","the","of","to","in","on","for","and","is","are","with","breaking","report","update"]);
+  const normalized = String(value || "").toLowerCase().replace(/[״׳'\"`]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  return new Set(normalized.split(" ").filter((word) => word.length >= 2 && !stop.has(word)).slice(0, 24));
+}
+
 function render() {
   renderLeadStory();
+  renderFlashDeck();
   renderFeed();
   renderSources();
   renderBreaking();
@@ -276,8 +558,11 @@ function render() {
 
 function renderStats(data = null) {
   const now = Date.now();
-  const hourItems = state.items.filter((item) => now - Date.parse(item.publishedAt) <= 60 * 60 * 1000);
-  const officialItems = state.items.filter((item) => item.official && now - Date.parse(item.publishedAt) <= 24 * 60 * 60 * 1000);
+  const hourItems = state.items.filter((item) => now - Date.parse(item.latestReportAt || item.publishedAt) <= 60 * 60 * 1000);
+  const officialItems = state.items.filter((item) =>
+    (item.official || (item.related || []).some((report) => report.official))
+    && now - Date.parse(item.latestReportAt || item.publishedAt) <= 24 * 60 * 60 * 1000
+  );
   el.statSources.textContent = String(state.sources.length);
   el.statHour.textContent = String(hourItems.length);
   el.statOfficial.textContent = String(officialItems.length);
@@ -305,11 +590,11 @@ function renderFeed() {
 function filteredItems() {
   const cutoff = Date.now() - state.hours * 60 * 60 * 1000;
   const filtered = state.items.filter((item) => {
-    if (Date.parse(item.publishedAt) < cutoff) return false;
+    if (Date.parse(item.latestReportAt || item.publishedAt) < cutoff) return false;
     if (state.category !== "all" && item.category !== state.category) return false;
     if (state.kind === "site" && item.sourceKind !== "site") return false;
     if (state.kind === "telegram" && item.sourceKind !== "telegram") return false;
-    if (state.kind === "official" && !item.official) return false;
+    if (state.kind === "official" && !(item.official || (item.related || []).some((report) => report.official))) return false;
     if (state.query) {
       const haystack = `${item.title} ${item.preview || ""} ${item.sourceName}`.toLowerCase();
       if (!haystack.includes(state.query)) return false;
@@ -323,15 +608,21 @@ function filteredItems() {
 function mainstreamFirst(items) {
   const selected = [];
   const usedPublishers = new Set();
-  for (const publisher of MAINSTREAM_PUBLISHERS) {
-    const item = items.find((candidate) => candidate.sourceKind === "site" && candidate.publisher === publisher && !usedPublishers.has(candidate.publisher));
-    if (item) { selected.push(item); usedPublishers.add(item.publisher); }
+  const major = items
+    .filter((item) => item.sourceKind === "site" && MAINSTREAM_PUBLISHERS.includes(item.publisher))
+    .sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
+
+  for (const item of major) {
+    if (usedPublishers.has(item.publisher)) continue;
+    selected.push(item);
+    usedPublishers.add(item.publisher);
     if (selected.length === 3) break;
   }
   if (selected.length < 3) {
     for (const item of items) {
       if (item.sourceKind !== "site" || usedPublishers.has(item.publisher)) continue;
-      selected.push(item); usedPublishers.add(item.publisher);
+      selected.push(item);
+      usedPublishers.add(item.publisher);
       if (selected.length === 3) break;
     }
   }
@@ -347,8 +638,8 @@ function newsCardHtml(item) {
   const category = item.category || "other";
   const preview = item.preview && item.preview !== item.title ? `<p class="news-preview">${escapeHtml(item.preview)}</p>` : "";
   const telegramBadge = item.sourceKind === "telegram" ? `<span class="source-type-badge">Telegram</span>` : "";
-  const newBadge = state.lastVisitAt > 0 && Date.parse(item.publishedAt) > state.lastVisitAt ? `<span class="new-badge">חדש</span>` : "";
-  const officialBadge = item.official ? `<span class="official-badge">רשמי</span>` : "";
+  const newBadge = state.lastVisitAt > 0 && Date.parse(item.latestReportAt || item.publishedAt) > state.lastVisitAt ? `<span class="new-badge">חדש</span>` : "";
+  const officialBadge = (item.official || (item.related || []).some((report) => report.official)) ? `<span class="official-badge">רשמי</span>` : "";
   const independentBadge = item.independent ? `<span class="independent-badge">עצמאי</span>` : "";
   const clusterBadge = reportCount > 1 ? `<span class="cluster-badge">${reportCount} מקורות</span>` : "";
   const isSite = item.sourceKind === "site";
@@ -414,18 +705,30 @@ function renderLeadStory() {
   const now = Date.now();
   const candidates = state.items
     .map((item) => {
-      const ageMinutes = Math.max(0, (now - Date.parse(item.publishedAt)) / 60_000);
-      const reportCount = Math.max(Number(item.reportCount) || 1, Array.isArray(item.related) ? item.related.length : 1);
-      const sourceKinds = new Set((item.related || []).map((r) => r.publisher || r.sourceId || r.sourceName));
-      if (item.publisher) sourceKinds.add(item.publisher);
-      const uniqueSources = Math.max(reportCount, sourceKinds.size);
-      const freshness = Math.max(0, 180 - ageMinutes) / 180;
-      const authority = item.official ? 0.6 : item.verified ? 0.25 : 0;
-      const score = uniqueSources * 2.4 + freshness * 2 + authority;
-      return { item, uniqueSources, ageMinutes, score };
+      const latestAt = clusterLatestAt(item);
+      const ageMinutes = Math.max(0, (now - Date.parse(latestAt)) / 60_000);
+      const reports = normalizeClusterReports(item);
+      const uniqueSources = Math.max(Number(item.reportCount) || 1, reports.length || 1);
+      const hasOfficial = !!item.official || reports.some((report) => report.official);
+      const hasVerified = !!item.verified || reports.some((report) => report.verified);
+
+      let freshness = 0;
+      if (ageMinutes <= 15) freshness = 10;
+      else if (ageMinutes <= 30) freshness = 8.5;
+      else if (ageMinutes <= 60) freshness = 6;
+      else if (ageMinutes <= 90) freshness = 3.2;
+      else if (ageMinutes <= 120) freshness = 1.2;
+      else freshness = 0;
+
+      const sourceScore = Math.min(uniqueSources, 9) * 1.2;
+      const authority = hasOfficial ? 1.8 : hasVerified ? 0.55 : 0;
+      const activity = ageMinutes <= 12 ? 1.8 : ageMinutes <= 25 ? 1 : 0;
+      const oldPenalty = ageMinutes > 75 ? (ageMinutes - 75) / 11 : 0;
+      const score = freshness + sourceScore + authority + activity - oldPenalty;
+      return { item, uniqueSources, ageMinutes, latestAt, score, hasOfficial };
     })
-    .filter((entry) => entry.ageMinutes <= 180 && entry.uniqueSources >= 3)
-    .sort((a, b) => b.score - a.score || Date.parse(b.item.publishedAt) - Date.parse(a.item.publishedAt));
+    .filter((entry) => entry.ageMinutes <= 150 && (entry.uniqueSources >= 3 || (entry.hasOfficial && entry.uniqueSources >= 2)))
+    .sort((a, b) => b.score - a.score || Date.parse(b.latestAt) - Date.parse(a.latestAt));
 
   const winner = candidates[0];
   if (!winner) {
@@ -434,25 +737,16 @@ function renderLeadStory() {
   }
 
   const item = winner.item;
-  const sources = [
-    { sourceName: item.sourceName, url: item.url, sourceKind: item.sourceKind },
-    ...(item.related || []).filter((r) => r.url !== item.url)
-  ];
-  const seen = new Set();
-  const unique = sources.filter((source) => {
-    const key = source.sourceName || source.url;
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 5);
+  const sources = normalizeClusterReports(item);
   const siteTarget = sources.find((source) => source.sourceKind === "site" && source.url);
+  const unique = sources.slice(0, 5);
 
   el.leadStoryTitle.textContent = cleanDisplayTitle(item.title);
-  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? stripUrls(item.preview) : "הידיעה זוהתה כמובילה לאחר שפורסמה במקביל במספר מקורות שונים בזמן קצר.";
+  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? stripUrls(item.preview) : "הידיעה מתקדמת במהירות ומופיעה בכמה מקורות בזמן קצר.";
   el.leadStorySource.textContent = item.sourceName;
-  el.leadStoryAge.textContent = formatAge(item.publishedAt);
+  el.leadStoryAge.textContent = formatAge(winner.latestAt);
   el.leadStoryCount.textContent = `${winner.uniqueSources} מקורות מדווחים`;
-  el.leadStorySignal.textContent = winner.uniqueSources >= 6 ? "חם מאוד" : winner.uniqueSources >= 4 ? "מתפשט במהירות" : "בכמה מקורות במקביל";
+  el.leadStorySignal.textContent = winner.ageMinutes <= 20 ? "מתעדכן עכשיו" : winner.uniqueSources >= 6 ? "חם מאוד" : "בכמה מקורות במקביל";
 
   setOptionalLink(el.leadStoryLink, siteTarget?.url);
   if (siteTarget?.url) {
@@ -481,8 +775,9 @@ function renderLeadStory() {
 function renderBreaking() {
   const now = Date.now();
   const latest = state.items.find((item) => {
-    const age = now - Date.parse(item.publishedAt);
-    return age <= 45 * 60 * 1000 && (item.category === "security" || item.official);
+    const age = now - Date.parse(item.latestReportAt || item.publishedAt);
+    const hasOfficial = item.official || (item.related || []).some((report) => report.official);
+    return age <= 45 * 60 * 1000 && (item.category === "security" || hasOfficial);
   });
 
   if (!latest) {
@@ -491,22 +786,23 @@ function renderBreaking() {
   }
 
   el.breakingTitle.textContent = cleanDisplayTitle(latest.title);
-  el.breakingMeta.textContent = `${latest.sourceName} · ${formatAge(latest.publishedAt)}`;
+  el.breakingMeta.textContent = `${latest.sourceName} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
   setOptionalLink(el.breakingLink, latest.sourceKind === "site" ? latest.url : null);
   el.breakingBanner.classList.remove("hidden");
 }
 
 function renderFlashDeck() {
   if (!el.flashDeck || !el.flashDeckItems) return;
+  const cutoff = Date.now() - 3 * 60 * 60 * 1000;
   const seen = new Set();
-  const items = state.items
-    .filter((item) => item.sourceKind === "site" && item.url)
+  const preferred = state.items
+    .filter((item) => item.sourceKind === "site" && item.url && Date.parse(item.latestReportAt || item.publishedAt) >= cutoff)
     .sort((a, b) => {
-      const ai = MAINSTREAM_PUBLISHERS.indexOf(a.publisher);
-      const bi = MAINSTREAM_PUBLISHERS.indexOf(b.publisher);
-      const ar = ai === -1 ? 99 : ai;
-      const br = bi === -1 ? 99 : bi;
-      return ar - br || Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+      const aMajor = MAINSTREAM_PUBLISHERS.includes(a.publisher) ? 1 : 0;
+      const bMajor = MAINSTREAM_PUBLISHERS.includes(b.publisher) ? 1 : 0;
+      const timeDiff = Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt);
+      if (Math.abs(timeDiff) > 20 * 60 * 1000) return timeDiff;
+      return bMajor - aMajor || timeDiff;
     })
     .filter((item) => {
       const key = item.publisher || item.sourceName;
@@ -514,13 +810,14 @@ function renderFlashDeck() {
       seen.add(key);
       return true;
     })
-    .slice(0, 4);
-  if (items.length < 2) {
+    .slice(0, 5);
+
+  if (preferred.length < 2) {
     el.flashDeck.classList.add("hidden");
     return;
   }
-  el.flashDeckItems.innerHTML = items.map((item) => `<a class="flash-item" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">
-    <span>${escapeHtml(item.sourceName)} · ${formatAge(item.publishedAt)}</span>
+  el.flashDeckItems.innerHTML = preferred.map((item) => `<a class="flash-item" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">
+    <span>${escapeHtml(item.sourceName)} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
     <strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
   </a>`).join("");
   el.flashDeck.classList.remove("hidden");
@@ -590,8 +887,8 @@ function syncControlsFromState() {
   el.clusterToggle.checked = state.cluster;
   el.autoRefresh.checked = state.autoRefresh;
   el.autoRefreshPill?.classList.toggle("active", state.autoRefresh);
-  if (el.autoRefreshPill) el.autoRefreshPill.querySelector("span").textContent = state.autoRefresh ? "60 שנ׳" : "כבוי";
-  if (el.quickAutoStatus) el.quickAutoStatus.textContent = state.autoRefresh ? "פעיל · 60 שנ׳" : "כבוי";
+  if (el.autoRefreshPill) el.autoRefreshPill.querySelector("span").textContent = state.autoRefresh ? "רענון אוטומטי" : "רענון כבוי";
+  if (el.quickAutoStatus) el.quickAutoStatus.textContent = state.autoRefresh ? "פעיל — מתעדכן כל דקה" : "רענון כבוי";
   if (el.citySelect) el.citySelect.value = state.city;
   document.querySelectorAll("[data-quick-category]").forEach((button) => button.classList.toggle("active", button.dataset.quickCategory === state.category));
   document.querySelectorAll("[data-quick-kind]").forEach((button) => button.classList.toggle("active", button.dataset.quickKind === state.kind));
@@ -603,7 +900,7 @@ function syncTheme() {
   el.themeToggle.setAttribute("aria-label", isDark ? "מעבר למצב בהיר" : "מעבר למצב כהה");
   el.themeToggle.title = isDark ? "מעבר למצב בהיר" : "מעבר למצב כהה";
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", isDark ? "#0b0d12" : "#f7f8fb");
+  if (meta) meta.setAttribute("content", isDark ? "#0b0f15" : "#f7f8fb");
 }
 
 function resetFilters() {
@@ -630,11 +927,10 @@ function toggleAutoRefresh() {
 }
 
 function restartAutoRefresh() {
-  clearInterval(state.timer);
+  clearTimeout(state.timer);
   clearInterval(state.countdownTimer);
   if (state.autoRefresh) {
     scheduleNextRefresh(60);
-    state.timer = setInterval(() => loadNews(false), 60_000);
   } else {
     state.nextRefreshAt = 0;
     updateRefreshCountdown();
@@ -643,18 +939,28 @@ function restartAutoRefresh() {
 }
 
 function scheduleNextRefresh(seconds = 60) {
-  state.nextRefreshAt = Date.now() + Math.max(15, seconds) * 1000;
+  clearTimeout(state.timer);
+  if (!state.autoRefresh) {
+    state.nextRefreshAt = 0;
+    updateRefreshCountdown();
+    return;
+  }
+  const delayMs = Math.max(15, seconds) * 1000;
+  state.nextRefreshAt = Date.now() + delayMs;
+  state.timer = setTimeout(() => loadNews(false), delayMs);
   updateRefreshCountdown();
 }
 
 function updateRefreshCountdown() {
   if (!el.refreshCountdown) return;
   if (!state.autoRefresh) {
-    el.refreshCountdown.textContent = "רענון אוטומטי כבוי";
+    el.refreshCountdown.textContent = "רענון כבוי";
+    if (el.quickAutoStatus) el.quickAutoStatus.textContent = "רענון כבוי";
     return;
   }
   const seconds = Math.max(0, Math.ceil((state.nextRefreshAt - Date.now()) / 1000));
   el.refreshCountdown.textContent = seconds > 0 ? `רענון בעוד ${seconds} שנ׳` : "מרענן עכשיו…";
+  if (el.quickAutoStatus) el.quickAutoStatus.textContent = seconds > 0 ? `רענון בעוד ${seconds} שנ׳` : "מרענן עכשיו…";
 }
 
 async function loadUtilities() {
@@ -722,7 +1028,7 @@ function renderTrending() {
   const counts = new Map();
   const stop = new Set(["ישראל", "ישראלי", "חדשות", "דיווח", "עדכון", "עכשיו", "היום", "אחרי", "לפני", "בעקבות", "במהלך", "ראשוני", "אמר", "אומר", "כוחות", "הודעה", "המשטרה", "צה״ל", "של", "את", "על", "עם", "לא", "גם", "כי", "זה", "זו", "כל"]);
   for (const item of state.items) {
-    if (Date.parse(item.publishedAt) < cutoff) continue;
+    if (Date.parse(item.latestReportAt || item.publishedAt) < cutoff) continue;
     const words = String(item.title || "").replace(/https?:\/\/\S+/g, " ").match(/[\u0590-\u05FF]{3,}/g) || [];
     const unique = new Set(words.filter((word) => !stop.has(word) && word.length >= 3));
     for (const word of unique) counts.set(word, (counts.get(word) || 0) + 1);
