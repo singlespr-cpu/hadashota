@@ -148,7 +148,11 @@ async function serveIndex(request, env, origin) {
   const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
   const headers = new Headers(asset.headers);
   headers.set("Content-Type", "text/html; charset=utf-8");
-  headers.set("Cache-Control", "public, max-age=0, s-maxage=300");
+  headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "SAMEORIGIN");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Permissions-Policy", "geolocation=(self)");
   return new Response(html, { status: 200, headers });
 }
 
@@ -178,11 +182,11 @@ async function handleEmergencyAlerts() {
         "Accept": "application/json,text/plain,*/*",
         "Referer": "https://www.oref.org.il/",
         "X-Requested-With": "XMLHttpRequest",
-        "User-Agent": "Mozilla/5.0 (compatible; Hadashota/20.0; +https://www.oref.org.il/)"
+        "User-Agent": "Mozilla/5.0 (compatible; Hadashota/25.0; +https://www.oref.org.il/)"
       }
     });
     if (!response.ok) throw new Error(`OREF HTTP ${response.status}`);
-    const raw = (await response.text()).replace(/^\\uFEFF/, "").trim();
+    const raw = (await response.text()).replace(/^\uFEFF/, "").trim();
     const parsed = raw && raw !== "null" ? JSON.parse(raw) : null;
     return json({
       ok: true,
@@ -553,14 +557,14 @@ async function handleNews(request, ctx) {
         officialSources: activeSources.filter((source) => source.official).length,
         telegramSources: activeSources.filter((source) => source.kind === "telegram").length,
         failedSources: failedSources.length,
-        retriesUsed: 4 - retryBudget.remaining
+        retriesUsed: 6 - retryBudget.remaining
       },
       failures: failedSources.slice(0, 12)
     };
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "23.0.0",
+      "X-Hadashota-Version": "25.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -588,7 +592,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "23.0.0"
+        "X-Hadashota-Version": "25.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.

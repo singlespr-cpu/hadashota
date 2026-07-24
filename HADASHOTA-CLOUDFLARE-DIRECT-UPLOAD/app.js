@@ -32,7 +32,13 @@ const state = {
   alertDesktop: localStorage.getItem("hadashota.alertDesktop") === "1",
   lastAlertFingerprint: localStorage.getItem("hadashota.lastAlertFingerprint") || "",
   alertAudioUnlocked: false,
-  alertAudioContext: null
+  alertAudioContext: null,
+  alertWasActive: false,
+  displayedLeadFingerprint: "",
+  displayedLeadSince: 0,
+  flashDeckExpanded: false,
+  flashDeckPaused: false,
+  flashDeckTimer: null
 };
 
 const el = {
@@ -135,7 +141,8 @@ const el = {
   alertSoundToggle: document.querySelector("#alertSoundToggle"),
   alertDesktopToggle: document.querySelector("#alertDesktopToggle"),
   alertTestBtn: document.querySelector("#alertTestBtn"),
-  alertConnectionState: document.querySelector("#alertConnectionState")
+  alertConnectionState: document.querySelector("#alertConnectionState"),
+  alertLiveRegion: document.querySelector("#alertLiveRegion")
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
@@ -943,14 +950,26 @@ function renderSources() {
 
 function renderLeadStory() {
   const now = Date.now();
+  const corroborationWindowMs = 45 * 60 * 1000;
   const candidates = state.items
     .map((item) => {
       const latestAt = clusterLatestAt(item);
-      const ageMinutes = Math.max(0, (now - Date.parse(latestAt)) / 60_000);
+      const latestMs = Date.parse(latestAt);
+      const ageMinutes = Math.max(0, (now - latestMs) / 60_000);
       const reports = normalizeClusterReports(item);
-      const uniqueSources = Math.max(Number(item.reportCount) || 1, reports.length || 1);
-      const hasOfficial = !!item.official || reports.some((report) => report.official);
-      const hasVerified = !!item.verified || reports.some((report) => report.verified);
+      // The lead story must be corroborated by distinct sources reporting roughly
+      // the same event in the same time window, not by old reports accumulated for hours.
+      const recentReports = reports.filter((report) => {
+        const reportMs = Date.parse(report.publishedAt || 0);
+        if (!Number.isFinite(reportMs) || !Number.isFinite(latestMs)) return false;
+        const delta = latestMs - reportMs;
+        return delta >= -5 * 60 * 1000 && delta <= corroborationWindowMs;
+      });
+      const uniqueSources = recentReports.length;
+      const hasOfficial = recentReports.some((report) => report.official);
+      const hasVerified = recentReports.some((report) => report.verified);
+      const reportTimes = recentReports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
+      const spreadMinutes = reportTimes.length > 1 ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000)) : 0;
 
       let freshness = 0;
       if (ageMinutes <= 15) freshness = 10;
@@ -963,21 +982,48 @@ function renderLeadStory() {
       const sourceScore = Math.min(uniqueSources, 9) * 1.2;
       const authority = hasOfficial ? 1.8 : hasVerified ? 0.55 : 0;
       const activity = ageMinutes <= 12 ? 1.8 : ageMinutes <= 25 ? 1 : 0;
+      const velocity = spreadMinutes <= 10 && uniqueSources >= 4 ? 1.2 : spreadMinutes <= 20 && uniqueSources >= 3 ? 0.55 : 0;
       const oldPenalty = ageMinutes > 75 ? (ageMinutes - 75) / 11 : 0;
-      const score = freshness + sourceScore + authority + activity - oldPenalty;
-      return { item, uniqueSources, ageMinutes, latestAt, score, hasOfficial };
+      const score = freshness + sourceScore + authority + activity + velocity - oldPenalty;
+      return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, score, hasOfficial, spreadMinutes };
     })
-    .filter((entry) => entry.ageMinutes <= 150 && (entry.uniqueSources >= 3 || (entry.hasOfficial && entry.uniqueSources >= 2)))
+    // A lead story always requires at least 3 distinct corroborating sources.
+    .filter((entry) => entry.ageMinutes <= 150 && entry.uniqueSources >= 3)
     .sort((a, b) => b.score - a.score || Date.parse(b.latestAt) - Date.parse(a.latestAt));
 
-  const winner = candidates[0];
+  let winner = candidates[0];
   if (!winner) {
+    state.displayedLeadFingerprint = "";
+    state.displayedLeadSince = 0;
     el.leadStory.classList.add("hidden");
     return;
   }
 
+  // Prevent headline ping-pong: keep the visible lead while it remains competitive.
+  // A challenger replaces it when materially stronger, when the current lead is aging,
+  // or when a very fresh officially corroborated story breaks through.
+  if (state.displayedLeadFingerprint) {
+    const current = candidates.find((entry) => leadFingerprint(entry) === state.displayedLeadFingerprint);
+    const challengerKey = leadFingerprint(winner);
+    if (current && challengerKey !== state.displayedLeadFingerprint) {
+      const absoluteAdvantage = winner.score - current.score;
+      const relativeAdvantage = current.score > 0 ? winner.score / current.score : Infinity;
+      const urgentBreakthrough = winner.hasOfficial && winner.uniqueSources >= 4 && winner.ageMinutes <= 15;
+      const currentAging = current.ageMinutes > 70;
+      const currentYoung = Date.now() - Number(state.displayedLeadSince || 0) < 3 * 60 * 1000;
+      const clearlyStronger = absoluteAdvantage >= 2.1 || relativeAdvantage >= 1.14;
+      if (!urgentBreakthrough && !currentAging && (!clearlyStronger || currentYoung)) winner = current;
+    }
+  }
+
+  const winnerFingerprint = leadFingerprint(winner);
+  if (winnerFingerprint !== state.displayedLeadFingerprint) {
+    state.displayedLeadFingerprint = winnerFingerprint;
+    state.displayedLeadSince = Date.now();
+  }
+
   const item = winner.item;
-  const sources = normalizeClusterReports(item);
+  const sources = winner.recentReports;
   const sourceTarget = sources.find((source) => source.sourceKind === "site" && source.url)
     || sources.find((source) => source.url)
     || (item.url ? item : null);
@@ -987,10 +1033,12 @@ function renderLeadStory() {
   el.leadStoryTitle.textContent = leadTitle;
   el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
   el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? cleanDisplayText(item.preview) : "הידיעה מתקדמת במהירות ומופיעה בכמה מקורות בזמן קצר.";
-  el.leadStorySource.textContent = item.sourceName;
+  el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName;
   el.leadStoryAge.textContent = formatAge(winner.latestAt);
   el.leadStoryCount.textContent = `${winner.uniqueSources} מקורות מדווחים`;
-  el.leadStorySignal.textContent = winner.ageMinutes <= 20 ? "מתעדכן עכשיו" : winner.uniqueSources >= 6 ? "חם מאוד" : "בכמה מקורות במקביל";
+  const spreadLabel = winner.spreadMinutes <= 1 ? "כמעט במקביל" : `תוך ${winner.spreadMinutes} דק׳`;
+  el.leadStorySignal.textContent = `${winner.uniqueSources} מקורות · ${spreadLabel}${winner.hasOfficial ? " · כולל רשמי" : ""}`;
+  el.leadStorySignal.title = "הסיפור נבחר לפי מספר מקורות שונים, טריות וקצב הופעת הדיווחים";
 
   setOptionalLink(el.leadStoryLink, sourceTarget?.url);
   const leadHref = safeHttpHref(sourceTarget?.url);
@@ -1532,7 +1580,7 @@ function renderCurrencySource(exchangeRates, cached = false) {
       el.currencyMeta.textContent = time ? `שוק עולמי · ${time}` : "שוק עולמי · אונליין";
     } else if (source === "Frankfurter") {
       const date = formatExchangeRateDate(exchangeRates.date);
-      el.currencyMeta.textContent = `${cached ? "נתון אחרון · " : "אונליין · "}${date || "שער גלובלי"}`;
+      el.currencyMeta.textContent = `${cached ? "נתון אחרון · " : "שער גלובלי יומי · "}${date || "עדכני"}`;
     } else {
       const date = formatExchangeRateDate(exchangeRates.date);
       el.currencyMeta.textContent = `${cached ? "נתון אחרון · " : "בנק ישראל · "}${date || "גיבוי"}`;
@@ -1723,7 +1771,7 @@ function syncAlertSettings() {
 }
 
 function addAlertCityFromInput() {
-  const city = String(el.alertCityInput?.value || "").trim().replace(/\\s+/g, " ");
+  const city = String(el.alertCityInput?.value || "").trim().replace(/\s+/g, " ");
   if (!city) return;
   if (!state.alertCities.some((value) => value.localeCompare(city, "he", { sensitivity: "base" }) === 0)) state.alertCities.push(city);
   state.alertAllIsrael = false;
@@ -1780,7 +1828,7 @@ async function pollEmergencyAlerts() {
 }
 
 function normalizeAlertSearch(value) {
-  return String(value || "").normalize("NFKD").replace(/[־–—-]/g," ").replace(/[״׳'\"]/g,"").replace(/\\s+/g," ").trim().toLowerCase();
+  return String(value || "").normalize("NFKD").replace(/[־–—-]/g," ").replace(/[״׳'\"]/g,"").replace(/\s+/g," ").trim().toLowerCase();
 }
 
 function alertMatchesPreferences(alert) {
@@ -1791,7 +1839,9 @@ function alertMatchesPreferences(alert) {
     const normalizedArea = normalizeAlertSearch(area);
     return state.alertCities.some((city) => {
       const normalizedCity = normalizeAlertSearch(city);
-      return normalizedArea.includes(normalizedCity) || normalizedCity.includes(normalizedArea);
+      return normalizedArea === normalizedCity
+        || normalizedArea.startsWith(`${normalizedCity} `)
+        || normalizedCity.startsWith(`${normalizedArea} `);
     });
   });
 }
@@ -1801,6 +1851,8 @@ function renderEmergencyAlerts(alerts, payload = {}) {
   const nowLabel = new Intl.DateTimeFormat("he-IL", { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date());
   if (el.alertLastCheck) el.alertLastCheck.textContent = `נבדק ${nowLabel}`;
   if (!matching.length) {
+    if (state.alertWasActive && el.alertLiveRegion) el.alertLiveRegion.textContent = "ההתרעה הפעילה הסתיימה באתר חדשותא. יש להמשיך לפעול לפי הנחיות פיקוד העורף.";
+    state.alertWasActive = false;
     el.alertCenterCard?.classList.remove("alert-active");
     el.alertCenterCard?.classList.add("alert-idle");
     el.alertCenter?.classList.remove("has-active-alert");
@@ -1823,7 +1875,9 @@ function renderEmergencyAlerts(alerts, payload = {}) {
     el.alertAreas.classList.toggle("hidden", !allAreas.length);
   }
   const fingerprint = matching.map((a) => a.id || `${a.title}|${(a.areas||[]).join("|")}`).sort().join("::");
+  state.alertWasActive = true;
   if (fingerprint && fingerprint !== state.lastAlertFingerprint) {
+    if (el.alertLiveRegion) el.alertLiveRegion.textContent = `התרעה פעילה: ${title}${allAreas.length ? `. אזורים: ${allAreas.slice(0,8).join(", ")}` : ""}`;
     state.lastAlertFingerprint = fingerprint;
     localStorage.setItem("hadashota.lastAlertFingerprint", fingerprint);
     if (state.alertSound) playAlertTone(false);
