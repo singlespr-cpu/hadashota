@@ -2923,3 +2923,13 @@ html[data-theme="dark"] .lead-story-media.image-unavailable {
     linear-gradient(135deg,#151b24,#10151c);
 }
 html[data-theme="dark"] .lead-story-media.image-unavailable::after { color:#667085; }
+
+
+/* V29 — utility card head alignment fix: text right, icon left */
+.weather-card .utility-head > .city-picker { order: 1 !important; }
+.weather-card .utility-head > .locate-button { order: 2 !important; }
+.weather-card .utility-head > .utility-icon { order: 3 !important; }
+.shabbat-card .utility-head > .utility-label,
+.currency-card .utility-head > .utility-label { order: 1 !important; }
+.shabbat-card .utility-head > .utility-icon,
+.currency-card .utility-head > .utility-icon { order: 2 !important; }
