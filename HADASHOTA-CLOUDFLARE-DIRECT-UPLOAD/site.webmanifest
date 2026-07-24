@@ -11,7 +11,7 @@
   "background_color": "#f7f8fb",
   "theme_color": "#f7f8fb",
   "icons": [
-    {"src":"/favicon-32.png?v=30.0.0","sizes":"32x32","type":"image/png"},
-    {"src":"/apple-touch-icon.png?v=30.0.0","sizes":"180x180","type":"image/png"}
+    {"src":"/favicon-32.png?v=31.0.0","sizes":"32x32","type":"image/png"},
+    {"src":"/apple-touch-icon.png?v=31.0.0","sizes":"180x180","type":"image/png"}
   ]
 }

@@ -665,9 +665,9 @@ function mergeClustersClient(items) {
     for (let i = Math.max(0, clusters.length - 120); i < clusters.length; i++) {
       const candidate = clusters[i];
       const candidateTime = Date.parse(candidate.latestReportAt || candidate.publishedAt);
-      if (Math.abs(itemTime - candidateTime) > 8 * 60 * 60 * 1000) continue;
-      if (item.category && candidate.category && item.category !== "other" && candidate.category !== "other" && item.category !== candidate.category) continue;
-      if (sameEventClient(item.title, candidate.title)) { match = candidate; break; }
+      const timeDeltaMs = Math.abs(itemTime - candidateTime);
+      if (timeDeltaMs > 8 * 60 * 60 * 1000) continue;
+      if (sameEventClient(item.title, candidate.title, timeDeltaMs)) { match = candidate; break; }
     }
 
     if (!match) {
@@ -761,7 +761,7 @@ function structuredCloneSafe(value) {
   try { return structuredClone(value); } catch { return JSON.parse(JSON.stringify(value)); }
 }
 
-function sameEventClient(a, b) {
+function sameEventClient(a, b, timeDeltaMs = Infinity) {
   const A = clientTitleTokens(a);
   const B = clientTitleTokens(b);
   if (!A.size || !B.size) return false;
@@ -770,13 +770,57 @@ function sameEventClient(a, b) {
   const union = A.size + B.size - intersection;
   const jaccard = union ? intersection / union : 0;
   const containment = intersection / Math.max(1, Math.min(A.size, B.size));
-  return jaccard >= 0.58 || (intersection >= 3 && containment >= 0.52) || (intersection >= 4 && containment >= 0.44);
+  if (jaccard >= 0.50 || (intersection >= 3 && containment >= 0.46) || (intersection >= 4 && containment >= 0.40)) return true;
+
+  if (timeDeltaMs <= 120 * 60 * 1000) {
+    const entitiesA = clientEventEntities(a);
+    const entitiesB = clientEventEntities(b);
+    const actionsA = clientEventActions(a);
+    const actionsB = clientEventActions(b);
+    const sharedEntities = [...entitiesA].filter((x) => entitiesB.has(x)).length;
+    const sharedActions = [...actionsA].filter((x) => actionsB.has(x)).length;
+    if (sharedEntities >= 2 && sharedActions >= 1) return true;
+    if (sharedEntities >= 1 && sharedActions >= 2 && intersection >= 2) return true;
+  }
+  return false;
+}
+
+function clientCanonicalToken(word) {
+  let w = String(word || "").toLowerCase();
+  if (w.length >= 5 && /^[ובלכמהש]/.test(w)) w = w.slice(1);
+  const aliases = {
+    "איראני":"איראן", "איראנית":"איראן", "איראנים":"איראן", "איראניות":"איראן",
+    "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית",
+    "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב",
+    "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ",
+    "טילים":"טיל", "רקטות":"רקטה", "תקיפות":"תקיפה", "התקפות":"תקיפה",
+    "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט"
+  };
+  return aliases[w] || w;
 }
 
 function clientTitleTokens(value) {
   const stop = new Set(["של","את","על","עם","לא","גם","זה","זו","כי","כך","הוא","היא","הם","כל","אל","לפי","אחרי","לפני","עוד","היום","עכשיו","חדש","חדשה","חדשות","דיווח","דיווחים","עדכון","עדכונים","ראשוני","ישראל","ישראלי","ישראלית","the","of","to","in","on","for","and","is","are","with","breaking","report","update"]);
-  const normalized = String(value || "").toLowerCase().replace(/[״׳'\"`]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  return new Set(normalized.split(" ").filter((word) => word.length >= 2 && !stop.has(word)).slice(0, 24));
+  const normalized = String(value || "").toLowerCase().replace(/[״׳'"`]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  return new Set(normalized.split(" ").map(clientCanonicalToken).filter((word) => word.length >= 2 && !stop.has(word)).slice(0, 28));
+}
+
+function clientEventEntities(value) {
+  const tokens = clientTitleTokens(value);
+  const known = new Set(["איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה"]);
+  return new Set([...tokens].filter((t) => known.has(t)));
+}
+
+function clientEventActions(value) {
+  const tokens = clientTitleTokens(value);
+  const families = new Map([
+    ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","ירי","שיגור","שיגרה","שיגר","מטח"])],
+    ["missile", new Set(["טיל","רקטה","כטבמ","רחפן","מלט"])],
+    ["intercept", new Set(["יירוט","יירט","הגנה","אזעקה","התרעה","התרעות"])],
+    ["base", new Set(["בסיס","צבאי","כוחות","ארהב"])]]);
+  const out = new Set();
+  for (const [family, words] of families) if ([...tokens].some((t) => words.has(t))) out.add(family);
+  return out;
 }
 
 function render() {

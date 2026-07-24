@@ -884,9 +884,9 @@ function clusterItems(items) {
     for (let i = Math.max(0, clusters.length - 110); i < clusters.length; i++) {
       const cluster = clusters[i];
       const clusterTime = Date.parse(cluster.latestReportAt || cluster.publishedAt);
-      if (Math.abs(itemTime - clusterTime) > 8 * 60 * 60 * 1000) continue;
-      if (item.category && cluster.category && item.category !== "other" && cluster.category !== "other" && item.category !== cluster.category) continue;
-      if (sameEvent(item.title, cluster.title)) {
+      const timeDeltaMs = Math.abs(itemTime - clusterTime);
+      if (timeDeltaMs > 8 * 60 * 60 * 1000) continue;
+      if (sameEvent(item.title, cluster.title, timeDeltaMs)) {
         match = cluster;
         break;
       }
@@ -946,7 +946,7 @@ function clusterItems(items) {
   return clusters.sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
 }
 
-function sameEvent(a, b) {
+function sameEvent(a, b, timeDeltaMs = Infinity) {
   const A = titleTokens(a);
   const B = titleTokens(b);
   if (!A.size || !B.size) return false;
@@ -955,9 +955,50 @@ function sameEvent(a, b) {
   const union = A.size + B.size - intersection;
   const jaccard = union ? intersection / union : 0;
   const containment = intersection / Math.max(1, Math.min(A.size, B.size));
-  // Hebrew outlets often phrase the same event very differently. Three specific shared
-  // terms plus strong containment is a better signal than exact headline similarity.
-  return jaccard >= 0.58 || (intersection >= 3 && containment >= 0.52) || (intersection >= 4 && containment >= 0.44);
+  if (jaccard >= 0.50 || (intersection >= 3 && containment >= 0.46) || (intersection >= 4 && containment >= 0.40)) return true;
+  if (timeDeltaMs <= 120 * 60 * 1000) {
+    const entitiesA = eventEntities(a);
+    const entitiesB = eventEntities(b);
+    const actionsA = eventActions(a);
+    const actionsB = eventActions(b);
+    const sharedEntities = [...entitiesA].filter((x) => entitiesB.has(x)).length;
+    const sharedActions = [...actionsA].filter((x) => actionsB.has(x)).length;
+    if (sharedEntities >= 2 && sharedActions >= 1) return true;
+    if (sharedEntities >= 1 && sharedActions >= 2 && intersection >= 2) return true;
+  }
+  return false;
+}
+
+function canonicalEventToken(word) {
+  let w = String(word || "").toLowerCase();
+  if (w.length >= 5 && /^[ובלכמהש]/.test(w)) w = w.slice(1);
+  const aliases = {
+    "איראני":"איראן", "איראנית":"איראן", "איראנים":"איראן", "איראניות":"איראן",
+    "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית",
+    "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב",
+    "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ",
+    "טילים":"טיל", "רקטות":"רקטה", "תקיפות":"תקיפה", "התקפות":"תקיפה",
+    "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט"
+  };
+  return aliases[w] || w;
+}
+
+function eventEntities(value) {
+  const tokens = titleTokens(value);
+  const known = new Set(["איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה"]);
+  return new Set([...tokens].filter((t) => known.has(t)));
+}
+
+function eventActions(value) {
+  const tokens = titleTokens(value);
+  const families = new Map([
+    ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","ירי","שיגור","שיגרה","שיגר","מטח"])],
+    ["missile", new Set(["טיל","רקטה","כטבמ","רחפן","מלט"])],
+    ["intercept", new Set(["יירוט","יירט","הגנה","אזעקה","התרעה","התרעות"])],
+    ["base", new Set(["בסיס","צבאי","כוחות","ארהב"])]]);
+  const out = new Set();
+  for (const [family, words] of families) if ([...tokens].some((t) => words.has(t))) out.add(family);
+  return out;
 }
 
 function titleSimilarity(a, b) {
@@ -974,8 +1015,9 @@ function titleTokens(value) {
   return new Set(
     normalizeHebrew(value)
       .split(/\s+/)
+      .map(canonicalEventToken)
       .filter((word) => word.length >= 2 && !STOP_WORDS.has(word))
-      .slice(0, 24)
+      .slice(0, 28)
   );
 }
 
