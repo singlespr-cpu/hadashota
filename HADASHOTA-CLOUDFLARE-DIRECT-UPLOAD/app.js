@@ -81,6 +81,7 @@ const el = {
   usdRate: document.querySelector("#usdRate"),
   eurRate: document.querySelector("#eurRate"),
   currencyMeta: document.querySelector("#currencyMeta"),
+  currencyCredit: document.querySelector("#currencyCredit"),
   trendingStrip: document.querySelector("#trendingStrip"),
   trendingTopics: document.querySelector("#trendingTopics"),
   refreshCountdown: document.querySelector("#refreshCountdown"),
@@ -1311,6 +1312,10 @@ async function loadUtilities() {
     if (el.usdRate) el.usdRate.textContent = "—";
     if (el.eurRate) el.eurRate.textContent = "—";
     if (el.currencyMeta) el.currencyMeta.textContent = "לא זמין כרגע";
+    if (el.currencyCredit) {
+      el.currencyCredit.textContent = "שערי שוק: לא זמין כרגע";
+      el.currencyCredit.href = "https://finance.yahoo.com/markets/currencies/";
+    }
   }
 }
 
@@ -1352,6 +1357,15 @@ function renderUtilities(data) {
       } else {
         const date = formatExchangeRateDate(exchangeRates.date);
         el.currencyMeta.textContent = date ? `בנק ישראל · ${date}` : "בנק ישראל · גיבוי";
+      }
+    }
+    if (el.currencyCredit) {
+      if (exchangeRates.live) {
+        el.currencyCredit.textContent = "שערי שוק: Yahoo Finance";
+        el.currencyCredit.href = "https://finance.yahoo.com/markets/currencies/";
+      } else {
+        el.currencyCredit.textContent = "שערים יציגים: בנק ישראל";
+        el.currencyCredit.href = "https://www.boi.org.il/roles/markets/exchangerates/";
       }
     }
   }

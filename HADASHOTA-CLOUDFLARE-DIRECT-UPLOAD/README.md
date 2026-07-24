@@ -1,8 +1,8 @@
-# חדשותא — HADASHOTA FINAL V17 LAUNCH
+# חדשותא — HADASHOTA FINAL V16 LAUNCH
 
 גרסת production סופית לפריסה ב-Cloudflare Workers + Static Assets.
 
-## עיקרי V17
+## עיקרי V16
 
 - הכותרת הראשית מאוזנת מול תמונת הידיעה: גודל אדפטיבי לפי אורך הכותרת, ללא טיפוגרפיה ענקית, ופריסה תקינה גם כשאין תמונה.
 - ניקוי כפול של HTML/Entities כדי למנוע הצגת שאריות קוד מתוך RSS/Telegram בתוכן הגלוי.
@@ -58,7 +58,7 @@ Push מלא כשהאתר סגור לחלוטין דורש שרת Web Push עם s
 - `_worker.js` — API, איסוף מקורות, clustering, cache ו-fallback.
 - `app.js` — UI, סינון, Last Good Data, רענון, כותרת ראשית והתראות.
 - `index.html` — מבנה, SEO, מודלים ובקרי התראות.
-- `styles.css` — Desktop/Mobile/Dark Mode ועיצוב V17.
+- `styles.css` — Desktop/Mobile/Dark Mode ועיצוב V16.
 - `sw.js` — Service Worker להתראות.
 - `site.webmanifest` — התקנת PWA.
 - `.assetsignore`, favicons ו-Apple Touch icon.
