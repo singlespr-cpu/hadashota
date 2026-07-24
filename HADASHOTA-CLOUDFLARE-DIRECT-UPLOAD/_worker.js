@@ -12,7 +12,7 @@ const SOURCES = [
   { id: "kikar-latest", publisher: "kikar", name: "כיכר השבת", kind: "site", adapter: "rss", url: "https://a.kikar.co.il/v1/rss/articles/latest/rss2", home: "https://www.kikar.co.il/", language: "he", verified: true },
 
   // ---------- HTML/JSON-LD fallbacks: source is only exposed if live items are actually parsed ----------
-  { id: "israelhayom-news", publisher: "israelhayom", name: "ישראל היום", kind: "site", adapter: "jsonld", url: "https://www.israelhayom.co.il/news", home: "https://www.israelhayom.co.il/news", language: "he", verified: true },
+  { id: "israelhayom-news", publisher: "israelhayom", name: "ישראל היום", kind: "site", adapter: "jsonld", url: "https://www.israelhayom.co.il/israelnow", home: "https://www.israelhayom.co.il/israelnow", language: "he", verified: true },
   { id: "n12-breaking", publisher: "n12", name: "N12 מבזקים", kind: "site", adapter: "jsonld", url: "https://www.n12.co.il/Tagit/%D7%9E%D7%91%D7%96%D7%A7", home: "https://www.n12.co.il/Tagit/%D7%9E%D7%91%D7%96%D7%A7", language: "he", verified: true },
   { id: "kan-headlines", publisher: "kan", name: "כאן חדשות", kind: "site", adapter: "jsonld", url: "https://www.kan.org.il/headlines/", home: "https://www.kan.org.il/headlines/", language: "he", verified: true },
   { id: "now14-breaking", publisher: "now14", name: "עכשיו 14 מבזקים", kind: "site", adapter: "jsonld", url: "https://www.now14.co.il/news-flash", home: "https://www.now14.co.il/news-flash", language: "he", verified: true },
@@ -32,16 +32,16 @@ const SOURCES = [
   { id: "tg-ram", publisher: "ram", name: "מבזקי רעם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/ramreports", home: "https://t.me/ramreports", language: "he", verified: false },
   { id: "tg-daniel", publisher: "danielamram", name: "דניאל עמרם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/danielamram3", home: "https://t.me/danielamram3", language: "he", verified: false },
   { id: "tg-amitsegal", publisher: "amitsegal", name: "עמית סגל", kind: "telegram", adapter: "telegram", url: "https://t.me/s/amitsegal", home: "https://t.me/amitsegal", language: "he", verified: true, defaultCategory: "politics" },
-  { id: "tg-kannews", publisher: "kan-tg", name: "כאן חדשות - טלגרם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/kann_news", home: "https://t.me/kann_news", language: "he", verified: false },
+  { id: "13tv-flash", publisher: "13tv", name: "חדשות 13 מבזקים", kind: "site", adapter: "jsonld", url: "https://13tv.co.il/news/news-flash/", home: "https://13tv.co.il/news/", language: "he", verified: true },
   { id: "tg-newssil", publisher: "newssil", name: "חדשות ישראל IL", kind: "telegram", adapter: "telegram", url: "https://t.me/s/newssil", home: "https://t.me/newssil", language: "he", verified: false },
   { id: "tg-hotnews", publisher: "hotnews", name: "החדשות החמות", kind: "telegram", adapter: "telegram", url: "https://t.me/s/hotnews1", home: "https://t.me/hotnews1", language: "he", verified: false },
 
   // ---------- Additional live Telegram newsrooms / journalists ----------
-  { id: "tg-ynet", publisher: "ynet-tg", name: "ynet חדשות - טלגרם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/ynetalerts", home: "https://t.me/ynetalerts", language: "he", verified: true },
-  { id: "tg-israelhayom", publisher: "israelhayom-tg", name: "ישראל היום - טלגרם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/israelhayomofficial", home: "https://t.me/israelhayomofficial", language: "he", verified: true },
-  { id: "tg-globes", publisher: "globes-tg", name: "גלובס - טלגרם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/globesnews", home: "https://t.me/globesnews", language: "he", verified: true },
-  { id: "tg-now14", publisher: "now14-tg", name: "עכשיו 14 - טלגרם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/Now14_Israel", home: "https://t.me/Now14_Israel", language: "he", verified: true },
-  { id: "tg-n12news", publisher: "n12-tg", name: "חדשות N12 - טלגרם", kind: "telegram", adapter: "telegram", url: "https://t.me/s/N12_News", home: "https://t.me/N12_News", language: "he", verified: false },
+  { id: "maariv-flash", publisher: "maariv", name: "מעריב מבזקים", kind: "site", adapter: "rss", url: "https://www.maariv.co.il/Rss/RssFeedsMivzakiChadashot", home: "https://www.maariv.co.il/news", language: "he", verified: true },
+  { id: "calcalist", publisher: "calcalist", name: "כלכליסט", kind: "site", adapter: "jsonld", url: "https://www.calcalist.co.il/", home: "https://www.calcalist.co.il/", language: "he", verified: true },
+  { id: "makorrishon", publisher: "makorrishon", name: "מקור ראשון", kind: "site", adapter: "jsonld", url: "https://www.makorrishon.co.il/", home: "https://www.makorrishon.co.il/", language: "he", verified: true },
+  { id: "srugim", publisher: "srugim", name: "סרוגים", kind: "site", adapter: "rss", url: "https://www.srugim.co.il/feed", home: "https://www.srugim.co.il/", language: "he", verified: true },
+  { id: "arutz7", publisher: "arutz7", name: "ערוץ 7", kind: "site", adapter: "jsonld", url: "https://www.inn.co.il/", home: "https://www.inn.co.il/", language: "he", verified: true },
   { id: "tg-yinon", publisher: "yinonews", name: "ינון מגל - YINONEWS", kind: "telegram", adapter: "telegram", url: "https://t.me/s/yinonews", home: "https://t.me/yinonews", language: "he", verified: true, defaultCategory: "politics" },
   { id: "tg-hamoked", publisher: "hamoked", name: "חדשות המוקד", kind: "telegram", adapter: "telegram", url: "https://t.me/s/hamoked_il", home: "https://t.me/hamoked_il", language: "he", verified: false },
   { id: "tg-moriahdoron", publisher: "moriahdoron", name: "קבינט מדיני ביטחוני - מוריה אסרף & דורון קדוש", kind: "telegram", adapter: "telegram", url: "https://t.me/s/moriahdoron", home: "https://t.me/moriahdoron", language: "he", verified: true, defaultCategory: "security" },

@@ -7,7 +7,7 @@ const state = {
   query: "",
   compact: (localStorage.getItem("hadashota.compact") ?? localStorage.getItem("pulse.compact")) === "1",
   cluster: (localStorage.getItem("hadashota.cluster") ?? localStorage.getItem("pulse.cluster")) !== "0",
-  autoRefresh: (localStorage.getItem("hadashota.autoRefresh") ?? localStorage.getItem("pulse.autoRefresh")) !== "0",
+  autoRefresh: (localStorage.getItem("hadashota.autoRefresh") ?? "1") !== "0",
   allSourcesVisible: false,
   loading: false,
   timer: null,
@@ -69,8 +69,19 @@ const el = {
   shabbatParasha: document.querySelector("#shabbatParasha"),
   trendingStrip: document.querySelector("#trendingStrip"),
   trendingTopics: document.querySelector("#trendingTopics"),
-  refreshCountdown: document.querySelector("#refreshCountdown")
+  refreshCountdown: document.querySelector("#refreshCountdown"),
+  flashDeck: document.querySelector("#flashDeck"),
+  flashDeckItems: document.querySelector("#flashDeckItems"),
+  locateBtn: document.querySelector("#locateBtn"),
+  autoRefreshPill: document.querySelector("#autoRefreshPill"),
+  quickMenu: document.querySelector("#quickMenu"),
+  quickAutoRefresh: document.querySelector("#quickAutoRefresh"),
+  quickAutoStatus: document.querySelector("#quickAutoStatus"),
+  quickFilters: document.querySelector("#quickFilters"),
+  quickReset: document.querySelector("#quickReset")
 };
+
+const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 
 const CATEGORY_LABELS = {
   all: "כל העדכונים",
@@ -154,11 +165,7 @@ function bindEvents() {
     render();
   });
 
-  el.autoRefresh.addEventListener("change", () => {
-    state.autoRefresh = el.autoRefresh.checked;
-    localStorage.setItem("hadashota.autoRefresh", state.autoRefresh ? "1" : "0");
-    restartAutoRefresh();
-  });
+  el.autoRefresh.addEventListener("change", () => setAutoRefresh(el.autoRefresh.checked));
 
   el.showAllSources.addEventListener("click", () => {
     state.allSourcesVisible = !state.allSourcesVisible;
@@ -171,8 +178,51 @@ function bindEvents() {
     loadUtilities();
   });
 
+  document.querySelector(".news-nav")?.addEventListener("click", (event) => {
+    const cat = event.target.closest("[data-quick-category]");
+    const kind = event.target.closest("[data-quick-kind]");
+    if (cat) {
+      state.category = cat.dataset.quickCategory;
+      localStorage.setItem("hadashota.category", state.category);
+      syncControlsFromState();
+      render();
+      document.querySelector("#controlPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (kind) {
+      state.kind = kind.dataset.quickKind;
+      localStorage.setItem("hadashota.kind", state.kind);
+      syncControlsFromState();
+      render();
+      document.querySelector("#controlPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+
+  el.locateBtn?.addEventListener("click", locateNearestCity);
+
   el.resetFilters.addEventListener("click", resetFilters);
-  el.filtersToggle.addEventListener("click", () => el.controlPanel.classList.toggle("mobile-collapsed"));
+  el.filtersToggle.addEventListener("click", () => {
+    const opening = el.quickMenu.classList.contains("hidden");
+    el.quickMenu.classList.toggle("hidden");
+    el.filtersToggle.setAttribute("aria-expanded", opening ? "true" : "false");
+  });
+  el.autoRefreshPill?.addEventListener("click", toggleAutoRefresh);
+  el.quickAutoRefresh?.addEventListener("click", toggleAutoRefresh);
+  el.quickFilters?.addEventListener("click", () => {
+    el.quickMenu.classList.add("hidden");
+    el.filtersToggle.setAttribute("aria-expanded", "false");
+    el.controlPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => el.searchInput.focus(), 350);
+  });
+  el.quickReset?.addEventListener("click", () => {
+    resetFilters();
+    el.quickMenu.classList.add("hidden");
+    el.filtersToggle.setAttribute("aria-expanded", "false");
+  });
+  document.addEventListener("click", (event) => {
+    if (!el.quickMenu || el.quickMenu.classList.contains("hidden")) return;
+    if (el.quickMenu.contains(event.target) || el.filtersToggle.contains(event.target)) return;
+    el.quickMenu.classList.add("hidden");
+    el.filtersToggle.setAttribute("aria-expanded", "false");
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "/" && document.activeElement !== el.searchInput) {
@@ -254,7 +304,7 @@ function renderFeed() {
 
 function filteredItems() {
   const cutoff = Date.now() - state.hours * 60 * 60 * 1000;
-  return state.items.filter((item) => {
+  const filtered = state.items.filter((item) => {
     if (Date.parse(item.publishedAt) < cutoff) return false;
     if (state.category !== "all" && item.category !== state.category) return false;
     if (state.kind === "site" && item.sourceKind !== "site") return false;
@@ -266,13 +316,34 @@ function filteredItems() {
     }
     return true;
   });
+  if (state.kind === "all" && state.category === "all" && !state.query) return mainstreamFirst(filtered);
+  return filtered;
+}
+
+function mainstreamFirst(items) {
+  const selected = [];
+  const usedPublishers = new Set();
+  for (const publisher of MAINSTREAM_PUBLISHERS) {
+    const item = items.find((candidate) => candidate.sourceKind === "site" && candidate.publisher === publisher && !usedPublishers.has(candidate.publisher));
+    if (item) { selected.push(item); usedPublishers.add(item.publisher); }
+    if (selected.length === 3) break;
+  }
+  if (selected.length < 3) {
+    for (const item of items) {
+      if (item.sourceKind !== "site" || usedPublishers.has(item.publisher)) continue;
+      selected.push(item); usedPublishers.add(item.publisher);
+      if (selected.length === 3) break;
+    }
+  }
+  const chosen = new Set(selected.map((item) => item.id || item.url));
+  return [...selected, ...items.filter((item) => !chosen.has(item.id || item.url))];
 }
 
 function newsCardHtml(item) {
   const related = state.cluster
-    ? (item.related || []).filter((r) => r.url !== item.url)
+    ? (item.related || []).filter((r) => r.url !== item.url && r.sourceKind === "site")
     : [];
-  const reportCount = state.cluster ? related.length + 1 : 1;
+  const reportCount = state.cluster ? Math.max(Number(item.reportCount) || 1, (item.related || []).length || 1) : 1;
   const category = item.category || "other";
   const preview = item.preview && item.preview !== item.title ? `<p class="news-preview">${escapeHtml(item.preview)}</p>` : "";
   const telegramBadge = item.sourceKind === "telegram" ? `<span class="source-type-badge">Telegram</span>` : "";
@@ -280,17 +351,24 @@ function newsCardHtml(item) {
   const officialBadge = item.official ? `<span class="official-badge">רשמי</span>` : "";
   const independentBadge = item.independent ? `<span class="independent-badge">עצמאי</span>` : "";
   const clusterBadge = reportCount > 1 ? `<span class="cluster-badge">${reportCount} מקורות</span>` : "";
-  const imageHtml = item.imageUrl ? `<a class="news-image" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת הידיעה"><img src="${safeUrl(item.imageUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.closest('.news-image').remove()" /></a>` : "";
+  const isSite = item.sourceKind === "site";
+  const image = item.imageUrl ? `<img src="${safeUrl(item.imageUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.closest('.news-image').remove()" />` : "";
+  const imageHtml = item.imageUrl
+    ? (isSite ? `<a class="news-image" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת הידיעה">${image}</a>` : `<div class="news-image telegram-image" aria-hidden="true">${image}</div>`)
+    : "";
+  const titleHtml = isSite
+    ? `<a href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`
+    : `<span>${escapeHtml(item.title)}</span>`;
   const relatedHtml = related.length ? `
     <details class="related-wrap">
-      <summary>עוד דיווחים על אותה ידיעה (${related.length})</summary>
+      <summary>עוד דיווחים מאתרי חדשות (${related.length})</summary>
       <div class="related-list">
         ${related.map((r) => `<a class="related-link" href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.sourceName)} · ${formatAge(r.publishedAt)}</a>`).join("")}
       </div>
     </details>` : "";
 
   return `
-    <article class="news-card ${state.compact ? "compact" : ""} ${item.imageUrl ? "has-image" : ""}" data-category="${category}">
+    <article class="news-card ${state.compact ? "compact" : ""} ${item.imageUrl ? "has-image" : ""} ${isSite ? "clickable-story" : "telegram-story"}" data-category="${category}">
       <div class="news-main">
         ${imageHtml}
         <div class="news-copy">
@@ -300,7 +378,7 @@ function newsCardHtml(item) {
             <time datetime="${escapeHtml(item.publishedAt)}" title="${escapeHtml(formatFullDate(item.publishedAt))}">${formatAge(item.publishedAt)}</time>
             ${newBadge}${telegramBadge}${officialBadge}${independentBadge}${clusterBadge}
           </div>
-          <h3 class="news-title"><a href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a></h3>
+          <h3 class="news-title">${titleHtml}</h3>
           ${preview}
         </div>
         <div class="news-side"><span class="category-badge ${category}">${CATEGORY_LABELS[category] || "כללי"}</span></div>
@@ -319,12 +397,13 @@ function renderSources() {
   const visible = sources.slice(0, limit);
 
   el.sourceList.innerHTML = visible.map((source) => {
-    const type = source.official ? "מקור רשמי" : source.independent ? "Telegram עצמאי" : source.kind === "telegram" ? "Telegram של גוף תקשורת/כתב" : "אתר חדשות";
-    return `<a class="source-row" href="${safeUrl(source.home)}" target="_blank" rel="noopener noreferrer">
-      <span class="source-avatar">${escapeHtml(sourceInitial(source.name))}</span>
+    const type = source.official ? "מקור רשמי" : source.independent ? "Telegram עצמאי" : source.kind === "telegram" ? "Telegram / כתב" : "אתר חדשות";
+    const inner = `<span class="source-avatar">${escapeHtml(sourceInitial(source.name))}</span>
       <span class="source-info"><b>${escapeHtml(source.name)}</b><small>${type} · ${formatAge(source.lastItemAt)}</small></span>
-      <i class="source-state" title="פעיל"></i>
-    </a>`;
+      <i class="source-state" title="פעיל"></i>`;
+    return source.kind === "site"
+      ? `<a class="source-row" href="${safeUrl(source.home)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+      : `<div class="source-row source-row-static" title="מקור Telegram — ללא קישור חיצוני">${inner}</div>`;
   }).join("");
 
   el.showAllSources.classList.toggle("hidden", sources.length <= 8);
@@ -356,7 +435,7 @@ function renderLeadStory() {
 
   const item = winner.item;
   const sources = [
-    { sourceName: item.sourceName, url: item.url },
+    { sourceName: item.sourceName, url: item.url, sourceKind: item.sourceKind },
     ...(item.related || []).filter((r) => r.url !== item.url)
   ];
   const seen = new Set();
@@ -365,27 +444,37 @@ function renderLeadStory() {
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 4);
+  }).slice(0, 5);
+  const siteTarget = sources.find((source) => source.sourceKind === "site" && source.url);
 
-  el.leadStoryTitle.textContent = item.title;
-  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? item.preview : "הידיעה זוהתה כמובילה לאחר שפורסמה במקביל במספר מקורות שונים בזמן קצר.";
+  el.leadStoryTitle.textContent = cleanDisplayTitle(item.title);
+  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? stripUrls(item.preview) : "הידיעה זוהתה כמובילה לאחר שפורסמה במקביל במספר מקורות שונים בזמן קצר.";
   el.leadStorySource.textContent = item.sourceName;
   el.leadStoryAge.textContent = formatAge(item.publishedAt);
   el.leadStoryCount.textContent = `${winner.uniqueSources} מקורות מדווחים`;
   el.leadStorySignal.textContent = winner.uniqueSources >= 6 ? "חם מאוד" : winner.uniqueSources >= 4 ? "מתפשט במהירות" : "בכמה מקורות במקביל";
-  el.leadStoryLink.href = item.url;
-  el.leadStoryCta.href = item.url;
+
+  setOptionalLink(el.leadStoryLink, siteTarget?.url);
+  if (siteTarget?.url) {
+    el.leadStoryCta.href = siteTarget.url;
+    el.leadStoryCta.classList.remove("hidden");
+  } else {
+    el.leadStoryCta.removeAttribute("href");
+    el.leadStoryCta.classList.add("hidden");
+  }
   if (item.imageUrl) {
     el.leadStoryImage.src = item.imageUrl;
-    el.leadStoryImage.alt = item.title;
-    el.leadStoryMedia.href = item.url;
+    el.leadStoryImage.alt = cleanDisplayTitle(item.title);
+    setOptionalLink(el.leadStoryMedia, siteTarget?.url);
     el.leadStoryMedia.classList.remove("hidden");
     el.leadStoryImage.onerror = () => el.leadStoryMedia.classList.add("hidden");
   } else {
     el.leadStoryImage.removeAttribute("src");
     el.leadStoryMedia.classList.add("hidden");
   }
-  el.leadStorySources.innerHTML = unique.map((source) => `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceName)}</a>`).join("");
+  el.leadStorySources.innerHTML = unique.map((source) => source.sourceKind === "site"
+    ? `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceName)}</a>`
+    : `<span>${escapeHtml(source.sourceName)}</span>`).join("");
   el.leadStory.classList.remove("hidden");
 }
 
@@ -401,10 +490,96 @@ function renderBreaking() {
     return;
   }
 
-  el.breakingTitle.textContent = latest.title;
+  el.breakingTitle.textContent = cleanDisplayTitle(latest.title);
   el.breakingMeta.textContent = `${latest.sourceName} · ${formatAge(latest.publishedAt)}`;
-  el.breakingLink.href = latest.url;
+  setOptionalLink(el.breakingLink, latest.sourceKind === "site" ? latest.url : null);
   el.breakingBanner.classList.remove("hidden");
+}
+
+function renderFlashDeck() {
+  if (!el.flashDeck || !el.flashDeckItems) return;
+  const seen = new Set();
+  const items = state.items
+    .filter((item) => item.sourceKind === "site" && item.url)
+    .sort((a, b) => {
+      const ai = MAINSTREAM_PUBLISHERS.indexOf(a.publisher);
+      const bi = MAINSTREAM_PUBLISHERS.indexOf(b.publisher);
+      const ar = ai === -1 ? 99 : ai;
+      const br = bi === -1 ? 99 : bi;
+      return ar - br || Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+    })
+    .filter((item) => {
+      const key = item.publisher || item.sourceName;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 4);
+  if (items.length < 2) {
+    el.flashDeck.classList.add("hidden");
+    return;
+  }
+  el.flashDeckItems.innerHTML = items.map((item) => `<a class="flash-item" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">
+    <span>${escapeHtml(item.sourceName)} · ${formatAge(item.publishedAt)}</span>
+    <strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
+  </a>`).join("");
+  el.flashDeck.classList.remove("hidden");
+}
+
+function setOptionalLink(anchor, url) {
+  if (!anchor) return;
+  if (url) {
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.classList.remove("no-link");
+    anchor.removeAttribute("aria-disabled");
+  } else {
+    anchor.removeAttribute("href");
+    anchor.removeAttribute("target");
+    anchor.classList.add("no-link");
+    anchor.setAttribute("aria-disabled", "true");
+  }
+}
+
+function stripUrls(text = "") {
+  return String(text).replace(/https?:\/\/\S+/gi, "").replace(/\s{2,}/g, " ").trim();
+}
+
+function cleanDisplayTitle(text = "") {
+  return stripUrls(text).replace(/(?:<<<|>>>|➡️|👉|👇)+/g, "").replace(/\s{2,}/g, " ").trim();
+}
+
+function locateNearestCity() {
+  if (!navigator.geolocation) {
+    showToast("הדפדפן לא תומך בזיהוי מיקום");
+    return;
+  }
+  el.locateBtn.disabled = true;
+  el.locateBtn.textContent = "מאתר…";
+  navigator.geolocation.getCurrentPosition((position) => {
+    const cities = {
+      telaviv: [32.0853, 34.7818], jerusalem: [31.7683, 35.2137], haifa: [32.7940, 34.9896],
+      beersheva: [31.2530, 34.7915], eilat: [29.5577, 34.9519]
+    };
+    const { latitude, longitude } = position.coords;
+    let nearest = "telaviv", best = Infinity;
+    for (const [key, [lat, lon]] of Object.entries(cities)) {
+      const d = (latitude - lat) ** 2 + (longitude - lon) ** 2;
+      if (d < best) { best = d; nearest = key; }
+    }
+    state.city = nearest;
+    localStorage.setItem("hadashota.city", nearest);
+    if (el.citySelect) el.citySelect.value = nearest;
+    loadUtilities();
+    showToast("העיר הותאמה לפי המיקום שלך");
+    el.locateBtn.disabled = false;
+    el.locateBtn.textContent = "⌖ המיקום שלי";
+  }, () => {
+    showToast("לא התקבלה הרשאת מיקום — אפשר לבחור עיר ידנית");
+    el.locateBtn.disabled = false;
+    el.locateBtn.textContent = "⌖ המיקום שלי";
+  }, { enableHighAccuracy: false, timeout: 7000, maximumAge: 900000 });
 }
 
 function syncControlsFromState() {
@@ -414,7 +589,12 @@ function syncControlsFromState() {
   el.compactToggle.textContent = state.compact ? "תצוגה מרווחת" : "תצוגה קומפקטית";
   el.clusterToggle.checked = state.cluster;
   el.autoRefresh.checked = state.autoRefresh;
+  el.autoRefreshPill?.classList.toggle("active", state.autoRefresh);
+  if (el.autoRefreshPill) el.autoRefreshPill.querySelector("span").textContent = state.autoRefresh ? "60 שנ׳" : "כבוי";
+  if (el.quickAutoStatus) el.quickAutoStatus.textContent = state.autoRefresh ? "פעיל · 60 שנ׳" : "כבוי";
   if (el.citySelect) el.citySelect.value = state.city;
+  document.querySelectorAll("[data-quick-category]").forEach((button) => button.classList.toggle("active", button.dataset.quickCategory === state.category));
+  document.querySelectorAll("[data-quick-kind]").forEach((button) => button.classList.toggle("active", button.dataset.quickKind === state.kind));
 }
 
 function syncTheme() {
@@ -436,6 +616,17 @@ function resetFilters() {
   localStorage.setItem("hadashota.kind", "all");
   syncControlsFromState();
   render();
+}
+
+function setAutoRefresh(enabled) {
+  state.autoRefresh = Boolean(enabled);
+  localStorage.setItem("hadashota.autoRefresh", state.autoRefresh ? "1" : "0");
+  syncControlsFromState();
+  restartAutoRefresh();
+}
+
+function toggleAutoRefresh() {
+  setAutoRefresh(!state.autoRefresh);
 }
 
 function restartAutoRefresh() {

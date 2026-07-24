@@ -63,6 +63,7 @@
 
       <div class="topbar-actions">
         <span class="live-pill"><i></i> LIVE</span>
+        <button class="auto-refresh-pill" id="autoRefreshPill" type="button" title="רענון אוטומטי כל 60 שניות"><i></i><span>60 שנ׳</span></button>
         <button class="icon-button theme-toggle" id="themeToggle" type="button" title="מעבר למצב כהה" aria-label="מעבר למצב כהה" aria-pressed="false">
           <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
           <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"></path></svg>
@@ -70,12 +71,29 @@
         <button class="icon-button" id="refreshBtn" type="button" title="רענון עכשיו" aria-label="רענון עכשיו">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
         </button>
-        <button class="icon-button mobile-only" id="filtersToggle" type="button" title="סינון" aria-label="פתיחת סינון">
+        <button class="icon-button menu-toggle" id="filtersToggle" type="button" title="תפריט מהיר" aria-label="פתיחת תפריט מהיר" aria-expanded="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
         </button>
       </div>
     </div>
   </header>
+  <div class="quick-menu hidden" id="quickMenu" role="dialog" aria-label="תפריט מהיר">
+    <button type="button" id="quickAutoRefresh"><span>רענון אוטומטי</span><b id="quickAutoStatus">פעיל · 60 שנ׳</b></button>
+    <button type="button" id="quickFilters"><span>סינון וחיפוש</span><b>פתח</b></button>
+    <button type="button" id="quickReset"><span>איפוס סינונים</span><b>שעה אחרונה</b></button>
+  </div>
+  <nav class="news-nav" aria-label="ניווט חדשות מהיר">
+    <div class="shell news-nav-inner">
+      <button class="nav-item active" type="button" data-quick-category="all">ראשי</button>
+      <button class="nav-item" type="button" data-quick-category="security">ביטחוני</button>
+      <button class="nav-item" type="button" data-quick-category="politics">פוליטי</button>
+      <button class="nav-item" type="button" data-quick-category="diplomatic">מדיני</button>
+      <span class="nav-separator"></span>
+      <button class="nav-item" type="button" data-quick-kind="site">אתרי חדשות</button>
+      <button class="nav-item" type="button" data-quick-kind="telegram">Telegram</button>
+      <button class="nav-item" type="button" data-quick-kind="official">רשמי</button>
+    </div>
+  </nav>
 
   <main class="shell page">
     <section class="pulse-strip portal-strip" aria-label="מידע שימושי וחדשותא עכשיו">
@@ -93,6 +111,7 @@
       <article class="utility-card weather-card">
         <div class="utility-head">
           <span class="utility-icon">☀</span>
+          <button class="locate-button" id="locateBtn" type="button" title="התאם לפי המיקום שלי">⌖ המיקום שלי</button>
           <label class="city-picker" title="בחירת עיר">
             <select id="citySelect" aria-label="בחירת עיר למזג אוויר וזמני שבת">
               <option value="telaviv">תל אביב</option>
@@ -123,6 +142,11 @@
         <div class="shabbat-meta"><span id="shabbatCity">תל אביב</span><span id="shabbatParasha"></span></div>
         <a class="utility-credit" href="https://www.hebcal.com/" target="_blank" rel="noopener noreferrer">זמני שבת: Hebcal</a>
       </article>
+    </section>
+
+    <section class="flash-deck hidden" id="flashDeck" aria-label="מבזקים אחרונים מאתרי החדשות">
+      <div class="flash-deck-label"><span>מבזקים</span><b>עכשיו</b></div>
+      <div class="flash-deck-items" id="flashDeckItems"></div>
     </section>
 
     <section class="lead-story hidden" id="leadStory" aria-live="polite">
