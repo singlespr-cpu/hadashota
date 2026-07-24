@@ -53,7 +53,9 @@ const el = {
   leadStoryCount: document.querySelector("#leadStoryCount"),
   leadStorySignal: document.querySelector("#leadStorySignal"),
   leadStorySources: document.querySelector("#leadStorySources"),
-  leadStoryCta: document.querySelector("#leadStoryCta")
+  leadStoryCta: document.querySelector("#leadStoryCta"),
+  leadStoryMedia: document.querySelector("#leadStoryMedia"),
+  leadStoryImage: document.querySelector("#leadStoryImage")
 };
 
 const CATEGORY_LABELS = {
@@ -254,6 +256,7 @@ function newsCardHtml(item) {
   const officialBadge = item.official ? `<span class="official-badge">רשמי</span>` : "";
   const independentBadge = item.independent ? `<span class="independent-badge">עצמאי</span>` : "";
   const clusterBadge = reportCount > 1 ? `<span class="cluster-badge">${reportCount} מקורות</span>` : "";
+  const imageHtml = item.imageUrl ? `<a class="news-image" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת הידיעה"><img src="${safeUrl(item.imageUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.closest('.news-image').remove()" /></a>` : "";
   const relatedHtml = related.length ? `
     <details class="related-wrap">
       <summary>עוד דיווחים על אותה ידיעה (${related.length})</summary>
@@ -263,8 +266,9 @@ function newsCardHtml(item) {
     </details>` : "";
 
   return `
-    <article class="news-card ${state.compact ? "compact" : ""}" data-category="${category}">
+    <article class="news-card ${state.compact ? "compact" : ""} ${item.imageUrl ? "has-image" : ""}" data-category="${category}">
       <div class="news-main">
+        ${imageHtml}
         <div class="news-copy">
           <div class="news-meta">
             <span class="source-name">${escapeHtml(item.sourceName)}</span>
@@ -347,6 +351,16 @@ function renderLeadStory() {
   el.leadStorySignal.textContent = winner.uniqueSources >= 6 ? "חם מאוד" : winner.uniqueSources >= 4 ? "מתפשט במהירות" : "בכמה מקורות במקביל";
   el.leadStoryLink.href = item.url;
   el.leadStoryCta.href = item.url;
+  if (item.imageUrl) {
+    el.leadStoryImage.src = item.imageUrl;
+    el.leadStoryImage.alt = item.title;
+    el.leadStoryMedia.href = item.url;
+    el.leadStoryMedia.classList.remove("hidden");
+    el.leadStoryImage.onerror = () => el.leadStoryMedia.classList.add("hidden");
+  } else {
+    el.leadStoryImage.removeAttribute("src");
+    el.leadStoryMedia.classList.add("hidden");
+  }
   el.leadStorySources.innerHTML = unique.map((source) => `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceName)}</a>`).join("");
   el.leadStory.classList.remove("hidden");
 }

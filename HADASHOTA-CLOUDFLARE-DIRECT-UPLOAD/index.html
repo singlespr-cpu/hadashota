@@ -78,25 +78,23 @@
   </header>
 
   <main class="shell page">
-    <section class="hero">
-      <div>
+    <section class="pulse-strip" aria-label="מצב חדשותא עכשיו">
+      <div class="pulse-intro">
         <div class="eyebrow"><span id="currentDate">היום</span><b>•</b><span id="lastUpdated">טוען עדכונים...</span></div>
-        <h1>כל מה שקורה.<br><span>במסך אחד.</span></h1>
-        <p>כותרות ועדכונים מאתרי חדשות, מקורות רשמיים וערוצי Telegram ציבוריים — מאוחדים, מסוננים ומסודרים לפי זמן.</p>
+        <div class="pulse-title"><span class="pulse-live-dot"></span><strong>חדשותא עכשיו</strong><small>התמונה המלאה, בלי לעבור בין עשרות מקורות</small></div>
       </div>
-
       <div class="stats-grid" aria-label="נתוני מערכת">
         <article class="stat-card">
           <span>מקורות פעילים</span>
           <strong id="statSources">—</strong>
           <small id="statSourceDetail">בודק מקורות</small>
         </article>
-        <article class="stat-card">
+        <article class="stat-card accent-blue">
           <span>בשעה האחרונה</span>
           <strong id="statHour">—</strong>
           <small>עדכונים מאוחדים</small>
         </article>
-        <article class="stat-card">
+        <article class="stat-card accent-red">
           <span>דיווחים רשמיים</span>
           <strong id="statOfficial">—</strong>
           <small>צה״ל, פיקוד העורף ועוד</small>
@@ -110,6 +108,9 @@
         <span class="lead-story-signal" id="leadStorySignal"></span>
       </div>
       <div class="lead-story-body">
+        <a class="lead-story-media hidden" id="leadStoryMedia" href="#" target="_blank" rel="noopener noreferrer" aria-label="פתיחת הידיעה המרכזית">
+          <img id="leadStoryImage" alt="" loading="eager" referrerpolicy="no-referrer" />
+        </a>
         <div class="lead-story-copy">
           <h2><a id="leadStoryLink" href="#" target="_blank" rel="noopener noreferrer"><span id="leadStoryTitle"></span></a></h2>
           <p id="leadStoryPreview"></p>

@@ -62,7 +62,7 @@ const DIPLOMATIC_WORDS = [
   "מדיני", "דיפלומט", "שגריר", "שגרירות", "משרד החוץ", "או״ם", "אום", "ארהב", "ארה״ב", "טראמפ", "וושינגטון", "הסכם", "הפסקת אש", "שיחות", "משא ומתן", "מו״מ", "סעודיה", "קטאר", "מצרים", "ירדן", "אירופה", "איחוד האירופי", "יחסי חוץ", "diplomat", "diplomacy", "trump", "white house", "ceasefire", "agreement", "negotiation", "united nations", "saudi", "qatar", "egypt", "jordan", "washington"
 ];
 
-const STOP_WORDS = new Set(["של", "את", "על", "עם", "לא", "גם", "זה", "זו", "כי", "כך", "הוא", "היא", "הם", "הן", "כל", "אל", "לפי", "אחרי", "לפני", "עוד", "the", "a", "an", "of", "to", "in", "on", "for", "and", "is", "are", "with", "after", "before"]);
+const STOP_WORDS = new Set(["של", "את", "על", "עם", "לא", "גם", "זה", "זו", "כי", "כך", "הוא", "היא", "הם", "הן", "כל", "אל", "לפי", "אחרי", "לפני", "עוד", "היום", "עכשיו", "חדש", "חדשה", "חדשות", "דיווח", "דיווחים", "עדכון", "עדכונים", "ראשוני", "ישראל", "ישראלי", "ישראלית", "the", "a", "an", "of", "to", "in", "on", "for", "and", "is", "are", "with", "after", "before", "breaking", "report", "reports", "update"]);
 
 export default {
   async fetch(request, env, ctx) {
@@ -256,12 +256,14 @@ function parseRss(xml, source) {
       link = href || cleanText(firstTag(block, ["guid", "id"]));
     }
     const dateRaw = cleanText(firstTag(block, ["pubDate", "published", "updated", "dc:date", "date"]));
-    const description = cleanText(firstTag(block, ["description", "summary", "content:encoded", "content"]));
+    const descriptionRaw = firstTag(block, ["description", "summary", "content:encoded", "content"]);
+    const description = cleanText(descriptionRaw);
     const publishedAt = safeIso(dateRaw);
     const url = absoluteUrl(link, source.home);
+    const imageUrl = extractRssImage(block, descriptionRaw, source.home);
 
     if (!title || !url || !publishedAt) continue;
-    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(description) }));
+    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(description), imageUrl }));
   }
   return items;
 }
@@ -280,7 +282,8 @@ function parseTelegram(html, source) {
 
     const url = `https://t.me/${dataPost}`;
     const title = telegramTitle(text);
-    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(text, 260) }));
+    const imageUrl = extractTelegramImage(chunk);
+    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(text, 260), imageUrl }));
   }
   return items;
 }
@@ -305,8 +308,9 @@ function parseJsonLd(html, source) {
       const url = absoluteUrl(rawUrl, source.home);
       const publishedAt = safeIso(obj.datePublished || obj.dateModified || obj.uploadDate);
       const preview = cleanText(obj.description || "");
+      const imageUrl = jsonLdImage(obj.image, source.home);
       if (!title || !url || !publishedAt) return null;
-      return makeItem({ source, title, url, publishedAt, preview: trimPreview(preview) });
+      return makeItem({ source, title, url, publishedAt, preview: trimPreview(preview), imageUrl });
     })
     .filter(Boolean);
 }
@@ -329,7 +333,53 @@ function walkJsonLd(value, out) {
   if (value.item) walkJsonLd(value.item, out);
 }
 
-function makeItem({ source, title, url, publishedAt, preview }) {
+
+function extractRssImage(block, descriptionRaw, base) {
+  const candidates = [];
+  for (const match of block.matchAll(/<(?:media:content|media:thumbnail)\b[^>]*url=["']([^"']+)["'][^>]*>/gi)) candidates.push(match[1]);
+  for (const match of block.matchAll(/<enclosure\b[^>]*url=["']([^"']+)["'][^>]*>/gi)) {
+    const tag = match[0];
+    if (/type=["']image\//i.test(tag) || /\.(?:jpe?g|png|webp|gif)(?:\?|$)/i.test(match[1])) candidates.push(match[1]);
+  }
+  const html = String(descriptionRaw || "");
+  const img = html.match(/<img\b[^>]*(?:src|data-src)=["']([^"']+)["'][^>]*>/i)?.[1];
+  if (img) candidates.push(img);
+  for (const value of candidates) {
+    const url = absoluteUrl(decodeEntities(value), base);
+    if (url && !/\.(?:svg)(?:\?|$)/i.test(url)) return url;
+  }
+  return null;
+}
+
+function extractTelegramImage(chunk) {
+  const style = chunk.match(/<a\b[^>]*class=["'][^"']*tgme_widget_message_photo_wrap[^"']*["'][^>]*style=["'][^"']*background-image\s*:\s*url\(['"]?([^)'"]+)/i)?.[1]
+    || chunk.match(/background-image\s*:\s*url\(['"]?([^)'"]+)/i)?.[1];
+  if (style) return sanitizeImageUrl(decodeEntities(style));
+  const img = chunk.match(/<img\b[^>]*(?:src|data-src)=["']([^"']+)["'][^>]*>/i)?.[1];
+  return img ? sanitizeImageUrl(decodeEntities(img)) : null;
+}
+
+function jsonLdImage(image, base) {
+  const values = Array.isArray(image) ? image : [image];
+  for (const value of values) {
+    const raw = typeof value === "string" ? value : value?.url || value?.contentUrl || value?.['@id'];
+    const url = absoluteUrl(raw, base);
+    if (url) return url;
+  }
+  return null;
+}
+
+function sanitizeImageUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value).trim());
+    return /^https?:$/.test(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function makeItem({ source, title, url, publishedAt, preview, imageUrl = null }) {
   return {
     id: stableId(`${source.id}|${url}|${publishedAt}`),
     sourceId: source.id,
@@ -342,6 +392,7 @@ function makeItem({ source, title, url, publishedAt, preview }) {
     language: source.language || "he",
     title: normalizeSpace(title),
     preview: normalizeSpace(preview || ""),
+    imageUrl: sanitizeImageUrl(imageUrl),
     url,
     publishedAt,
     defaultCategory: source.defaultCategory || null
@@ -377,7 +428,8 @@ function clusterItems(items) {
     for (let i = Math.max(0, clusters.length - 90); i < clusters.length; i++) {
       const cluster = clusters[i];
       if (Math.abs(itemTime - Date.parse(cluster.publishedAt)) > 8 * 60 * 60 * 1000) continue;
-      if (titleSimilarity(item.title, cluster.title) >= 0.72) {
+      if (item.category && cluster.category && item.category !== "other" && cluster.category !== "other" && item.category !== cluster.category) continue;
+      if (sameEvent(item.title, cluster.title)) {
         match = cluster;
         break;
       }
@@ -387,15 +439,16 @@ function clusterItems(items) {
       clusters.push({
         ...item,
         reportCount: 1,
-        related: [{ sourceId: item.sourceId, publisher: item.publisher, sourceName: item.sourceName, sourceKind: item.sourceKind, verified: item.verified, official: item.official, independent: item.independent, url: item.url, publishedAt: item.publishedAt }]
+        related: [{ sourceId: item.sourceId, publisher: item.publisher, sourceName: item.sourceName, sourceKind: item.sourceKind, verified: item.verified, official: item.official, independent: item.independent, url: item.url, publishedAt: item.publishedAt, imageUrl: item.imageUrl || null }]
       });
       continue;
     }
 
     const exists = match.related.some((r) => r.publisher === item.publisher);
     if (!exists) {
-      match.related.push({ sourceId: item.sourceId, publisher: item.publisher, sourceName: item.sourceName, sourceKind: item.sourceKind, verified: item.verified, official: item.official, independent: item.independent, url: item.url, publishedAt: item.publishedAt });
+      match.related.push({ sourceId: item.sourceId, publisher: item.publisher, sourceName: item.sourceName, sourceKind: item.sourceKind, verified: item.verified, official: item.official, independent: item.independent, url: item.url, publishedAt: item.publishedAt, imageUrl: item.imageUrl || null });
       match.reportCount = match.related.length;
+      if (!match.imageUrl && item.imageUrl) match.imageUrl = item.imageUrl;
     }
 
     // Prefer an official or verified representative, otherwise keep the newest one.
@@ -408,6 +461,21 @@ function clusterItems(items) {
   }
 
   return clusters.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+}
+
+
+function sameEvent(a, b) {
+  const A = titleTokens(a);
+  const B = titleTokens(b);
+  if (!A.size || !B.size) return false;
+  let intersection = 0;
+  for (const token of A) if (B.has(token)) intersection++;
+  const union = A.size + B.size - intersection;
+  const jaccard = union ? intersection / union : 0;
+  const containment = intersection / Math.max(1, Math.min(A.size, B.size));
+  // Hebrew outlets often phrase the same event very differently. Three specific shared
+  // terms plus strong containment is a better signal than exact headline similarity.
+  return jaccard >= 0.58 || (intersection >= 3 && containment >= 0.52) || (intersection >= 4 && containment >= 0.44);
 }
 
 function titleSimilarity(a, b) {
