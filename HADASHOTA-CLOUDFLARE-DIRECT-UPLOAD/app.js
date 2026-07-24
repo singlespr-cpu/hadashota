@@ -16,8 +16,13 @@ const state = {
   retryAttempt: 0,
   nextRefreshAt: 0,
   dataDelayed: false,
+  lastDataGeneratedAt: null,
   city: localStorage.getItem("hadashota.city") || "telaviv",
-  lastVisitAt: Number((localStorage.getItem("hadashota.lastVisitAt") ?? localStorage.getItem("pulse.lastVisitAt"))) || 0
+  lastVisitAt: Number((localStorage.getItem("hadashota.lastVisitAt") ?? localStorage.getItem("pulse.lastVisitAt"))) || 0,
+  notificationsEnabled: localStorage.getItem("hadashota.headlineNotifications") === "1",
+  currentLeadFingerprint: localStorage.getItem("hadashota.lastLeadFingerprint") || "",
+  leadNotificationPrimed: localStorage.getItem("hadashota.lastLeadFingerprint") ? true : false,
+  serviceWorkerRegistration: null
 };
 
 const el = {
@@ -32,6 +37,7 @@ const el = {
   compactToggle: document.querySelector("#compactToggle"),
   clusterToggle: document.querySelector("#clusterToggle"),
   autoRefresh: document.querySelector("#autoRefresh"),
+  notificationToggle: document.querySelector("#notificationToggle"),
   sourceList: document.querySelector("#sourceList"),
   activeSourceCount: document.querySelector("#activeSourceCount"),
   showAllSources: document.querySelector("#showAllSources"),
@@ -82,10 +88,13 @@ const el = {
   quickMenu: document.querySelector("#quickMenu"),
   quickAutoRefresh: document.querySelector("#quickAutoRefresh"),
   quickAutoStatus: document.querySelector("#quickAutoStatus"),
+  quickNotifications: document.querySelector("#quickNotifications"),
+  quickNotificationsStatus: document.querySelector("#quickNotificationsStatus"),
   quickFilters: document.querySelector("#quickFilters"),
   quickReset: document.querySelector("#quickReset"),
   dataStatus: document.querySelector("#dataStatus"),
   dataStatusText: document.querySelector("#dataStatusText"),
+  notificationsBtn: document.querySelector("#notificationsBtn"),
   aboutBtn: document.querySelector("#aboutBtn"),
   contactBtn: document.querySelector("#contactBtn"),
   aboutModal: document.querySelector("#aboutModal"),
@@ -110,8 +119,10 @@ init();
 function init() {
   el.currentDate.textContent = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
   syncTheme();
+  reconcileNotificationPermission();
   syncControlsFromState();
   bindEvents();
+  registerServiceWorker();
   restoreLocalLastGood();
   loadUtilities();
   loadNews();
@@ -199,6 +210,7 @@ function bindEvents() {
   });
 
   el.autoRefresh.addEventListener("change", () => setAutoRefresh(el.autoRefresh.checked));
+  el.notificationToggle?.addEventListener("change", () => toggleHeadlineNotifications(el.notificationToggle.checked));
 
   el.showAllSources.addEventListener("click", () => {
     state.allSourcesVisible = !state.allSourcesVisible;
@@ -244,6 +256,8 @@ function bindEvents() {
   });
   el.autoRefreshPill?.addEventListener("click", toggleAutoRefresh);
   el.quickAutoRefresh?.addEventListener("click", toggleAutoRefresh);
+  el.notificationsBtn?.addEventListener("click", toggleHeadlineNotifications);
+  el.quickNotifications?.addEventListener("click", toggleHeadlineNotifications);
   el.quickFilters?.addEventListener("click", () => {
     el.quickMenu.classList.add("hidden");
     el.filtersToggle.setAttribute("aria-expanded", "false");
@@ -267,6 +281,15 @@ function bindEvents() {
     if (el.quickMenu.contains(event.target) || el.filtersToggle.contains(event.target)) return;
     el.quickMenu.classList.add("hidden");
     el.filtersToggle.setAttribute("aria-expanded", "false");
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (state.autoRefresh) restartAutoRefresh();
+    if (!document.hidden && state.dataDelayed) loadNews(false, true);
+  });
+
+  window.addEventListener("focus", () => {
+    if (state.dataDelayed) loadNews(false, true);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -348,6 +371,7 @@ async function loadNews(force = false, fromRetry = false) {
 
     state.items = data.items;
     state.sources = data.sources;
+    state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
     state.dataDelayed = delayed || freshShards < NEWS_SHARDS.length;
     el.lastUpdated.textContent = state.dataDelayed
       ? `נתונים אחרונים · ${formatClock(data.generatedAt)}`
@@ -357,14 +381,14 @@ async function loadNews(force = false, fromRetry = false) {
     render();
     setDataStatus(state.dataDelayed);
 
-    if (state.autoRefresh) scheduleNextRefresh(Number(data.refreshAfterSeconds) || 60);
+    if (state.autoRefresh) scheduleNextRefresh(Math.max(Number(data.refreshAfterSeconds) || 30, getRefreshInterval()));
     else updateRefreshCountdown();
 
     if (!state.dataDelayed) {
       state.retryAttempt = 0;
       clearTimeout(state.retryTimer);
       localStorage.setItem("hadashota.lastVisitAt", String(Date.now()));
-      if (force) showToast("החדשות רועננו עכשיו");
+      if (force && !fromRetry) showToast("החדשות רועננו עכשיו");
     } else {
       scheduleNewsRetry();
       if (force) showToast("חלק מהמקורות מתעכבים — מוצגים הנתונים האחרונים");
@@ -392,10 +416,11 @@ async function fetchNewsShard(shard, force = false) {
   try {
     const params = new URLSearchParams({ shard });
     if (force) params.set("force", "1");
+    params.set("_", String(Math.floor(Date.now() / 15000)));
     const response = await fetch(`/api/news?${params}`, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
       signal: controller.signal,
-      cache: force ? "no-store" : "default"
+      cache: "no-store"
     });
     if (!response.ok) throw new Error(`HTTP ${response.status} (${shard})`);
     return await response.json();
@@ -437,6 +462,7 @@ function restoreLocalLastGood() {
   if (!data.items.length) return false;
   state.items = data.items;
   state.sources = data.sources;
+  state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
   state.dataDelayed = true;
   el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
   renderStats(data);
@@ -447,20 +473,26 @@ function restoreLocalLastGood() {
 
 function scheduleNewsRetry() {
   clearTimeout(state.retryTimer);
-  const delays = [5, 10, 20, 30];
+  const delays = [4, 8, 15, 25];
   const seconds = delays[Math.min(state.retryAttempt, delays.length - 1)];
   state.retryAttempt += 1;
-  state.retryTimer = setTimeout(() => loadNews(false, true), seconds * 1000);
+  state.retryTimer = setTimeout(() => loadNews(true, true), seconds * 1000);
 }
 
 function setDataStatus(delayed, hasData = state.items.length > 0) {
   if (!el.dataStatus || !el.dataStatusText) return;
   el.dataStatus.classList.toggle("hidden", !delayed);
-  if (delayed) {
-    el.dataStatusText.textContent = hasData
-      ? "העדכון מתעכב — מוצגים הנתונים האחרונים"
-      : "מתחבר למקורות — מתבצע ניסיון נוסף אוטומטית";
+  if (!delayed) return;
+
+  if (!hasData) {
+    el.dataStatusText.textContent = "מתחבר למקורות — מתבצע ניסיון נוסף אוטומטית";
+    return;
   }
+
+  const clock = state.lastDataGeneratedAt ? formatClock(state.lastDataGeneratedAt) : "";
+  el.dataStatusText.textContent = clock
+    ? `חלק מהמקורות מתעכבים — מוצגים הנתונים האחרונים מ־${clock}. המערכת מנסה שוב אוטומטית.`
+    : "חלק מהמקורות מתעכבים — מוצגים הנתונים האחרונים. המערכת מנסה שוב אוטומטית.";
 }
 
 function mergeNewsPayloads(payloads) {
@@ -483,7 +515,7 @@ function mergeNewsPayloads(payloads) {
 
   return {
     generatedAt,
-    refreshAfterSeconds: 60,
+    refreshAfterSeconds: Math.min(...payloads.map((payload) => Number(payload.refreshAfterSeconds) || 30), 30),
     items: mergedItems,
     sources: [...sourcesById.values()].sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0)),
     stats: {
@@ -546,7 +578,8 @@ function normalizeClusterReports(item) {
     independent: !!item.independent,
     url: item.url,
     publishedAt: item.publishedAt,
-    imageUrl: item.imageUrl || null
+    imageUrl: item.imageUrl || null,
+    title: item.title || ""
   };
   return dedupeReports([base, ...(Array.isArray(item.related) ? item.related : [])]);
 }
@@ -721,7 +754,9 @@ function newsCardHtml(item) {
     : [];
   const reportCount = state.cluster ? Math.max(Number(item.reportCount) || 1, (item.related || []).length || 1) : 1;
   const category = item.category || "other";
-  const preview = item.preview && item.preview !== item.title ? `<p class="news-preview">${escapeHtml(item.preview)}</p>` : "";
+  const safeTitle = cleanDisplayTitle(item.title);
+  const safePreviewText = item.preview && item.preview !== item.title ? cleanDisplayText(item.preview) : "";
+  const preview = safePreviewText ? `<p class="news-preview">${escapeHtml(safePreviewText)}</p>` : "";
   const telegramBadge = item.sourceKind === "telegram" ? `<span class="source-type-badge">Telegram</span>` : "";
   const newBadge = state.lastVisitAt > 0 && Date.parse(item.latestReportAt || item.publishedAt) > state.lastVisitAt ? `<span class="new-badge">חדש</span>` : "";
   const officialBadge = (item.official || (item.related || []).some((report) => report.official)) ? `<span class="official-badge">רשמי</span>` : "";
@@ -733,7 +768,7 @@ function newsCardHtml(item) {
   const imageHtml = item.imageUrl
     ? `<a class="news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה">${image}</a>`
     : "";
-  const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>`;
+  const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeTitle)}</a>`;
   const relatedHtml = related.length ? `
     <details class="related-wrap">
       <summary>עוד דיווחים (${related.length})</summary>
@@ -743,12 +778,12 @@ function newsCardHtml(item) {
     </details>` : "";
 
   return `
-    <article class="news-card clickable-story ${state.compact ? "compact" : ""} ${item.imageUrl ? "has-image" : ""} ${isSite ? "site-story" : "telegram-story"}" data-category="${category}" data-story-url="${storyUrl}" role="link" tabindex="0" aria-label="פתיחת המקור: ${escapeHtml(item.title)}">
+    <article class="news-card clickable-story ${state.compact ? "compact" : ""} ${item.imageUrl ? "has-image" : ""} ${isSite ? "site-story" : "telegram-story"}" data-category="${category}" data-story-url="${storyUrl}" role="link" tabindex="0" aria-label="פתיחת המקור: ${escapeHtml(safeTitle)}">
       <div class="news-main">
         ${imageHtml}
         <div class="news-copy">
           <div class="news-meta">
-            <span class="source-name">${escapeHtml(item.sourceName)}</span>
+            <span class="source-name">${escapeHtml(cleanDisplayText(item.sourceName))}</span>
             <span class="meta-sep">•</span>
             <time datetime="${escapeHtml(item.publishedAt)}" title="${escapeHtml(formatFullDate(item.publishedAt))}">${formatAge(item.publishedAt)}</time>
             ${newBadge}${telegramBadge}${officialBadge}${independentBadge}${clusterBadge}
@@ -774,7 +809,7 @@ function renderSources() {
   el.sourceList.innerHTML = visible.map((source) => {
     const type = source.official ? "מקור רשמי" : source.independent ? "Telegram עצמאי" : source.kind === "telegram" ? "Telegram / כתב" : "אתר חדשות";
     const inner = `<span class="source-avatar">${escapeHtml(sourceInitial(source.name))}</span>
-      <span class="source-info"><b>${escapeHtml(source.name)}</b><small>${type} · ${formatAge(source.lastItemAt)}</small></span>
+      <span class="source-info"><b>${escapeHtml(cleanDisplayText(source.name))}</b><small>${type} · ${formatAge(source.lastItemAt)}</small></span>
       <i class="source-state" title="פעיל"></i>`;
     return source.home
       ? `<a class="source-row" href="${safeUrl(source.home)}" target="_blank" rel="noopener noreferrer" title="פתיחת המקור">${inner}</a>`
@@ -828,7 +863,7 @@ function renderLeadStory() {
   const unique = sources.slice(0, 5);
 
   el.leadStoryTitle.textContent = cleanDisplayTitle(item.title);
-  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? stripUrls(item.preview) : "הידיעה מתקדמת במהירות ומופיעה בכמה מקורות בזמן קצר.";
+  el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? cleanDisplayText(item.preview) : "הידיעה מתקדמת במהירות ומופיעה בכמה מקורות בזמן קצר.";
   el.leadStorySource.textContent = item.sourceName;
   el.leadStoryAge.textContent = formatAge(winner.latestAt);
   el.leadStoryCount.textContent = `${winner.uniqueSources} מקורות מדווחים`;
@@ -853,9 +888,10 @@ function renderLeadStory() {
     el.leadStoryMedia.classList.add("hidden");
   }
   el.leadStorySources.innerHTML = unique.map((source) => source.url
-    ? `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceName)}</a>`
-    : `<span>${escapeHtml(source.sourceName)}</span>`).join("");
+    ? `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanDisplayText(source.sourceName))}</a>`
+    : `<span>${escapeHtml(cleanDisplayText(source.sourceName))}</span>`).join("");
   el.leadStory.classList.remove("hidden");
+  updateLeadHeadlineTracking(winner);
 }
 
 function renderBreaking() {
@@ -872,7 +908,7 @@ function renderBreaking() {
   }
 
   el.breakingTitle.textContent = cleanDisplayTitle(latest.title);
-  el.breakingMeta.textContent = `${latest.sourceName} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
+  el.breakingMeta.textContent = `${cleanDisplayText(latest.sourceName)} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
   setOptionalLink(el.breakingLink, latest.url);
   el.breakingBanner.classList.remove("hidden");
 }
@@ -903,7 +939,7 @@ function renderFlashDeck() {
     return;
   }
   el.flashDeckItems.innerHTML = preferred.map((item) => `<a class="flash-item" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">
-    <span>${escapeHtml(item.sourceName)} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
+    <span>${escapeHtml(cleanDisplayText(item.sourceName))} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
     <strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
   </a>`).join("");
   el.flashDeck.classList.remove("hidden");
@@ -936,12 +972,162 @@ function setOptionalLink(anchor, url) {
   }
 }
 
+function decodeHtmlEntities(text = "") {
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = String(text ?? "");
+  return textarea.value;
+}
+
+function stripTags(text = "") {
+  return String(text ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?p\b[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+}
+
 function stripUrls(text = "") {
-  return String(text).replace(/https?:\/\/\S+/gi, "").replace(/\s{2,}/g, " ").trim();
+  return String(text).replace(/https?:\/\/\S+/gi, "").replace(/(?:www\.)\S+/gi, "").replace(/\s{2,}/g, " ").trim();
+}
+
+function stripMarkupArtifacts(text = "") {
+  return String(text ?? "")
+    .replace(/\bimg\s+[^<>]{0,700}?(?:\/?>|(?=\s{2,}|$))/gi, " ")
+    .replace(/\b(?:height|width|align|src|class|style|alt|loading)\s*=\s*(?:["'][^"']*["']|[^\s>]+)/gi, " ")
+    .replace(/(?:<|&lt;)?\/?br\s*\/?(?:>|&gt;)?/gi, " ")
+    .replace(/(?:<|&lt;)?\/?(?:p|div|span)\s*(?:>|&gt;)?/gi, " ");
+}
+
+function cleanDisplayText(text = "") {
+  return stripUrls(stripMarkupArtifacts(stripTags(decodeHtmlEntities(decodeHtmlEntities(String(text ?? ""))))))
+    .replace(/(?:<<<|>>>|➡️|👉|👇)+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function cleanDisplayTitle(text = "") {
-  return stripUrls(text).replace(/(?:<<<|>>>|➡️|👉|👇)+/g, "").replace(/\s{2,}/g, " ").trim();
+  return cleanDisplayText(text);
+}
+
+function getRefreshInterval() {
+  return document.hidden ? 60 : 30;
+}
+
+
+function reconcileNotificationPermission() {
+  if (!("Notification" in window) || Notification.permission !== "granted") {
+    state.notificationsEnabled = false;
+    localStorage.setItem("hadashota.headlineNotifications", "0");
+  }
+}
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js");
+  } catch (error) {
+    console.warn("Service worker registration failed", error);
+  }
+}
+
+async function toggleHeadlineNotifications(desiredState = !state.notificationsEnabled) {
+  const enabled = Boolean(desiredState);
+  if (!enabled) {
+    state.notificationsEnabled = false;
+    localStorage.setItem("hadashota.headlineNotifications", "0");
+    syncControlsFromState();
+    showToast("התראות דפדפן כבויות");
+    return;
+  }
+
+  if (!("Notification" in window)) {
+    showToast("הדפדפן לא תומך בהתראות");
+    return;
+  }
+
+  let permission = Notification.permission;
+  if (permission === "default") permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    state.notificationsEnabled = false;
+    localStorage.setItem("hadashota.headlineNotifications", "0");
+    syncControlsFromState();
+    showToast("לא ניתנה הרשאה להתראות");
+    return;
+  }
+
+  state.notificationsEnabled = true;
+  state.leadNotificationPrimed = true;
+  localStorage.setItem("hadashota.headlineNotifications", "1");
+  syncControlsFromState();
+  showToast("התראות הופעלו — תישלח התראה כשהכותרת הראשית תתחלף");
+}
+
+function leadFingerprint(entry) {
+  if (!entry?.item) return "";
+  const item = entry.item;
+  const reports = normalizeClusterReports(item);
+  const titles = [item.title, ...reports.map((report) => report.title)].filter(Boolean);
+  const tokenSets = titles.map((title) => clientTitleTokens(cleanDisplayTitle(title))).filter((set) => set.size);
+  const tokenFrequency = new Map();
+
+  for (const tokens of tokenSets) {
+    for (const token of tokens) tokenFrequency.set(token, (tokenFrequency.get(token) || 0) + 1);
+  }
+
+  const threshold = Math.max(1, Math.ceil(tokenSets.length * 0.45));
+  const commonTokens = [...tokenFrequency.entries()]
+    .filter(([, count]) => count >= threshold)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "he"))
+    .slice(0, 7)
+    .map(([token]) => token);
+
+  const fallbackTokens = [...clientTitleTokens(cleanDisplayTitle(item.title))].slice(0, 7);
+  const identityTokens = commonTokens.length >= 2 ? commonTokens : fallbackTokens;
+  const firstAt = Date.parse(clusterFirstAt(item));
+  const timeBucket = Number.isFinite(firstAt) ? Math.floor(firstAt / (20 * 60 * 1000)) : 0;
+  return [item.category || "other", timeBucket, ...identityTokens].join("|").toLowerCase();
+}
+
+async function notifyHeadlineChange(entry) {
+  if (!state.notificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
+  const item = entry.item;
+  const title = cleanDisplayTitle(item.title);
+  const reports = normalizeClusterReports(item);
+  const hasOfficial = !!item.official || reports.some((report) => report.official);
+  const body = `${entry.uniqueSources} מקורות מדווחים${hasOfficial ? " · כולל מקור רשמי" : ""} · ${formatAge(entry.latestAt)}`;
+  const options = {
+    body,
+    tag: `hadashota-headline-${leadFingerprint(entry)}`,
+    renotify: true,
+    data: { url: item.url },
+    icon: "/favicon-32.png",
+    badge: "/favicon-32.png"
+  };
+
+  try {
+    if (state.serviceWorkerRegistration?.showNotification) {
+      await state.serviceWorkerRegistration.showNotification(title, options);
+    } else {
+      const notification = new Notification(title, options);
+      notification.onclick = () => openStorySource(item.url);
+    }
+  } catch (error) {
+    console.warn("Notification failed", error);
+  }
+}
+
+function updateLeadHeadlineTracking(entry) {
+  const fingerprint = leadFingerprint(entry);
+  if (!fingerprint) return;
+  const previous = state.currentLeadFingerprint;
+  state.currentLeadFingerprint = fingerprint;
+  localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
+
+  if (!state.leadNotificationPrimed) {
+    state.leadNotificationPrimed = true;
+    return;
+  }
+
+  if (previous && previous !== fingerprint && !state.dataDelayed) notifyHeadlineChange(entry);
 }
 
 function locateNearestCity() {
@@ -982,10 +1168,23 @@ function syncControlsFromState() {
   document.querySelectorAll("[data-kind]").forEach((button) => button.classList.toggle("active", button.dataset.kind === state.kind));
   el.compactToggle.textContent = state.compact ? "תצוגה מרווחת" : "תצוגה קומפקטית";
   el.clusterToggle.checked = state.cluster;
+  const refreshInterval = getRefreshInterval();
   el.autoRefresh.checked = state.autoRefresh;
   el.autoRefreshPill?.classList.toggle("active", state.autoRefresh);
-  if (el.autoRefreshPill) el.autoRefreshPill.querySelector("span").textContent = state.autoRefresh ? "רענון אוטומטי" : "רענון כבוי";
-  if (el.quickAutoStatus) el.quickAutoStatus.textContent = state.autoRefresh ? "פעיל — מתעדכן כל דקה" : "רענון כבוי";
+  if (el.autoRefreshPill) {
+    el.autoRefreshPill.querySelector("span").textContent = state.autoRefresh ? "רענון אוטומטי" : "רענון כבוי";
+    el.autoRefreshPill.title = state.autoRefresh ? `רענון חכם — כל ${refreshInterval} שניות` : "רענון אוטומטי כבוי";
+  }
+  if (el.quickAutoStatus) el.quickAutoStatus.textContent = state.autoRefresh ? `פעיל — כל ${refreshInterval} שנ׳` : "רענון כבוי";
+  if (el.notificationsBtn) {
+    el.notificationsBtn.classList.toggle("active", state.notificationsEnabled);
+    el.notificationsBtn.setAttribute("aria-pressed", state.notificationsEnabled ? "true" : "false");
+    el.notificationsBtn.querySelector("span").textContent = state.notificationsEnabled ? "התראות פועלות" : "התראות";
+    el.notificationsBtn.title = state.notificationsEnabled ? "התראות דפדפן פעילות" : "הפעלת התראות דפדפן";
+  }
+  if (el.quickNotificationsStatus) el.quickNotificationsStatus.textContent = state.notificationsEnabled ? "פעיל" : "כבוי";
+  if (el.quickNotifications) el.quickNotifications.classList.toggle("active", state.notificationsEnabled);
+  if (el.notificationToggle) el.notificationToggle.checked = state.notificationsEnabled;
   if (el.citySelect) el.citySelect.value = state.city;
   document.querySelectorAll("[data-quick-category]").forEach((button) => {
     const active = state.kind === "all" && button.dataset.quickCategory === state.category;
@@ -1035,7 +1234,7 @@ function restartAutoRefresh() {
   clearTimeout(state.timer);
   clearInterval(state.countdownTimer);
   if (state.autoRefresh) {
-    scheduleNextRefresh(60);
+    scheduleNextRefresh(getRefreshInterval());
   } else {
     state.nextRefreshAt = 0;
     updateRefreshCountdown();
@@ -1043,7 +1242,7 @@ function restartAutoRefresh() {
   state.countdownTimer = setInterval(updateRefreshCountdown, 1000);
 }
 
-function scheduleNextRefresh(seconds = 60) {
+function scheduleNextRefresh(seconds = getRefreshInterval()) {
   clearTimeout(state.timer);
   if (!state.autoRefresh) {
     state.nextRefreshAt = 0;

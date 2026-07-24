@@ -290,8 +290,8 @@ async function handleNews(request, ctx) {
   try {
     // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
     // even when an origin redirects or several sources fail at the same time.
-    const retryBudget = { remaining: 4 };
-    const settled = await fetchSourcesWithLimit(shardSources, 10, retryBudget);
+    const retryBudget = { remaining: 6 };
+    const settled = await fetchSourcesWithLimit(shardSources, 12, retryBudget);
     const rawItems = settled.flatMap((result) => result.items);
     const now = Date.now();
     const cutoff = now - 30 * 60 * 60 * 1000;
@@ -340,7 +340,7 @@ async function handleNews(request, ctx) {
 
     // A severely degraded refresh must never overwrite or replace a healthy feed.
     // When only a handful of sources answered, serve the previous good shard and retry soon.
-    const minimumHealthySources = 4;
+    const minimumHealthySources = shard === "telegram" ? 3 : 4;
     if (activeSources.length < minimumHealthySources) {
       const previousGood = await cache.match(lastGoodKey);
       if (previousGood) return await lastGoodOrError(cache, lastGoodKey, shard, `partial_refresh_${activeSources.length}_sources`);
@@ -348,7 +348,7 @@ async function handleNews(request, ctx) {
 
     const payload = {
       generatedAt: new Date().toISOString(),
-      refreshAfterSeconds: 60,
+      refreshAfterSeconds: 30,
       shard,
       stale: false,
       tookMs: Date.now() - started,
@@ -368,7 +368,9 @@ async function handleNews(request, ctx) {
     };
 
     const response = json(payload, 200, {
-      "Cache-Control": "public, max-age=20, s-maxage=55, stale-while-revalidate=180"
+      "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
+      "X-Hadashota-Version": "13.0.0",
+      "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=21600, stale-while-revalidate=86400"
@@ -394,7 +396,8 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       payload.servedAt = new Date().toISOString();
       return json(payload, 200, {
         "Cache-Control": "no-store",
-        "X-Hadashota-Stale": "1"
+        "X-Hadashota-Stale": "1",
+        "X-Hadashota-Version": "13.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -433,7 +436,7 @@ async function fetchSource(source, retryBudget = { remaining: 0 }) {
 
   while (attempt < 2) {
     try {
-      const timeoutMs = source.adapter === "telegram" ? 4200 : source.adapter === "jsonld" ? 4800 : 4400;
+      const timeoutMs = source.adapter === "telegram" ? 5400 : source.adapter === "jsonld" ? 6200 : 5600;
       const response = await fetchWithTimeout(source.url, timeoutMs);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -495,7 +498,7 @@ async function fetchWithTimeout(url, timeoutMs) {
         "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
         "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
       },
-      cf: { cacheEverything: true, cacheTtl: 60 }
+      cf: { cacheEverything: true, cacheTtl: 45 }
     });
   } finally {
     clearTimeout(timeout);
@@ -704,7 +707,8 @@ function clusterItems(items) {
       independent: item.independent,
       url: item.url,
       publishedAt: item.publishedAt,
-      imageUrl: item.imageUrl || null
+      imageUrl: item.imageUrl || null,
+      title: item.title || ""
     };
 
     if (!match) {
@@ -816,7 +820,16 @@ function unwrapCdata(value) {
 }
 
 function cleanText(value) {
-  return normalizeSpace(decodeEntities(stripHtml(unwrapCdata(value || ""))));
+  const decoded = decodeEntities(decodeEntities(unwrapCdata(value || "")));
+  return normalizeSpace(stripMarkupArtifacts(stripHtml(decoded)));
+}
+
+function stripMarkupArtifacts(value) {
+  return String(value || "")
+    .replace(/\bimg\s+[^<>]{0,700}?(?:\/?>|(?=\s{2,}|$))/gi, " ")
+    .replace(/\b(?:height|width|align|src|class|style|alt|loading)\s*=\s*(?:["'][^"']*["']|[^\s>]+)/gi, " ")
+    .replace(/(?:<|&lt;)?\/?br\s*\/?(?:>|&gt;)?/gi, " ")
+    .replace(/(?:<|&lt;)?\/?(?:p|div|span)\s*(?:>|&gt;)?/gi, " ");
 }
 
 function stripHtml(value) {

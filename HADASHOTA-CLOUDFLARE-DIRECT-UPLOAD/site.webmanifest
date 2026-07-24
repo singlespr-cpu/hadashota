@@ -1,14 +1,17 @@
 {
-  "name": "חדשותא",
+  "id": "/",
+  "name": "חדשותא — חדשות בזמן אמת",
   "short_name": "חדשותא",
-  "lang": "he",
+  "description": "חדשות ועדכונים בזמן אמת מאתרי חדשות, מקורות רשמיים וערוצי Telegram ציבוריים בישראל.",
+  "lang": "he-IL",
   "dir": "rtl",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f7f8fb",
   "theme_color": "#f7f8fb",
   "icons": [
-    {"src":"/favicon-32.png","sizes":"32x32","type":"image/png"},
-    {"src":"/apple-touch-icon.png","sizes":"180x180","type":"image/png"}
+    {"src":"/favicon-32.png?v=13.0.0","sizes":"32x32","type":"image/png"},
+    {"src":"/apple-touch-icon.png?v=13.0.0","sizes":"180x180","type":"image/png"}
   ]
 }
