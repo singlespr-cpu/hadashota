@@ -667,7 +667,14 @@ function mergeClustersClient(items) {
       const candidateTime = Date.parse(candidate.latestReportAt || candidate.publishedAt);
       const timeDeltaMs = Math.abs(itemTime - candidateTime);
       if (timeDeltaMs > 8 * 60 * 60 * 1000) continue;
-      if (sameEventClient(item.title, candidate.title, timeDeltaMs)) { match = candidate; break; }
+      const directMatch = sameEventClient(item.title, candidate.title, timeDeltaMs);
+      const relatedMatch = !directMatch && normalizeClusterReports(candidate).some((report) => {
+        if (!report?.title) return false;
+        const reportTime = Date.parse(report.publishedAt || 0);
+        const reportDeltaMs = Number.isFinite(reportTime) && Number.isFinite(itemTime) ? Math.abs(itemTime - reportTime) : timeDeltaMs;
+        return reportDeltaMs <= 120 * 60 * 1000 && sameEventClient(item.title, report.title, reportDeltaMs);
+      });
+      if (directMatch || relatedMatch) { match = candidate; break; }
     }
 
     if (!match) {
@@ -781,20 +788,42 @@ function sameEventClient(a, b, timeDeltaMs = Infinity) {
     const sharedActions = [...actionsA].filter((x) => actionsB.has(x)).length;
     if (sharedEntities >= 2 && sharedActions >= 1) return true;
     if (sharedEntities >= 1 && sharedActions >= 2 && intersection >= 2) return true;
+    // Breaking regional events are often phrased very differently across Hebrew,
+    // English and Telegram. A shared specific target + the same conflict action
+    // within 90 minutes is enough to treat them as one developing event.
+    if (timeDeltaMs <= 90 * 60 * 1000 && sharedEntities >= 1 && sharedActions >= 1) {
+      const specificTargets = new Set(["כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","טהרן","ביירות","דמשק"]);
+      const sharedSpecificTarget = [...entitiesA].some((entity) => entitiesB.has(entity) && specificTargets.has(entity));
+      if (sharedSpecificTarget) return true;
+    }
   }
   return false;
 }
 
 function clientCanonicalToken(word) {
   let w = String(word || "").toLowerCase();
-  if (w.length >= 5 && /^[ובלכמהש]/.test(w)) w = w.slice(1);
+  // Strip a Hebrew one-letter prefix only when the remaining word is a known
+  // event/location stem. The old generic rule broke words such as "כווית"
+  // itself by turning it into "ווית".
+  if (w.length >= 4 && /^[ובלכמהש]/.test(w)) {
+    const candidate = w.slice(1);
+    const prefixableStems = new Set([
+      "איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה",
+      "תקיפה","מתקפה","פגיעה","פיצוץ","ירי","שיגור","מטח","טיל","רקטה","כטבמ","רחפן","יירוט","אזעקה","התרעה","בסיס"
+    ]);
+    if (prefixableStems.has(candidate)) w = candidate;
+  }
   const aliases = {
     "איראני":"איראן", "איראנית":"איראן", "איראנים":"איראן", "איראניות":"איראן",
-    "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית",
-    "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב",
-    "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ",
-    "טילים":"טיל", "רקטות":"רקטה", "תקיפות":"תקיפה", "התקפות":"תקיפה",
-    "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט"
+    "iran":"איראן", "iranian":"איראן", "iranians":"איראן",
+    "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית", "kuwait":"כווית", "kuwaiti":"כווית",
+    "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב", "american":"ארהב", "americans":"ארהב",
+    "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ", "drone":"כטבמ", "drones":"כטבמ",
+    "טילים":"טיל", "missile":"טיל", "missiles":"טיל", "רקטות":"רקטה", "rocket":"רקטה", "rockets":"רקטה",
+    "תקיפות":"תקיפה", "התקפות":"תקיפה", "מתקפה":"תקיפה", "מתקפת":"תקיפה", "attack":"תקיפה", "attacks":"תקיפה", "attacked":"תקיפה", "strike":"תקיפה", "strikes":"תקיפה",
+    "שיגורים":"שיגור", "launch":"שיגור", "launches":"שיגור", "launched":"שיגור",
+    "פיצוצים":"פיצוץ", "explosion":"פיצוץ", "explosions":"פיצוץ", "blast":"פיצוץ", "blasts":"פיצוץ",
+    "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט", "intercepted":"יירוט", "intercepts":"יירוט", "interception":"יירוט"
   };
   return aliases[w] || w;
 }
@@ -814,7 +843,7 @@ function clientEventEntities(value) {
 function clientEventActions(value) {
   const tokens = clientTitleTokens(value);
   const families = new Map([
-    ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","ירי","שיגור","שיגרה","שיגר","מטח"])],
+    ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","פיצוץ","ירי","שיגור","שיגרה","שיגר","מטח"])],
     ["missile", new Set(["טיל","רקטה","כטבמ","רחפן","מלט"])],
     ["intercept", new Set(["יירוט","יירט","הגנה","אזעקה","התרעה","התרעות"])],
     ["base", new Set(["בסיס","צבאי","כוחות","ארהב"])]]);
@@ -1038,7 +1067,7 @@ function persistQualifiedLeadSnapshot(entry) {
 }
 
 function persistDisplayedLeadSnapshot(entry) {
-  if (!entry?.item || !storyImageUrl(entry)) return;
+  if (!entry?.item) return;
   const snapshot = buildLeadSnapshot(entry);
   state.displayedLeadSnapshot = snapshot;
   try { localStorage.setItem(DISPLAYED_LEAD_SNAPSHOT_KEY, JSON.stringify(snapshot)); } catch {}
@@ -1065,7 +1094,7 @@ function buildLeadSnapshot(entry) {
 function buildFallbackLeadCandidate() {
   const now = Date.now();
   const item = state.items
-    .filter((entry) => entry && storyImageUrl({ item: entry, reports: normalizeClusterReports(entry) }))
+    .filter(Boolean)
     .sort((a, b) => Date.parse(clusterLatestAt(b) || 0) - Date.parse(clusterLatestAt(a) || 0))[0];
   if (!item) return null;
 
@@ -1140,7 +1169,7 @@ function renderLeadStory() {
   // A story earns the lead only when the THIRD distinct source arrives. The most
   // recently qualified story wins; a one/two-source item can never replace it.
   const candidates = allEntries
-    .filter((entry) => entry.ageMinutes <= 12 * 60 && entry.uniqueSources >= 3 && entry.qualificationAt && !!storyImageUrl(entry))
+    .filter((entry) => entry.ageMinutes <= 12 * 60 && entry.uniqueSources >= 3 && entry.qualificationAt)
     .sort((a, b) => {
       const qualifiedDelta = Date.parse(b.qualificationAt) - Date.parse(a.qualificationAt);
       if (qualifiedDelta) return qualifiedDelta;
@@ -1156,7 +1185,7 @@ function renderLeadStory() {
 
   // During a partial/stale refresh, never downgrade or switch the lead based on
   // incomplete data. Keep the last qualified story until a complete refresh.
-  if (state.dataDelayed && storedQualified?.entry?.item && storyImageUrl(storedQualified.entry)) {
+  if (state.dataDelayed && storedQualified?.entry?.item) {
     const storedQ = Date.parse(storedQualified.entry.qualificationAt || 0);
     const liveQ = Date.parse(deterministicLead?.qualificationAt || 0);
     if (!deterministicLead || !Number.isFinite(liveQ) || (Number.isFinite(storedQ) && liveQ <= storedQ)) {
@@ -1167,8 +1196,8 @@ function renderLeadStory() {
   // If the current payload contains no 3-source story (for example immediately
   // after first launch), keep the last qualified/displayed story. Only on a truly
   // fresh installation do we seed the box with the newest real story + image.
-  if (!winner && storedQualified?.entry?.item && storyImageUrl(storedQualified.entry)) winner = storedQualified.entry;
-  if (!winner && storedDisplay?.entry?.item && storyImageUrl(storedDisplay.entry)) winner = storedDisplay.entry;
+  if (!winner && storedQualified?.entry?.item) winner = storedQualified.entry;
+  if (!winner && storedDisplay?.entry?.item) winner = storedDisplay.entry;
   if (!winner) winner = buildFallbackLeadCandidate();
 
   if (!winner) {
@@ -1218,17 +1247,23 @@ function renderLeadStory() {
   }
 
   const imageUrl = storyImageUrl(winner);
+  el.leadStoryMedia.classList.remove("hidden");
+  el.leadStory.classList.add("has-media");
+  setOptionalLink(el.leadStoryMedia, leadHref);
+  el.leadStoryImage.onerror = null;
   if (imageUrl) {
     el.leadStoryImage.src = imageUrl;
     el.leadStoryImage.alt = leadTitle;
-    setOptionalLink(el.leadStoryMedia, leadHref);
-    el.leadStoryMedia.classList.remove("hidden");
     el.leadStoryMedia.classList.remove("image-unavailable");
-    el.leadStory.classList.add("has-media");
     el.leadStoryImage.onerror = () => {
       el.leadStoryImage.removeAttribute("src");
+      el.leadStoryImage.alt = "";
       el.leadStoryMedia.classList.add("image-unavailable");
     };
+  } else {
+    el.leadStoryImage.removeAttribute("src");
+    el.leadStoryImage.alt = "";
+    el.leadStoryMedia.classList.add("image-unavailable");
   }
 
   el.leadStorySources.innerHTML = unique.map((source) => source.url

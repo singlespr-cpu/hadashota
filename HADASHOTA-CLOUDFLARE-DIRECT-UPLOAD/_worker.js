@@ -886,7 +886,14 @@ function clusterItems(items) {
       const clusterTime = Date.parse(cluster.latestReportAt || cluster.publishedAt);
       const timeDeltaMs = Math.abs(itemTime - clusterTime);
       if (timeDeltaMs > 8 * 60 * 60 * 1000) continue;
-      if (sameEvent(item.title, cluster.title, timeDeltaMs)) {
+      const directMatch = sameEvent(item.title, cluster.title, timeDeltaMs);
+      const relatedMatch = !directMatch && (cluster.related || []).some((report) => {
+        if (!report?.title) return false;
+        const reportTime = Date.parse(report.publishedAt || 0);
+        const reportDeltaMs = Number.isFinite(reportTime) && Number.isFinite(itemTime) ? Math.abs(itemTime - reportTime) : timeDeltaMs;
+        return reportDeltaMs <= 120 * 60 * 1000 && sameEvent(item.title, report.title, reportDeltaMs);
+      });
+      if (directMatch || relatedMatch) {
         match = cluster;
         break;
       }
@@ -965,20 +972,39 @@ function sameEvent(a, b, timeDeltaMs = Infinity) {
     const sharedActions = [...actionsA].filter((x) => actionsB.has(x)).length;
     if (sharedEntities >= 2 && sharedActions >= 1) return true;
     if (sharedEntities >= 1 && sharedActions >= 2 && intersection >= 2) return true;
+    if (timeDeltaMs <= 90 * 60 * 1000 && sharedEntities >= 1 && sharedActions >= 1) {
+      const specificTargets = new Set(["כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","טהרן","ביירות","דמשק"]);
+      const sharedSpecificTarget = [...entitiesA].some((entity) => entitiesB.has(entity) && specificTargets.has(entity));
+      if (sharedSpecificTarget) return true;
+    }
   }
   return false;
 }
 
 function canonicalEventToken(word) {
   let w = String(word || "").toLowerCase();
-  if (w.length >= 5 && /^[ובלכמהש]/.test(w)) w = w.slice(1);
+  // Strip a Hebrew one-letter prefix only when the remaining word is a known
+  // event/location stem. The old generic rule broke words such as "כווית"
+  // itself by turning it into "ווית".
+  if (w.length >= 4 && /^[ובלכמהש]/.test(w)) {
+    const candidate = w.slice(1);
+    const prefixableStems = new Set([
+      "איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה",
+      "תקיפה","מתקפה","פגיעה","פיצוץ","ירי","שיגור","מטח","טיל","רקטה","כטבמ","רחפן","יירוט","אזעקה","התרעה","בסיס"
+    ]);
+    if (prefixableStems.has(candidate)) w = candidate;
+  }
   const aliases = {
     "איראני":"איראן", "איראנית":"איראן", "איראנים":"איראן", "איראניות":"איראן",
-    "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית",
-    "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב",
-    "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ",
-    "טילים":"טיל", "רקטות":"רקטה", "תקיפות":"תקיפה", "התקפות":"תקיפה",
-    "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט"
+    "iran":"איראן", "iranian":"איראן", "iranians":"איראן",
+    "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית", "kuwait":"כווית", "kuwaiti":"כווית",
+    "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב", "american":"ארהב", "americans":"ארהב",
+    "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ", "drone":"כטבמ", "drones":"כטבמ",
+    "טילים":"טיל", "missile":"טיל", "missiles":"טיל", "רקטות":"רקטה", "rocket":"רקטה", "rockets":"רקטה",
+    "תקיפות":"תקיפה", "התקפות":"תקיפה", "מתקפה":"תקיפה", "מתקפת":"תקיפה", "attack":"תקיפה", "attacks":"תקיפה", "attacked":"תקיפה", "strike":"תקיפה", "strikes":"תקיפה",
+    "שיגורים":"שיגור", "launch":"שיגור", "launches":"שיגור", "launched":"שיגור",
+    "פיצוצים":"פיצוץ", "explosion":"פיצוץ", "explosions":"פיצוץ", "blast":"פיצוץ", "blasts":"פיצוץ",
+    "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט", "intercepted":"יירוט", "intercepts":"יירוט", "interception":"יירוט"
   };
   return aliases[w] || w;
 }
@@ -992,7 +1018,7 @@ function eventEntities(value) {
 function eventActions(value) {
   const tokens = titleTokens(value);
   const families = new Map([
-    ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","ירי","שיגור","שיגרה","שיגר","מטח"])],
+    ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","פיצוץ","ירי","שיגור","שיגרה","שיגר","מטח"])],
     ["missile", new Set(["טיל","רקטה","כטבמ","רחפן","מלט"])],
     ["intercept", new Set(["יירוט","יירט","הגנה","אזעקה","התרעה","התרעות"])],
     ["base", new Set(["בסיס","צבאי","כוחות","ארהב"])]]);
