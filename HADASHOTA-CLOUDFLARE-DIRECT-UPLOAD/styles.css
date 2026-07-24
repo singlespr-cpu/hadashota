@@ -1975,3 +1975,84 @@ html[data-theme="dark"] .lead-story-copy > p { color: #a2acb9 !important; }
   .lead-story-meta { font-size: 11.5px !important; }
 }
 \n\n/* =========================================================\n   HADASHOTA V13 — launch polish\n   ========================================================= */\n:root {\n  --v13-accent: #e6372f;\n  --v13-accent-soft: rgba(230,55,47,.10);\n}\n\n/* Stronger editorial hierarchy without making the interface heavy. */\n.lead-story {\n  padding: 20px 22px 22px !important;\n  border-radius: 24px !important;\n}\n.lead-story-topline {\n  margin-bottom: 14px !important;\n}\n.lead-story-label {\n  font-size: 16.5px !important;\n  font-weight: 900 !important;\n  color: var(--v13-accent) !important;\n}\n.lead-story-label i {\n  width: 10px !important;\n  height: 10px !important;\n}\n.lead-story-signal {\n  font-size: 12.5px !important;\n  font-weight: 800 !important;\n  padding: 7px 12px !important;\n}\n.lead-story h2,\n.lead-story h2 a {\n  font-size: clamp(36px, 3.45vw, 55px) !important;\n  line-height: 1.1 !important;\n  letter-spacing: -.045em !important;\n}\n.lead-story-copy > p {\n  font-size: 16px !important;\n  line-height: 1.68 !important;\n  margin: 15px 0 14px !important;\n}\n.lead-story-meta {\n  font-size: 13.5px !important;\n}\n\n/* Red/editorial micro-headings were too timid on large screens. */\n.hero-news-grid .flash-deck-label {\n  min-height: 60px !important;\n  font-size: 15px !important;\n  font-weight: 900 !important;\n}\n.hero-news-grid .flash-deck-label b {\n  font-size: 17px !important;\n}\n.breaking-label {\n  font-size: 13.5px !important;\n  font-weight: 900 !important;\n}\n.trending-label {\n  font-size: 13.5px !important;\n  font-weight: 900 !important;\n}\n.section-kicker {\n  font-size: 13px !important;\n  font-weight: 800 !important;\n}\n\n/* Slightly richer story cards, still restrained. */\n.news-card {\n  border-radius: 18px !important;\n  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease !important;\n}\n.news-card:hover {\n  border-color: #dce2e9 !important;\n}\n.news-title, .news-title a {\n  text-wrap: pretty;\n}\n.lead-story h2, .lead-story h2 a {\n  text-wrap: balance;\n}\n\n/* Delayed-data state: clearer, calmer and more trustworthy. */\n.data-status {\n  min-height: 42px !important;\n  padding: 10px 14px !important;\n  border-radius: 14px !important;\n  font-size: 13px !important;\n  line-height: 1.45 !important;\n}\n\n/* Notification state is visible anywhere the user can control it. */\n.notifications-button.active,\n#quickNotifications.active {\n  color: #087a4e !important;\n}\n#quickNotifications.active b {\n  color: #087a4e !important;\n}\n\n/* Keyboard polish for launch. */\nbutton:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {\n  outline: 3px solid rgba(37,92,255,.20) !important;\n  outline-offset: 2px !important;\n}\n\n/* Keep the hero dramatic but comfortable on intermediate widths. */\n@media (max-width: 1180px) {\n  .lead-story h2, .lead-story h2 a {\n    font-size: clamp(30px, 3.3vw, 43px) !important;\n  }\n  .lead-story-copy > p { font-size: 14.5px !important; }\n}\n@media (max-width: 900px) {\n  .lead-story { padding: 17px !important; }\n  .lead-story-label { font-size: 14.5px !important; }\n  .lead-story h2, .lead-story h2 a { font-size: 29px !important; line-height: 1.15 !important; }\n}\n@media (max-width: 700px) {\n  .lead-story { border-radius: 20px !important; }\n  .lead-story-topline { margin-bottom: 10px !important; }\n  .lead-story-label { font-size: 13.5px !important; }\n  .lead-story-signal { font-size: 11px !important; padding: 5px 9px !important; }\n  .lead-story h2, .lead-story h2 a { font-size: 23px !important; line-height: 1.18 !important; }\n  .hero-news-grid .flash-deck-label b { font-size: 15px !important; }\n  .section-kicker { font-size: 12px !important; }\n}\n\nhtml[data-theme="dark"] .data-status {\n  background: #282313 !important;\n  border-color: #5a4b20 !important;\n  color: #e5d49a !important;\n}\nhtml[data-theme="dark"] .notifications-button.active,\nhtml[data-theme="dark"] #quickNotifications.active {\n  color: #72ddb3 !important;\n}\n
+
+/* =========================================================
+   HADASHOTA V14 — final visual tightening
+   ========================================================= */
+/* Main headline was made too aggressive in V13. Keep it strong, but calmer. */
+.lead-story {
+  padding: 18px 20px 20px !important;
+}
+.lead-story-body {
+  grid-template-columns: minmax(200px, 24%) minmax(0, 1fr) auto !important;
+  gap: 16px !important;
+  align-items: center !important;
+}
+.lead-story h2,
+.lead-story h2 a {
+  font-size: clamp(28px, 2.7vw, 43px) !important;
+  line-height: 1.14 !important;
+  letter-spacing: -.038em !important;
+  text-wrap: balance;
+}
+.lead-story-copy > p {
+  font-size: 14.5px !important;
+  line-height: 1.62 !important;
+  margin: 11px 0 11px !important;
+}
+.lead-story-label {
+  font-size: 14.5px !important;
+}
+.lead-story-signal {
+  font-size: 11.5px !important;
+}
+
+/* The left flash column should be tighter, not stretched with huge empty gaps. */
+.hero-news-grid {
+  align-items: start !important;
+}
+.hero-news-grid .flash-deck {
+  min-height: 0 !important;
+  height: auto !important;
+}
+.hero-news-grid .flash-deck-items {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 0 0 auto !important;
+}
+.hero-news-grid .flash-item {
+  min-height: 0 !important;
+  padding: 12px 14px !important;
+  gap: 3px !important;
+  justify-content: flex-start !important;
+}
+.hero-news-grid .flash-item strong {
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+  -webkit-line-clamp: 2 !important;
+}
+.hero-news-grid .flash-item span {
+  font-size: 11.5px !important;
+}
+
+@media (max-width: 1180px) {
+  .lead-story h2,
+  .lead-story h2 a {
+    font-size: clamp(26px, 3vw, 36px) !important;
+  }
+}
+@media (max-width: 900px) {
+  .lead-story-body {
+    grid-template-columns: 1fr !important;
+  }
+  .lead-story h2,
+  .lead-story h2 a {
+    font-size: 27px !important;
+  }
+}
+@media (max-width: 700px) {
+  .lead-story h2,
+  .lead-story h2 a {
+    font-size: 22px !important;
+  }
+}
