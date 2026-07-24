@@ -164,13 +164,6 @@ async function handleUtilities(request, ctx) {
   const requestUrl = new URL(request.url);
   const cityKey = CITIES[requestUrl.searchParams.get("city")] ? requestUrl.searchParams.get("city") : "telaviv";
   const city = CITIES[cityKey];
-  const cacheUrl = new URL(request.url);
-  cacheUrl.pathname = "/api/utilities";
-  cacheUrl.search = `?city=${cityKey}`;
-  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
-  const cache = caches.default;
-  const cached = await cache.match(cacheKey);
-  if (cached) return cors(cached);
 
   const weatherUrl = new URL("https://api.open-meteo.com/v1/forecast");
   weatherUrl.searchParams.set("latitude", String(city.latitude));
@@ -189,25 +182,49 @@ async function handleUtilities(request, ctx) {
   shabbatUrl.searchParams.set("M", "on");
   shabbatUrl.searchParams.set("leyning", "off");
 
-  const [weatherResult, shabbatResult] = await Promise.allSettled([
+  // Market quotes are requested fresh on every utilities refresh. Yahoo Finance is
+  // the primary global market source; Bank of Israel remains a safety fallback.
+  const usdMarketUrl = "https://query1.finance.yahoo.com/v8/finance/chart/USDILS=X?interval=1m&range=1d";
+  const eurMarketUrl = "https://query1.finance.yahoo.com/v8/finance/chart/EURILS=X?interval=1m&range=1d";
+  const exchangeRatesUrl = "https://boi.org.il/PublicApi/GetExchangeRates?asXML=true";
+
+  const [weatherResult, shabbatResult, usdMarketResult, eurMarketResult, boiResult] = await Promise.allSettled([
     fetchJsonWithTimeout(weatherUrl.toString(), 4500),
-    fetchJsonWithTimeout(shabbatUrl.toString(), 4500)
+    fetchJsonWithTimeout(shabbatUrl.toString(), 4500),
+    fetchJsonFreshWithTimeout(usdMarketUrl, 4500),
+    fetchJsonFreshWithTimeout(eurMarketUrl, 4500),
+    fetchTextWithTimeout(exchangeRatesUrl, 4500)
   ]);
 
   const weather = weatherResult.status === "fulfilled" ? normalizeWeather(weatherResult.value) : null;
   const shabbat = shabbatResult.status === "fulfilled" ? normalizeShabbat(shabbatResult.value) : null;
+  const usdMarket = usdMarketResult.status === "fulfilled" ? normalizeYahooFx(usdMarketResult.value) : null;
+  const eurMarket = eurMarketResult.status === "fulfilled" ? normalizeYahooFx(eurMarketResult.value) : null;
+  const boiRates = boiResult.status === "fulfilled" ? normalizeBoiExchangeRates(boiResult.value) : null;
 
-  const response = json({
-    ok: !!(weather || shabbat),
+  let exchangeRates = null;
+  if (Number.isFinite(usdMarket?.rate) || Number.isFinite(eurMarket?.rate)) {
+    exchangeRates = {
+      USD: Number.isFinite(usdMarket?.rate) ? usdMarket.rate : boiRates?.USD ?? null,
+      EUR: Number.isFinite(eurMarket?.rate) ? eurMarket.rate : boiRates?.EUR ?? null,
+      date: usdMarket?.timestamp || eurMarket?.timestamp || new Date().toISOString(),
+      source: "Yahoo Finance",
+      live: true
+    };
+  } else if (boiRates) {
+    exchangeRates = { ...boiRates, live: false };
+  }
+
+  return json({
+    ok: !!(weather || shabbat || exchangeRates),
     city: { key: cityKey, name: city.name },
     generatedAt: new Date().toISOString(),
     weather,
-    shabbat
+    shabbat,
+    exchangeRates
   }, 200, {
-    "Cache-Control": "public, max-age=120, s-maxage=600, stale-while-revalidate=1800"
+    "Cache-Control": "no-store, max-age=0"
   });
-  ctx.waitUntil(cache.put(cacheKey, response.clone()));
-  return response;
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs) {
@@ -225,6 +242,74 @@ async function fetchJsonWithTimeout(url, timeoutMs) {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchJsonFreshWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/1.0; +news-aggregator)",
+        "Accept": "application/json",
+        "Cache-Control": "no-cache"
+      },
+      cf: { cacheEverything: false, cacheTtl: 0 }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeYahooFx(data) {
+  const result = data?.chart?.result?.[0];
+  if (!result) return null;
+  const meta = result.meta || {};
+  let rate = Number(meta.regularMarketPrice);
+
+  if (!Number.isFinite(rate)) {
+    const closes = result.indicators?.quote?.[0]?.close;
+    if (Array.isArray(closes)) {
+      for (let i = closes.length - 1; i >= 0; i -= 1) {
+        const value = Number(closes[i]);
+        if (Number.isFinite(value)) {
+          rate = value;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!Number.isFinite(rate)) return null;
+  const marketTime = Number(meta.regularMarketTime);
+  return {
+    rate,
+    timestamp: Number.isFinite(marketTime) ? new Date(marketTime * 1000).toISOString() : new Date().toISOString()
+  };
+}
+
+async function fetchTextWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/1.0; +news-aggregator)",
+        "Accept": "application/xml,text/xml,text/plain;q=0.9,*/*;q=0.8"
+      },
+      cf: { cacheEverything: true, cacheTtl: 300 }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.text();
   } finally {
     clearTimeout(timeout);
   }
@@ -253,6 +338,33 @@ function normalizeShabbat(data) {
     havdalah: havdalah?.date || null,
     parasha: cleanText(parasha?.hebrew || parasha?.title || "")
   };
+}
+
+function normalizeBoiExchangeRates(xml) {
+  const source = String(xml || "");
+  if (!source) return null;
+
+  const readRate = (code) => {
+    const blocks = source.match(/<(?:ExchangeRate|ExchangeRateDTO|ExchangeRateResponseDTO|ExchangeRateResponseCollectioDTO)[^>]*>[\s\S]*?<\/(?:ExchangeRate|ExchangeRateDTO|ExchangeRateResponseDTO|ExchangeRateResponseCollectioDTO)>/gi) || [source];
+    for (const block of blocks) {
+      if (!new RegExp(`<Key>\\s*${code}\\s*</Key>`, "i").test(block)) continue;
+      const match = block.match(/<CurrentExchangeRate>\s*([0-9.]+)\s*<\/CurrentExchangeRate>/i);
+      const rate = match ? Number(match[1]) : NaN;
+      if (Number.isFinite(rate)) return rate;
+    }
+
+    const aroundKey = source.match(new RegExp(`<Key>\\s*${code}\\s*</Key>[\\s\\S]{0,1200}?<CurrentExchangeRate>\\s*([0-9.]+)`, "i"));
+    const beforeKey = source.match(new RegExp(`<CurrentExchangeRate>\\s*([0-9.]+)\\s*<\\/CurrentExchangeRate>[\\s\\S]{0,1200}?<Key>\\s*${code}\\s*</Key>`, "i"));
+    const value = Number(aroundKey?.[1] || beforeKey?.[1]);
+    return Number.isFinite(value) ? value : null;
+  };
+
+  const USD = readRate("USD");
+  const EUR = readRate("EUR");
+  if (!Number.isFinite(USD) && !Number.isFinite(EUR)) return null;
+
+  const dateMatch = source.match(/<(?:LastUpdate|UpdateDate|Date)>\s*([^<]+)\s*<\/(?:LastUpdate|UpdateDate|Date)>/i);
+  return { USD, EUR, date: dateMatch?.[1]?.trim() || null, source: "Bank of Israel" };
 }
 
 function numberOrNull(value) {
@@ -369,7 +481,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "13.0.0",
+      "X-Hadashota-Version": "15.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -397,7 +509,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "13.0.0"
+        "X-Hadashota-Version": "15.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.

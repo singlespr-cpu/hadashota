@@ -78,6 +78,9 @@ const el = {
   shabbatMobileOut: document.querySelector("#shabbatMobileOut"),
   shabbatCity: document.querySelector("#shabbatCity"),
   shabbatParasha: document.querySelector("#shabbatParasha"),
+  usdRate: document.querySelector("#usdRate"),
+  eurRate: document.querySelector("#eurRate"),
+  currencyMeta: document.querySelector("#currencyMeta"),
   trendingStrip: document.querySelector("#trendingStrip"),
   trendingTopics: document.querySelector("#trendingTopics"),
   refreshCountdown: document.querySelector("#refreshCountdown"),
@@ -125,6 +128,7 @@ function init() {
   registerServiceWorker();
   restoreLocalLastGood();
   loadUtilities();
+  window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
   loadNews();
   restartAutoRefresh();
 }
@@ -284,6 +288,7 @@ function bindEvents() {
   });
 
   document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) loadUtilities();
     if (state.autoRefresh) restartAutoRefresh();
     if (!document.hidden && state.dataDelayed) loadNews(false, true);
   });
@@ -862,7 +867,9 @@ function renderLeadStory() {
     || (item.url ? item : null);
   const unique = sources.slice(0, 5);
 
-  el.leadStoryTitle.textContent = cleanDisplayTitle(item.title);
+  const leadTitle = cleanDisplayTitle(item.title);
+  el.leadStoryTitle.textContent = leadTitle;
+  el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
   el.leadStoryPreview.textContent = item.preview && item.preview !== item.title ? cleanDisplayText(item.preview) : "הידיעה מתקדמת במהירות ומופיעה בכמה מקורות בזמן קצר.";
   el.leadStorySource.textContent = item.sourceName;
   el.leadStoryAge.textContent = formatAge(winner.latestAt);
@@ -870,8 +877,9 @@ function renderLeadStory() {
   el.leadStorySignal.textContent = winner.ageMinutes <= 20 ? "מתעדכן עכשיו" : winner.uniqueSources >= 6 ? "חם מאוד" : "בכמה מקורות במקביל";
 
   setOptionalLink(el.leadStoryLink, sourceTarget?.url);
-  if (sourceTarget?.url) {
-    el.leadStoryCta.href = sourceTarget.url;
+  const leadHref = safeHttpHref(sourceTarget?.url);
+  if (leadHref) {
+    el.leadStoryCta.href = leadHref;
     el.leadStoryCta.classList.remove("hidden");
   } else {
     el.leadStoryCta.removeAttribute("href");
@@ -879,13 +887,18 @@ function renderLeadStory() {
   }
   if (item.imageUrl) {
     el.leadStoryImage.src = item.imageUrl;
-    el.leadStoryImage.alt = cleanDisplayTitle(item.title);
-    setOptionalLink(el.leadStoryMedia, sourceTarget?.url);
+    el.leadStoryImage.alt = leadTitle;
+    setOptionalLink(el.leadStoryMedia, leadHref);
     el.leadStoryMedia.classList.remove("hidden");
-    el.leadStoryImage.onerror = () => el.leadStoryMedia.classList.add("hidden");
+    el.leadStory.classList.add("has-media");
+    el.leadStoryImage.onerror = () => {
+      el.leadStoryMedia.classList.add("hidden");
+      el.leadStory.classList.remove("has-media");
+    };
   } else {
     el.leadStoryImage.removeAttribute("src");
     el.leadStoryMedia.classList.add("hidden");
+    el.leadStory.classList.remove("has-media");
   }
   el.leadStorySources.innerHTML = unique.map((source) => source.url
     ? `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanDisplayText(source.sourceName))}</a>`
@@ -956,10 +969,21 @@ function openStorySource(url) {
   }
 }
 
+function safeHttpHref(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(value, window.location.href);
+    return /^https?:$/.test(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 function setOptionalLink(anchor, url) {
   if (!anchor) return;
-  if (url) {
-    anchor.href = url;
+  const href = safeHttpHref(url);
+  if (href) {
+    anchor.href = href;
     anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
     anchor.classList.remove("no-link");
@@ -967,6 +991,7 @@ function setOptionalLink(anchor, url) {
   } else {
     anchor.removeAttribute("href");
     anchor.removeAttribute("target");
+    anchor.removeAttribute("rel");
     anchor.classList.add("no-link");
     anchor.setAttribute("aria-disabled", "true");
   }
@@ -1098,7 +1123,7 @@ async function notifyHeadlineChange(entry) {
     body,
     tag: `hadashota-headline-${leadFingerprint(entry)}`,
     renotify: true,
-    data: { url: item.url },
+    data: { url: safeHttpHref(item.url) || "/" },
     icon: "/favicon-32.png",
     badge: "/favicon-32.png"
   };
@@ -1283,6 +1308,9 @@ async function loadUtilities() {
     if (el.shabbatOut) el.shabbatOut.textContent = "—";
     if (el.shabbatMobileIn) el.shabbatMobileIn.textContent = "—";
     if (el.shabbatMobileOut) el.shabbatMobileOut.textContent = "—";
+    if (el.usdRate) el.usdRate.textContent = "—";
+    if (el.eurRate) el.eurRate.textContent = "—";
+    if (el.currencyMeta) el.currencyMeta.textContent = "לא זמין כרגע";
   }
 }
 
@@ -1312,6 +1340,43 @@ function renderUtilities(data) {
     if (el.shabbatMobileOut) el.shabbatMobileOut.textContent = havdalah;
     if (el.shabbatParasha) el.shabbatParasha.textContent = shabbat.parasha ? `· ${shabbat.parasha}` : "";
   }
+
+  const exchangeRates = data?.exchangeRates;
+  if (exchangeRates) {
+    if (el.usdRate) el.usdRate.textContent = formatExchangeRate(exchangeRates.USD);
+    if (el.eurRate) el.eurRate.textContent = formatExchangeRate(exchangeRates.EUR);
+    if (el.currencyMeta) {
+      if (exchangeRates.live) {
+        const time = formatExchangeRateTime(exchangeRates.date);
+        el.currencyMeta.textContent = time ? `שוק עולמי · ${time}` : "שוק עולמי · אונליין";
+      } else {
+        const date = formatExchangeRateDate(exchangeRates.date);
+        el.currencyMeta.textContent = date ? `בנק ישראל · ${date}` : "בנק ישראל · גיבוי";
+      }
+    }
+  }
+}
+
+function formatExchangeRate(value) {
+  const rate = Number(value);
+  return Number.isFinite(rate) ? `₪${rate.toFixed(4)}` : "—";
+}
+
+function formatExchangeRateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Jerusalem" }).format(date);
+}
+
+function formatExchangeRateDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const match = String(value).match(/(\d{4})-(\d{2})-(\d{2})/);
+    return match ? `${match[3]}/${match[2]}` : "";
+  }
+  return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit" }).format(date);
 }
 
 function formatUtilityTime(iso) {
