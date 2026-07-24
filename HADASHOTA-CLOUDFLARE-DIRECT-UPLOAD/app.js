@@ -1012,7 +1012,8 @@ function buildLeadSnapshot(entry) {
       latestAt: entry.latestAt || entry.item?.latestReportAt || entry.item?.publishedAt,
       score: Number(entry.score) || 0,
       hasOfficial: !!entry.hasOfficial,
-      spreadMinutes: Number(entry.spreadMinutes) || 0
+      spreadMinutes: Number(entry.spreadMinutes) || 0,
+      qualificationAt: entry.qualificationAt || null
     }
   };
 }
@@ -1044,6 +1045,14 @@ function buildFallbackLeadCandidate() {
   };
 }
 
+function leadQualificationAt(reports) {
+  const times = (Array.isArray(reports) ? reports : [])
+    .map((report) => Date.parse(report?.publishedAt || 0))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  return times.length >= 3 ? new Date(times[2]).toISOString() : null;
+}
+
 function renderLeadStory() {
   const now = Date.now();
   const corroborationWindowMs = 90 * 60 * 1000;
@@ -1058,11 +1067,14 @@ function renderLeadStory() {
       const delta = latestMs - reportMs;
       return delta >= -5 * 60 * 1000 && delta <= corroborationWindowMs;
     });
+    // normalizeClusterReports() is deduplicated by publisher/sourceId, therefore
+    // this is a count of DISTINCT sources, not a count of posts.
     const uniqueSources = recentReports.length;
     const hasOfficial = recentReports.some((report) => report.official);
     const hasVerified = recentReports.some((report) => report.verified);
     const reportTimes = recentReports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
     const spreadMinutes = reportTimes.length > 1 ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000)) : 0;
+    const qualificationAt = uniqueSources >= 3 ? leadQualificationAt(recentReports) : null;
 
     let freshness = 0;
     if (ageMinutes <= 15) freshness = 10;
@@ -1077,55 +1089,44 @@ function renderLeadStory() {
     const velocity = spreadMinutes <= 10 && uniqueSources >= 4 ? 1.2 : spreadMinutes <= 20 && uniqueSources >= 3 ? 0.55 : 0;
     const oldPenalty = ageMinutes > 75 ? (ageMinutes - 75) / 11 : 0;
     const score = freshness + sourceScore + authority + activity + velocity - oldPenalty;
-    return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, score, hasOfficial, spreadMinutes };
+    return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, qualificationAt, score, hasOfficial, spreadMinutes };
   });
 
-  // A NEW lead can replace the visible one only when at least three distinct
-  // sources corroborate it in the same time window and it has a usable image.
+  // Product rule: all devices must resolve the same lead from the same data.
+  // A story earns the lead only when the THIRD distinct source arrives. The most
+  // recently qualified story wins; a one/two-source item can never replace it.
   const candidates = allEntries
-    .filter((entry) => entry.ageMinutes <= 240 && entry.uniqueSources >= 3 && !!storyImageUrl(entry))
-    .sort((a, b) => b.score - a.score || Date.parse(b.latestAt) - Date.parse(a.latestAt));
+    .filter((entry) => entry.ageMinutes <= 12 * 60 && entry.uniqueSources >= 3 && entry.qualificationAt && !!storyImageUrl(entry))
+    .sort((a, b) => {
+      const qualifiedDelta = Date.parse(b.qualificationAt) - Date.parse(a.qualificationAt);
+      if (qualifiedDelta) return qualifiedDelta;
+      const latestDelta = Date.parse(b.latestAt) - Date.parse(a.latestAt);
+      if (latestDelta) return latestDelta;
+      return b.score - a.score;
+    });
 
+  const deterministicLead = candidates[0] || null;
+  const storedQualified = state.lastQualifiedLead || readStoredLeadSnapshot();
   const storedDisplay = state.displayedLeadSnapshot || readDisplayedLeadSnapshot();
-  let current = null;
-  if (state.displayedLeadFingerprint) {
-    current = allEntries.find((entry) => leadFingerprint(entry) === state.displayedLeadFingerprint) || null;
-  }
-  if (!current && storedDisplay?.entry?.item && storyImageUrl(storedDisplay.entry)) current = storedDisplay.entry;
+  let winner = deterministicLead;
 
-  // On a first visit there may not yet be a 3-source cluster. Seed the box with
-  // the newest real story that has an image, then keep it until a qualified
-  // 3-source challenger earns the right to replace it.
-  if (!current) current = buildFallbackLeadCandidate();
-
-  let winner = current;
-  const challenger = candidates[0] || null;
-
-  if (!winner && challenger) winner = challenger;
-  else if (winner && challenger) {
-    const currentKey = leadFingerprint(winner);
-    const challengerKey = leadFingerprint(challenger);
-    if (challengerKey === currentKey) {
-      // Use the fresh in-memory version so source count, time and preview continue updating.
-      winner = challenger;
-    } else {
-      const currentMs = Date.parse(winner.latestAt || winner.item?.latestReportAt || winner.item?.publishedAt || 0);
-      const challengerMs = Date.parse(challenger.latestAt || challenger.item?.latestReportAt || challenger.item?.publishedAt || 0);
-      // Exact product rule: the visible headline stays put. A different story may
-      // replace it only after 3+ distinct sources corroborate that NEWER event.
-      if (Number(challenger.uniqueSources) >= 3 && Number.isFinite(challengerMs)
-          && (!Number.isFinite(currentMs) || challengerMs > currentMs)) {
-        winner = challenger;
-      }
+  // During a partial/stale refresh, never downgrade or switch the lead based on
+  // incomplete data. Keep the last qualified story until a complete refresh.
+  if (state.dataDelayed && storedQualified?.entry?.item && storyImageUrl(storedQualified.entry)) {
+    const storedQ = Date.parse(storedQualified.entry.qualificationAt || 0);
+    const liveQ = Date.parse(deterministicLead?.qualificationAt || 0);
+    if (!deterministicLead || !Number.isFinite(liveQ) || (Number.isFinite(storedQ) && liveQ <= storedQ)) {
+      winner = storedQualified.entry;
     }
   }
 
-  // Absolute safety net: the lead module remains visible. In practice the feed
-  // should always provide a story; this branch preserves the previous snapshot.
-  if (!winner) {
-    const saved = state.lastQualifiedLead || readStoredLeadSnapshot();
-    if (saved?.entry?.item && storyImageUrl(saved.entry)) winner = saved.entry;
-  }
+  // If the current payload contains no 3-source story (for example immediately
+  // after first launch), keep the last qualified/displayed story. Only on a truly
+  // fresh installation do we seed the box with the newest real story + image.
+  if (!winner && storedQualified?.entry?.item && storyImageUrl(storedQualified.entry)) winner = storedQualified.entry;
+  if (!winner && storedDisplay?.entry?.item && storyImageUrl(storedDisplay.entry)) winner = storedDisplay.entry;
+  if (!winner) winner = buildFallbackLeadCandidate();
+
   if (!winner) {
     el.leadStory.classList.remove("hidden");
     return;
@@ -1154,11 +1155,8 @@ function renderLeadStory() {
   el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName;
   el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
   el.leadStoryCount.textContent = `${Math.max(1, Number(winner.uniqueSources) || unique.length || 1)} מקורות מדווחים`;
-  const spreadLabel = Number(winner.spreadMinutes) <= 1 ? "כמעט במקביל" : `תוך ${Number(winner.spreadMinutes) || 0} דק׳`;
   if (el.leadStoryLabelText) el.leadStoryLabelText.textContent = "הסיפור המרכזי עכשיו";
   if (el.leadStoryLiveBadge) el.leadStoryLiveBadge.classList.remove("hidden");
-  // The qualification logic stays internal. Keep the lead card editorially clean:
-  // source names remain visible below the story, without status/explanation text.
   if (el.leadStorySignal) {
     el.leadStorySignal.textContent = "";
     el.leadStorySignal.removeAttribute("title");
@@ -1181,9 +1179,9 @@ function renderLeadStory() {
     el.leadStoryImage.alt = leadTitle;
     setOptionalLink(el.leadStoryMedia, leadHref);
     el.leadStoryMedia.classList.remove("hidden");
+    el.leadStoryMedia.classList.remove("image-unavailable");
     el.leadStory.classList.add("has-media");
     el.leadStoryImage.onerror = () => {
-      // Keep the lead box itself visible even if an external image host fails.
       el.leadStoryImage.removeAttribute("src");
       el.leadStoryMedia.classList.add("image-unavailable");
     };
