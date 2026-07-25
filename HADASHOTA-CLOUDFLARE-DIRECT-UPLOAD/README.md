@@ -168,3 +168,12 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Removed the generic “Israel news” image fallback for uncategorized stories.
 - Raised media relevance thresholds and changed the media cache namespace so previously cached bad matches are not reused.
 - When no semantically credible licensed image exists, the site now prefers its contextual fallback over a misleading photograph.
+
+## V60 — image coverage + source link repair
+- Added subject-rescue image queries for OpenAI/ChatGPT and motorcycle/scooter stories while keeping hard semantic mismatch protection.
+- Commons searches may now use vector files for technology-brand imagery such as OpenAI logos.
+- Lowered relevance thresholds only for strict named/subject concepts; generic stories remain conservative.
+- Media cache namespace bumped so previous no-image/bad-image decisions are not reused.
+- Added server-side /go resolver for ynet and Walla links.
+- ynet/Walla links are validated only when clicked; valid redirected URLs open normally.
+- If a publisher URL is genuinely dead/404, the user is sent to that publisher's own search page with the exact headline instead of a 404 page.

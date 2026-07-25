@@ -147,6 +147,11 @@ export default {
       });
     }
 
+    if (url.pathname === "/go") {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
+      return handleOutboundRedirect(url);
+    }
+
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
     if (url.pathname === "/" || url.pathname === "/index.html") return serveHtmlAsset(request, env, url.origin, "/index.html");
@@ -289,6 +294,21 @@ function mediaQueryVariants(raw, category = "other") {
     q = cleanText(q).slice(0, 100);
     if (q && !out.some((row) => row.q === q)) out.push({ q, specificity });
   };
+
+  // High-value subject rescue queries. These remain semantically strict, but
+  // avoid ending with no image merely because a long event query was too specific.
+  const concepts = mediaConcepts(text);
+  if (concepts.has("openai")) {
+    push("OpenAI logo", 4);
+    push("ChatGPT OpenAI", 4);
+  }
+  if (concepts.has("motorcycle")) {
+    push("motorcycle rider", 4);
+    push("motorcycle", 3);
+  }
+  if (concepts.has("scooter")) {
+    push("motor scooter", 4);
+  }
   // Exact structured pieces first: person -> entity/action pair -> strongest headline.
   pieces.slice(0, 4).forEach((part, idx) => {
     const translated = translate(part);
@@ -414,12 +434,14 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("generator", "search");
   api.searchParams.set("gsrnamespace", "6");
   api.searchParams.set("gsrlimit", "14");
-  api.searchParams.set("gsrsearch", `${query} filetype:bitmap`);
+  const queryConcepts = mediaConcepts(query);
+  const needsVector = queryConcepts.has("openai") || queryConcepts.has("anthropic") || queryConcepts.has("gemini") || queryConcepts.has("microsoft") || queryConcepts.has("apple");
+  api.searchParams.set("gsrsearch", needsVector ? query : `${query} filetype:bitmap`);
   api.searchParams.set("prop", "imageinfo");
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/59 (+strict semantic media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/60 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -439,7 +461,11 @@ async function findCommonsMedia(query, specificity = 1) {
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
     // Specific queries must actually match. A wrong photo is worse than a branded fallback.
-    const threshold = specificity >= 3 ? 42 : specificity >= 2 ? 36 : specificity >= 1 ? 30 : 70;
+    const concepts = mediaConcepts(query);
+    const subjectStrict = concepts.has("openai") || concepts.has("motorcycle") || concepts.has("scooter");
+    const threshold = subjectStrict
+      ? (specificity >= 3 ? 30 : specificity >= 2 ? 28 : 26)
+      : (specificity >= 3 ? 42 : specificity >= 2 ? 36 : specificity >= 1 ? 30 : 70);
     if (!best || best.score < threshold) return null;
     const attributionRequired = !String(best.license).toUpperCase().includes("PUBLIC DOMAIN") && String(best.license).toUpperCase() !== "CC0";
     return {
@@ -466,7 +492,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/59 (+news aggregator; strict semantic media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/60 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -483,7 +509,11 @@ async function findOpenverseMedia(query, specificity = 1) {
     }
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
-    const threshold = specificity >= 3 ? 44 : specificity >= 2 ? 38 : specificity >= 1 ? 32 : 72;
+    const concepts = mediaConcepts(query);
+    const subjectStrict = concepts.has("openai") || concepts.has("motorcycle") || concepts.has("scooter");
+    const threshold = subjectStrict
+      ? (specificity >= 3 ? 32 : specificity >= 2 ? 30 : 28)
+      : (specificity >= 3 ? 44 : specificity >= 2 ? 38 : specificity >= 1 ? 32 : 72);
     if (!best || best.score < threshold) return null;
     const img = best.img;
     const creator = cleanText(img?.creator || "");
@@ -509,7 +539,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v59?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v60?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -542,6 +572,62 @@ async function handleOpenMedia(url, ctx) {
   const response = json(payload, 200, { "Cache-Control": "public, max-age=21600, stale-while-revalidate=86400" });
   ctx?.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
+}
+
+async function handleOutboundRedirect(url) {
+  const rawTarget = cleanText(url.searchParams.get("u") || "");
+  const publisher = cleanText(url.searchParams.get("p") || "").toLowerCase();
+  const title = cleanText(url.searchParams.get("t") || "").slice(0, 220);
+
+  let target;
+  try {
+    target = new URL(rawTarget);
+  } catch {
+    return Response.redirect("/", 302);
+  }
+  if (!/^https?:$/.test(target.protocol)) return Response.redirect("/", 302);
+
+  const allowedHost = publisher === "ynet"
+    ? /(^|\.)ynet\.co\.il$/i.test(target.hostname)
+    : publisher === "walla"
+      ? /(^|\.)walla\.co\.il$/i.test(target.hostname)
+      : true;
+  if (!allowedHost) return Response.redirect("/", 302);
+
+  // Known RSS publishers sometimes keep an old article path after a CMS move.
+  // Validate only on click, not during feed collection, so it costs no extra
+  // subrequests during normal news refreshes.
+  if (publisher === "ynet" || publisher === "walla") {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4200);
+    try {
+      const check = await fetch(target.toString(), {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Hadashota/60 (+source-link-validator)",
+          "Accept": "text/html,application/xhtml+xml"
+        }
+      });
+      clearTimeout(timer);
+      if (check.ok && check.url) return Response.redirect(check.url, 302);
+    } catch {
+      clearTimeout(timer);
+    }
+
+    // Never send the user into a known 404. Fall back to the publisher's own
+    // search interface with the exact headline so the story can still be found.
+    const q = encodeURIComponent(title || "");
+    if (publisher === "ynet") {
+      return Response.redirect(`https://www.ynet.co.il/plus/search?q=${q}`, 302);
+    }
+    if (publisher === "walla") {
+      return Response.redirect(`https://search.walla.co.il/?q=${q}`, 302);
+    }
+  }
+
+  return Response.redirect(target.toString(), 302);
 }
 
 async function handleUtilities(request, ctx) {
@@ -912,7 +998,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": force ? "no-store, max-age=0" : "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
-      "X-Hadashota-Version": "59.0.0",
+      "X-Hadashota-Version": "60.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -940,7 +1026,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "59.0.0"
+        "X-Hadashota-Version": "60.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.

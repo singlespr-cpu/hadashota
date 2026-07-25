@@ -1745,7 +1745,7 @@ function newsCardHtml(item) {
   const hotBadge = hot >= 52 ? `<span class="hot-badge hot-${hot >= 75 ? "very" : "normal"}">🔥 ${hot}</span>` : "";
   const verifyBadge = reportCount >= 2 ? `<span class="verification-badge" title="רמת אימות לפי מספר וסוג המקורות">✓ ${verification.label}</span>` : "";
   const isSite = item.sourceKind === "site";
-  const storyUrl = safeUrl(item.url);
+  const storyUrl = escapeHtml(storyHref(item));
   const mediaQuery = escapeHtml(mediaQueryForItem(item, safeTitle));
   const preferredImage = preferredSourceImage(item);
   const imageHtml = state.showImages
@@ -1756,7 +1756,7 @@ function newsCardHtml(item) {
     <details class="related-wrap story-timeline-wrap">
       <summary>התפתחות הסיפור · ${reportCount} מקורות</summary>
       <div class="related-list story-timeline-mini">
-        ${storyTimelineReports(item, 6).map((r) => `<a class="related-link" href="${safeUrl(r.url)}" target="_blank" rel="noopener noreferrer"><time>${formatClock(r.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(r.sourceName))}</span><b>עדכון מהמקור</b></a>`).join("")}
+        ${storyTimelineReports(item, 6).map((r) => `<a class="related-link" href="${escapeHtml(storyHref(r))}" target="_blank" rel="noopener noreferrer"><time>${formatClock(r.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(r.sourceName))}</span><b>עדכון מהמקור</b></a>`).join("")}
       </div>
     </details>` : "";
 
@@ -2083,7 +2083,7 @@ function renderLeadStory() {
   if (el.leadTimeline) {
     const timeline = storyTimelineReports(item, 7);
     el.leadTimeline.innerHTML = timeline.map((report) =>
-      `<a href="${safeUrl(report.url)}" target="_blank" rel="noopener noreferrer"><time>${formatClock(report.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(report.sourceName))}</span><b>עדכון מהמקור</b></a>`
+      `<a href="${escapeHtml(storyHref(report))}" target="_blank" rel="noopener noreferrer"><time>${formatClock(report.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(report.sourceName))}</span><b>עדכון מהמקור</b></a>`
     ).join("");
     el.leadTimeline.closest("details")?.classList.toggle("hidden", timeline.length < 2);
     renderLeadChanges(item, timeline);
@@ -2101,8 +2101,9 @@ function renderLeadStory() {
     el.leadStorySignal.classList.add("hidden");
   }
 
-  setOptionalLink(el.leadStoryLink, sourceTarget?.url);
-  const leadHref = safeHttpHref(sourceTarget?.url);
+  const leadResolvedHref = storyHref(sourceTarget || item);
+  setOptionalLink(el.leadStoryLink, leadResolvedHref);
+  const leadHref = safeHttpHref(leadResolvedHref);
   if (leadHref) {
     el.leadStoryCta.href = leadHref;
     el.leadStoryCta.classList.remove("hidden");
@@ -2123,7 +2124,7 @@ function renderLeadStory() {
   hydrateLeadSafeMedia(winner, leadTitle);
 
   el.leadStorySources.innerHTML = unique.map((source) => source.url
-    ? `<a href="${safeUrl(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanDisplayText(source.sourceName))}</a>`
+    ? `<a href="${escapeHtml(storyHref(source))}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanDisplayText(source.sourceName))}</a>`
     : `<span>${escapeHtml(cleanDisplayText(source.sourceName))}</span>`).join("");
 
   el.leadStory.classList.remove("hidden");
@@ -2166,7 +2167,7 @@ function renderFlashDeck() {
     return;
   }
 
-  el.flashDeckItems.innerHTML = preferred.map((item, index) => `<a class="flash-item" data-flash-index="${index}" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">
+  el.flashDeckItems.innerHTML = preferred.map((item, index) => `<a class="flash-item" data-flash-index="${index}" href="${escapeHtml(storyHref(item))}" target="_blank" rel="noopener noreferrer">
     <span>${escapeHtml(cleanDisplayText(item.sourceName))} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
     <strong>${escapeHtml(editorialTitle(item))}</strong>
   </a>`).join("");
@@ -3095,7 +3096,7 @@ function openQuickBrief() {
     const reports = normalizeClusterReports(item);
     const verification = storyVerification(item);
     const sourceNames = [...new Set(reports.map(r => r.sourceName || r.publisher).filter(Boolean))].slice(0,3);
-    const url = safeUrl(item.url);
+    const url = escapeHtml(storyHref(item));
     return `<article class="brief-story-card">
       <div class="brief-rank">${index+1}</div>
       <div class="brief-copy">
@@ -3139,6 +3140,28 @@ function formatFullDate(iso) {
 function sourceInitial(name) {
   const clean = String(name || "?").replace(/[^\p{L}\p{N}]/gu, "");
   return clean.slice(0, 2).toUpperCase() || "?";
+}
+
+function sourceResolverUrl(url, title = "", publisher = "") {
+  const href = safeHttpHref(url);
+  if (!href) return "#";
+  const pub = String(publisher || "").toLowerCase();
+  // Walla and ynet RSS links are checked server-side before redirecting because
+  // both publishers occasionally change article URL formats.
+  if (pub === "ynet" || pub === "walla") {
+    const params = new URLSearchParams({ u: href, p: pub, t: String(title || "").slice(0, 220) });
+    return `/go?${params.toString()}`;
+  }
+  return href;
+}
+
+function storyHref(itemOrReport) {
+  if (!itemOrReport) return "#";
+  return sourceResolverUrl(
+    itemOrReport.url,
+    itemOrReport.title || "",
+    itemOrReport.publisher || itemOrReport.sourceId || ""
+  );
 }
 
 function safeUrl(value) {
