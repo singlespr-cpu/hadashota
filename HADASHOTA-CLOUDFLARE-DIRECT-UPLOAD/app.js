@@ -300,6 +300,12 @@ function bindEvents() {
   });
 
   el.refreshBtn.addEventListener("click", () => { loadNews(true); loadUtilities(); });
+  el.installOfferAccept?.addEventListener("click", handleInstallAccept);
+  el.installOfferLater?.addEventListener("click", () => {
+    localStorage.setItem("hadashota.installSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
+    closeSiteModal(el.installOfferModal);
+  });
+  el.installAppBtn?.addEventListener("click", () => maybeShowInstallOffer("manual"));
   el.backToTop?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   el.alertSettingsBtn?.addEventListener("click", () => openSiteModal(el.alertSettingsModal, el.alertSettingsBtn));
   el.alertSoundQuick?.addEventListener("click", () => setAlertSound(!state.alertSound, true));
@@ -630,7 +636,9 @@ function maybeShowInstallOffer(reason = "automatic") {
     delete el.installOfferAccept.dataset.stage;
     el.installOfferAccept.textContent = state.deferredInstallPrompt
       ? "התקינו את חדשותא"
-      : (isIOSDevice() ? "הראו לי איך" : "הוסיפו את חדשותא");
+      : (isIOSDevice()
+          ? "הראו לי איך"
+          : (isAndroidDevice() ? "הראו לי איך להתקין" : "הראו אפשרויות התקנה"));
   }
   openSiteModal(el.installOfferModal, reason === "manual" ? el.installAppBtn : null);
 }
@@ -673,6 +681,18 @@ async function handleInstallAccept() {
     return;
   }
 
+  if (el.installOfferAccept?.dataset.stage === "instructions-shown") {
+    closeSiteModal(el.installOfferModal, false);
+    return;
+  }
+  if (el.installInstructions) {
+    el.installInstructions.innerHTML = installInstructionsMarkup();
+    el.installInstructions.classList.remove("hidden");
+  }
+  if (el.installOfferAccept) {
+    el.installOfferAccept.textContent = "הבנתי";
+    el.installOfferAccept.dataset.stage = "instructions-shown";
+  }
   localStorage.setItem("hadashota.installSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
   showToast(isMacDesktop() ? "למועדפים: ⌘D" : "למועדפים: Ctrl+D");
 }

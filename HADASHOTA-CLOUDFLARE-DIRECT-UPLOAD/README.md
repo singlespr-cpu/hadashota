@@ -127,3 +127,10 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - 3+ distinct publishers is the primary main-story rule; if none exists in the last hour, 2+ is allowed.
 - A one-source item can never masquerade as a corroborated main story; it is shown only as “עדכון מתפתח עכשיו” so the hero is never blank.
 - Push notifications remain 3+ sources only.
+
+## V54 — desktop install button hotfix
+- Fixed missing click event bindings for the install modal buttons.
+- “התקינו את חדשותא” now calls the browser's native beforeinstallprompt when available.
+- Manual “הוספת חדשותא למכשיר” opens the install offer correctly.
+- “לא עכשיו” now closes the modal and snoozes it.
+- Unsupported desktop browsers show real install/favorites instructions instead of appearing unresponsive.
