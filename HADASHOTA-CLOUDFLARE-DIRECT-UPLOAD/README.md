@@ -134,3 +134,9 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Manual “הוספת חדשותא למכשיר” opens the install offer correctly.
 - “לא עכשיו” now closes the modal and snoozes it.
 - Unsupported desktop browsers show real install/favorites instructions instead of appearing unresponsive.
+
+## V55 — quick brief modal polish
+- The “30 seconds to understand what’s happening” modal now shows the 5 items in chronological order (newest first), using the shared server snapshot clock.
+- Modal reduced in size and compressed so 5 updates fit without needing internal scrolling in normal cases.
+- Bottom “סגירה” button moved to the left side of the footer (RTL-left via flex-end).
+- Card spacing, rank badge, metadata chips and source button sizes tightened for a cleaner fit.

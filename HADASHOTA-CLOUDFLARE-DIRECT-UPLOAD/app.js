@@ -2844,10 +2844,13 @@ function renderSmartDashboard() {
 
 function openQuickBrief() {
   if (!el.quickBriefModal || !el.quickBriefList) return;
+  const serverNow = Date.parse(state.lastDataGeneratedAt || "");
+  const now = Number.isFinite(serverNow) ? serverNow : Date.now();
   const items = [...state.items]
-    .filter(i => Date.now() - Date.parse(clusterLatestAt(i)||0) <= 6*60*60*1000)
-    .sort((a,b) => storyHotScore(b)-storyHotScore(a) || Date.parse(clusterLatestAt(b))-Date.parse(clusterLatestAt(a)))
-    .slice(0,5);
+    .filter((item) => now - Date.parse(clusterLatestAt(item) || 0) <= 8 * 60 * 60 * 1000)
+    // Chronological first: newest updates at the top, then hotter stories as tie-break.
+    .sort((a, b) => Date.parse(clusterLatestAt(b) || 0) - Date.parse(clusterLatestAt(a) || 0) || storyHotScore(b) - storyHotScore(a))
+    .slice(0, 5);
   el.quickBriefList.innerHTML = items.map((item,index) => {
     const reports = normalizeClusterReports(item);
     const verification = storyVerification(item);
@@ -2867,7 +2870,7 @@ function openQuickBrief() {
       </div>
       ${url !== "#" ? `<a class="brief-source-btn" href="${url}" target="_blank" rel="noopener noreferrer">למקור ↗</a>` : ""}
     </article>`;
-  }).join("") || '<p class="brief-empty">עדיין אין מספיק עדכונים לבניית תקציר.</p>';
+  }).join("") || '<p class="brief-empty">עדיין אין מספיק עדכונים טריים לבניית תקציר.</p>';
   openSiteModal(el.quickBriefModal, el.quickBriefBtn);
 }
 
