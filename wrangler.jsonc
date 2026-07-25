@@ -1,0 +1,10 @@
+{
+  "name": "hadashota",
+  "main": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/_worker.js",
+  "compatibility_date": "2026-07-24",
+  "assets": {
+    "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
+    "binding": "ASSETS",
+    "html_handling": "none"
+  }
+}
