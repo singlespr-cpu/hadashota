@@ -134,7 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "68.0.0",
+          version: "70.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -147,9 +147,12 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "68.0.0",
+        version: "70.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
+        configuredSiteSources: getShardSources("sites").length,
+        configuredTelegramSources: getShardSources("telegram").length,
+        collectionPolicy: "full-pass-before-retry",
         newsShards: ["sites", "telegram"]
       });
     }
@@ -222,7 +225,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v68/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v70/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -575,7 +578,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v68?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v70?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -865,7 +868,7 @@ async function handleNews(request, env, ctx) {
   const forceRequested = requestUrl.searchParams.get("force") === "1";
   const shardSources = getShardSources(shard);
   const cache = caches.default;
-  // V68: an explicit refresh must always reach the configured publishers.
+  // V70: an explicit refresh must always reach the configured publishers.
   // Browser-specific Sec-Fetch/Origin header differences must never silently demote it.
   const force = forceRequested;
 
@@ -889,7 +892,7 @@ async function handleNews(request, env, ctx) {
     // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
     // even when an origin redirects or several sources fail at the same time.
     const retryBudget = { remaining: 6 };
-    // V68: every configured source gets one real attempt on every collection.
+    // V70: every configured source gets one real attempt on every collection.
     // Retries happen only after that first complete pass, so late-list sources
     // (especially Telegram channels) can never be starved by an early timeout.
     const settled = await fetchSourcesWithLimit(shardSources, 6, retryBudget, force);
@@ -963,7 +966,7 @@ async function handleNews(request, env, ctx) {
       };
     }).sort((a,b) => Number(b.official)-Number(a.official) || b.healthScore-a.healthScore || Date.parse(b.lastItemAt||0)-Date.parse(a.lastItemAt||0));
 
-    // V68: if even one source produced current items, return the fresh partial
+    // V70: if even one source produced current items, return the fresh partial
     // result instead of hiding it behind an older snapshot. The UI already marks
     // degraded sources and the lead-story policy still requires corroboration.
 
@@ -997,13 +1000,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "68.0.0",
+      "X-Hadashota-Version": "70.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "68.0.0",
+      "X-Hadashota-Version": "70.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1035,7 +1038,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "68.0.0"
+        "X-Hadashota-Version": "70.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
