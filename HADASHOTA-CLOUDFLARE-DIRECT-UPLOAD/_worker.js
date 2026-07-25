@@ -251,67 +251,151 @@ function normalizeOrefCurrentAlerts(payload) {
 }
 
 
-async function handleOpenMedia(url, ctx) {
-  const raw = cleanText(url.searchParams.get("q") || "").slice(0, 180);
-  const category = cleanText(url.searchParams.get("category") || "other");
+function mediaQueryVariants(raw, category = "other") {
+  const text = cleanText(raw || "");
+  const map = [
+    [/איראן|איראני/g, "Iran"], [/כווית/g, "Kuwait"], [/בחריין/g, "Bahrain"], [/קטאר/g, "Qatar"],
+    [/ירדן/g, "Jordan"], [/עיראק/g, "Iraq"], [/סעודיה/g, "Saudi Arabia"], [/תימן/g, "Yemen"],
+    [/טהרן/g, "Tehran"], [/לבנון|ביירות/g, "Lebanon Beirut"], [/סוריה|דמשק/g, "Syria Damascus"],
+    [/ישראל/g, "Israel"], [/נתניהו/g, "Benjamin Netanyahu"], [/טראמפ/g, "Donald Trump"],
+    [/כנסת/g, "Knesset Israel"], [/צה.?ל/g, "Israel Defense Forces"], [/משטרה/g, "Israel Police"],
+    [/טיל|טילים|ירי|שיגור/g, "missile attack"], [/תקיפה|מתקפה|הפצצה/g, "air strike"],
+    [/יירוט|יירוטים/g, "missile interception"], [/מטוס|חיל האוויר/g, "military aircraft"],
+    [/נעדר|נעדרת|חיפושים/g, "missing person search"], [/אותר|נמצא|נמצאה/g, "rescue search"],
+    [/בחירות/g, "election Israel"], [/ממשלה|קואליציה/g, "Israel government"],
+    [/נתב.?ג|נמל התעופה/g, "Ben Gurion Airport"], [/בורסה|מניות|שוק ההון/g, "stock market Israel"]
+  ];
+  let englishish = text;
+  for (const [re, replacement] of map) englishish = englishish.replace(re, ` ${replacement} `);
+  englishish = englishish.replace(/[א-ת]{2,}/g, " ").replace(/[|•:;–—-]+/g, " ").replace(/\s+/g, " ").trim();
+
+  const parts = text.split("|").map((x) => cleanText(x)).filter(Boolean);
   const fallbackMap = {
-    security: "Israel security city night military",
-    politics: "Israel parliament government politics",
-    diplomatic: "diplomacy flags meeting middle east",
-    other: "Israel news city people"
+    security: "Israel security military middle east",
+    politics: "Knesset Israel government politics",
+    diplomatic: "Israel diplomacy middle east flags",
+    other: "Israel news city"
   };
-  const query = raw || fallbackMap[category] || fallbackMap.other;
+  const out = [];
+  const push = (q) => { q = cleanText(q).slice(0, 110); if (q && !out.includes(q)) out.push(q); };
+  push(englishish);
+  for (const part of parts.slice(0, 3)) push(part);
+  push(fallbackMap[category] || fallbackMap.other);
+  return out.slice(0, 5);
+}
+
+function commonsLicenseAllowed(name) {
+  const value = cleanText(name || "").toUpperCase();
+  return value.includes("PUBLIC DOMAIN") || value === "CC0" || value.startsWith("CC BY ") || value.startsWith("CC BY-") || value.startsWith("CC BY-SA");
+}
+
+function stripHtmlText(value) {
+  return cleanText(String(value || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&"));
+}
+
+async function findCommonsMedia(query) {
+  const api = new URL("https://commons.wikimedia.org/w/api.php");
+  api.searchParams.set("action", "query");
+  api.searchParams.set("format", "json");
+  api.searchParams.set("origin", "*");
+  api.searchParams.set("generator", "search");
+  api.searchParams.set("gsrnamespace", "6");
+  api.searchParams.set("gsrlimit", "8");
+  api.searchParams.set("gsrsearch", `${query} filetype:bitmap`);
+  api.searchParams.set("prop", "imageinfo");
+  api.searchParams.set("iiprop", "url|extmetadata");
+  api.searchParams.set("iiurlwidth", "1400");
+  try {
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/40 (+licensed media resolver)" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pages = Object.values(data?.query?.pages || {});
+    for (const page of pages) {
+      const info = page?.imageinfo?.[0];
+      const meta = info?.extmetadata || {};
+      const license = meta?.LicenseShortName?.value || "";
+      const url = info?.thumburl || info?.url || "";
+      if (!url || !commonsLicenseAllowed(license)) continue;
+      const creator = stripHtmlText(meta?.Artist?.value || meta?.Credit?.value || "");
+      const attributionRequired = !String(license).toUpperCase().includes("PUBLIC DOMAIN") && String(license).toUpperCase() !== "CC0";
+      return {
+        url,
+        thumbnail: info?.thumburl || url,
+        creator,
+        license,
+        licenseUrl: meta?.LicenseUrl?.value || "",
+        landingUrl: info?.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title || "")}`,
+        attribution: [creator, license, "Wikimedia Commons"].filter(Boolean).join(" · "),
+        shortAttribution: attributionRequired ? [creator || "Wikimedia Commons", license].filter(Boolean).join(" · ") : "Wikimedia Commons · נחלת הכלל",
+        provider: "Wikimedia Commons"
+      };
+    }
+  } catch {}
+  return null;
+}
+
+async function findOpenverseMedia(query) {
+  const searchUrl = new URL("https://api.openverse.org/v1/images/");
+  searchUrl.searchParams.set("q", query);
+  searchUrl.searchParams.set("page_size", "16");
+  searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
+  searchUrl.searchParams.set("mature", "false");
+  try {
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/40 (+news aggregator; licensed media lookup)" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const allowed = new Set(["cc0","pdm","by","by-sa"]);
+    const results = Array.isArray(data?.results) ? data.results : [];
+    for (const img of results) {
+      const license = String(img?.license || "").toLowerCase();
+      const mediaUrl = img?.url || img?.thumbnail || "";
+      if (!allowed.has(license) || !/^https?:\/\//.test(mediaUrl)) continue;
+      const creator = cleanText(img?.creator || "");
+      return {
+        url: mediaUrl,
+        thumbnail: img?.thumbnail || mediaUrl,
+        creator,
+        license: img?.license || "",
+        licenseUrl: img?.license_url || "",
+        landingUrl: img?.foreign_landing_url || img?.detail_url || "",
+        attribution: img?.attribution || [creator, String(img?.license || "").toUpperCase(), "Openverse"].filter(Boolean).join(" · "),
+        shortAttribution: [creator || "Openverse", String(img?.license || "").toUpperCase()].filter(Boolean).join(" · "),
+        provider: img?.provider || "Openverse"
+      };
+    }
+  } catch {}
+  return null;
+}
+
+async function handleOpenMedia(url, ctx) {
+  const raw = cleanText(url.searchParams.get("q") || "").slice(0, 280);
+  const category = cleanText(url.searchParams.get("category") || "other");
+  const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/openverse?q=${encodeURIComponent(query)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v40?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
-  const searchUrl = new URL("https://api.openverse.org/v1/images/");
-  searchUrl.searchParams.set("q", query);
-  searchUrl.searchParams.set("page_size", "12");
-  searchUrl.searchParams.set("license_type", "commercial");
-  searchUrl.searchParams.set("mature", "false");
-
-  let data = null;
-  try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/39 (+news aggregator; open-licensed media lookup)" } });
-    if (res.ok) data = await res.json();
-  } catch {}
-
-  const allowed = new Set(["cc0","pdm","by","by-sa"]);
-  let results = Array.isArray(data?.results) ? data.results : [];
-  let chosen = results.find((img) => allowed.has(String(img?.license || "").toLowerCase()) && /^https?:\/\//.test(img?.url || img?.thumbnail || ""));
-  // A breaking-news headline may be too specific (especially in Hebrew). If it yields no
-  // licensed result, use a broad thematic query rather than falling back to a publisher-owned image.
-  if (!chosen && raw) {
-    try {
-      const fallbackUrl = new URL("https://api.openverse.org/v1/images/");
-      fallbackUrl.searchParams.set("q", fallbackMap[category] || fallbackMap.other);
-      fallbackUrl.searchParams.set("page_size", "12");
-      fallbackUrl.searchParams.set("license_type", "commercial");
-      fallbackUrl.searchParams.set("mature", "false");
-      const fallbackRes = await fetch(fallbackUrl.toString(), { headers: { "Accept":"application/json", "User-Agent":"Hadashota/39 (+news aggregator; open-licensed media lookup)" } });
-      if (fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json();
-        results = Array.isArray(fallbackData?.results) ? fallbackData.results : [];
-        chosen = results.find((img) => allowed.has(String(img?.license || "").toLowerCase()) && /^https?:\/\//.test(img?.url || img?.thumbnail || ""));
-      }
-    } catch {}
+  let chosen = null;
+  let matchedQuery = "";
+  // Commons tends to be strongest for named people, places and public institutions.
+  for (const query of queries.slice(0, 3)) {
+    chosen = await findCommonsMedia(query);
+    if (chosen) { matchedQuery = query; break; }
   }
+  // Openverse expands coverage for generic event photography.
+  if (!chosen) {
+    for (const query of queries) {
+      chosen = await findOpenverseMedia(query);
+      if (chosen) { matchedQuery = query; break; }
+    }
+  }
+
   const payload = chosen ? {
-    image: {
-      url: chosen.url || chosen.thumbnail,
-      thumbnail: chosen.thumbnail || chosen.url,
-      creator: chosen.creator || "",
-      license: chosen.license || "",
-      licenseUrl: chosen.license_url || "",
-      landingUrl: chosen.foreign_landing_url || chosen.detail_url || "",
-      attribution: chosen.attribution || [chosen.creator, String(chosen.license || "").toUpperCase()].filter(Boolean).join(" · "),
-      provider: chosen.provider || "Openverse"
-    },
-    note: "Open-licensed media result; license metadata should remain attributable and is subject to the original license."
+    image: { ...chosen, matchedQuery },
+    note: "Licensed/open-media result. Attribution and license metadata are preserved; source-license accuracy should still be independently verifiable."
   } : { image: null };
-  const response = json(payload, 200, { "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400" });
+  const response = json(payload, 200, { "Cache-Control": "public, max-age=21600, stale-while-revalidate=86400" });
   ctx?.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
 }

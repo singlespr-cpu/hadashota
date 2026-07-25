@@ -71,3 +71,10 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Visuals are looked up through Openverse using commercial-compatible open licenses (CC0/PDM/CC BY/CC BY-SA), with attribution metadata retained when available.
 - Hadashota synthesizes display headlines from corroborated event facts; source names and direct links remain visible.
 - Added /copyright notice-and-takedown page.
+
+
+## V40 newsroom + media resolver
+- Front-page and feed headlines use an upgraded newsroom-style synthesis: punchier phrasing while avoiding simple verbatim mirroring of a publisher headline.
+- Media resolver now tries Wikimedia Commons first for named people/places/institutions, then Openverse, with Hebrew-to-English entity/action expansion and category fallbacks.
+- Only public-domain / CC0 / CC BY / CC BY-SA results are accepted, and visible attribution metadata is preserved.
+- Feed media hydration capacity was increased so substantially more visible stories receive licensed imagery.

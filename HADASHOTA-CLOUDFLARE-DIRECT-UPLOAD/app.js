@@ -1100,11 +1100,13 @@ function clientEventActions(value) {
 
 
 
-// V39 — Editorial layer: keep the facts, not a publisher's wording.
-// Headlines are built from the corroborated event signals already collected by Hadashota.
+// V40 — Newsroom editorial layer.
+// We do not simply mirror a publisher headline. Instead we choose the strongest factual
+// formulation from the corroborating reports and rebuild it in Hadashota's own newsroom voice.
 function editorialHeadlineForItem(item) {
   const reports = normalizeClusterReports(item);
   const titles = reports.map((r) => cleanDisplayTitle(r.title || "")).filter(Boolean);
+  if (!titles.length) return cleanDisplayTitle(item?.title || "חדשות עכשיו");
   const corpus = titles.join(" | ");
   const lower = corpus.toLowerCase();
   const entities = new Set();
@@ -1121,70 +1123,131 @@ function editorialHeadlineForItem(item) {
   const hasAttack = actions.has("attack");
   const hasMissile = actions.has("missile");
   const hasIntercept = actions.has("intercept");
+  const reportCount = Math.max(1, Number(item?.reportCount) || reports.length || 1);
 
-  // Search / missing-person events — intentionally factual and human, without copying a source headline.
+  // Human-interest / missing-person stories need the person's name to stay prominent.
   const found = /(נמצא|נמצאה|אותר|אותרה|אותרו|נמצאו)/.test(lower);
   const missing = /(נעדר|נעדרת|החיפושים|אבדו עקבות|נעלם|נעלמה|חיפושים)/.test(lower);
   if (found && missing) {
     const name = extractLikelyPersonName(titles);
-    return name ? `סוף טוב לחיפושים: ${name} אותר` : "סוף טוב לחיפושים: הנעדר אותר";
+    return name ? `סוף טוב לחיפושים: ${name} אותר בשלום` : "סוף טוב לחיפושים: הנעדר אותר בשלום";
   }
 
+  // High-confidence security clusters get a true front-page treatment.
   if (iran && place && place !== "איראן" && hasAttack) {
+    if (hasMissile && hasIntercept) return `ההסלמה מתרחבת: ירי איראני לעבר ${place} — ודיווחים על יירוטים`;
     if (hasMissile) return `ההסלמה מתרחבת: דיווחים על ירי איראני לעבר ${place}`;
     return `המתיחות מחריפה: דיווחים על תקיפה איראנית ב${place}`;
   }
   if (place && hasMissile && hasIntercept) return `לילה מתוח ב${place}: ירי ויירוטים במוקד האירועים`;
-  if (place && hasAttack) return `אירוע מתפתח ב${place}: דיווחים על תקיפה והמשך עדכונים`;
+  if (place && hasAttack && reportCount >= 3) return `אירוע מתפתח ב${place}: כמה מקורות מדווחים על תקיפה`;
   if (iran && hasAttack) return "המתיחות מול איראן מחריפה: דיווחים חדשים מהשטח";
   if (usa && hasAttack) return "התפתחות ביטחונית: דיווחים חדשים הנוגעים לכוחות האמריקניים";
 
+  const fact = strongestFactFromTitles(titles);
   const category = item?.category || "other";
-  const factual = conciseFactFromTitles(titles);
-  const prefix = category === "security" ? "אירוע מתפתח"
-    : category === "politics" ? "המערכת הפוליטית סוערת"
-    : category === "diplomatic" ? "התפתחות מדינית"
-    : "חדשות עכשיו";
-  return factual ? `${prefix}: ${factual}` : prefix;
+  if (!fact) return category === "security" ? "אירוע מתפתח" : "חדשות עכשיו";
+
+  // When several independent sources corroborate the story, the prefix makes the headline
+  // clearly Hadashota editorial copy rather than a verbatim publisher headline.
+  if (reportCount >= 3) {
+    const prefix = category === "security" ? newsroomSecurityPrefix(fact)
+      : category === "politics" ? newsroomPoliticsPrefix(fact)
+      : category === "diplomatic" ? "בזירה המדינית"
+      : "במוקד החדשות";
+    return `${prefix}: ${fact}`;
+  }
+
+  // Single-source feed cards stay factual and restrained.
+  return fact;
+}
+
+function newsroomSecurityPrefix(fact) {
+  const t = String(fact);
+  if (/(טיל|ירי|שיגור|תקיפה|פיצוץ|כטב)/.test(t)) return "האירוע שמסעיר את השטח";
+  if (/(חטוף|נעדר|חילוץ|נפגע|הרוג|פצוע)/.test(t)) return "הדרמה נמשכת";
+  return "אירוע מתפתח";
+}
+
+function newsroomPoliticsPrefix(fact) {
+  const t = String(fact);
+  if (/(ממשלה|קואליציה|בחירות|פיטור|פרישה|התפטר)/.test(t)) return "טלטלה במערכת הפוליטית";
+  if (/(נתניהו|ראש הממשלה|שר|כנסת)/.test(t)) return "המערכת הפוליטית סוערת";
+  return "במערכת הפוליטית";
 }
 
 function extractLikelyPersonName(titles) {
-  const stop = new Set(["הילד","הילדה","הנער","הנערה","הנעדר","הנעדרת","נעדר","נעדרת","נמצא","נמצאה","אותר","אותרה","אחרי","שעות","חיפושים","החיפושים","דיווח","דיווחים"]);
+  const stop = new Set(["הילד","הילדה","הנער","הנערה","הנעדר","הנעדרת","נעדר","נעדרת","נמצא","נמצאה","אותר","אותרה","אחרי","שעות","חיפושים","החיפושים","דיווח","דיווחים","משטרת","ישראל"]);
   const counts = new Map();
   for (const title of titles) {
-    const words = String(title).replace(/[״׳'\"`]/g, "").match(/[א-ת]{3,}/g) || [];
+    const words = String(title).replace(/[״׳'"`]/g, "").match(/[א-ת]{3,}/g) || [];
     for (const w of words) {
       if (stop.has(w)) continue;
       counts.set(w, (counts.get(w) || 0) + 1);
     }
   }
-  return [...counts.entries()].filter(([,n]) => n >= 2).sort((a,b) => b[1]-a[1] || a[0].length-b[0].length)[0]?.[0] || "";
+  return [...counts.entries()].filter(([,n]) => n >= 2).sort((a,b) => b[1]-a[1] || b[0].length-a[0].length)[0]?.[0] || "";
 }
 
-function conciseFactFromTitles(titles) {
-  if (!titles.length) return "";
-  // Prefer the shortest factual formulation, then remove common publisher-style clickbait wrappers.
-  let t = [...titles].sort((a,b) => a.length-b.length)[0] || "";
-  t = t.replace(/^(פרסום ראשון|בלעדי|דרמה|סערה|הלם|תיעוד|צפו|דיווח ראשוני)\s*[:\-–—]\s*/i, "")
-       .replace(/\s*[|•]\s*[^|•]{1,24}$/g, "")
-       .replace(/[!]{2,}/g, "!")
+function cleanNewsroomCandidate(value) {
+  let t = cleanDisplayTitle(value || "");
+  t = t.replace(/\s*[|•]\s*(ynet|וואלה|N12|ישראל היום|מעריב|כאן|חדשות 13|ערוץ 14|גלובס|כלכליסט).*$/i, "")
+       .replace(/^(פרסום ראשון|בלעדי|צפו|תיעוד|דיווח ראשוני)\s*[:\-–—]\s*/i, "")
+       .replace(/\s+/g, " ")
        .trim();
-  if (t.length > 92) t = t.slice(0, 89).replace(/\s+\S*$/, "") + "…";
+  if (t.length > 112) t = t.slice(0, 109).replace(/\s+\S*$/, "") + "…";
   return t;
+}
+
+function strongestFactFromTitles(titles) {
+  const rows = titles.map(cleanNewsroomCandidate).filter((t) => t.length >= 14);
+  if (!rows.length) return "";
+  const dramatic = /(תקיפה|ירי|טיל|פיצוץ|אותר|נמצא|דרמה|סערה|החלטה|הודיע|נחשף|לראשונה|חשש|חילוץ|הסלמה|יירוט)/;
+  const clickbait = /^(דרמה|סערה|הלם|לא תאמינו|צפו|תיעוד)\b/;
+  const scored = rows.map((t) => {
+    let score = 0;
+    const len = t.length;
+    if (len >= 38 && len <= 92) score += 18;
+    else if (len >= 25 && len <= 108) score += 10;
+    if (dramatic.test(t)) score += 9;
+    if (/[־–—:]/.test(t)) score += 4;
+    if (/\d/.test(t)) score += 3;
+    if (clickbait.test(t)) score -= 8;
+    return { t, score };
+  }).sort((a,b) => b.score-a.score || a.t.length-b.t.length);
+  let chosen = scored[0].t;
+  // Rebuild punctuation and opening so the result is editorial, punchy and not a verbatim mirror.
+  chosen = chosen.replace(/^דיווחים?\s*[:\-–—]\s*/i, "")
+                 .replace(/^על פי דיווחים?\s*[:\-–—]?\s*/i, "")
+                 .replace(/[!]{2,}/g, "!")
+                 .trim();
+  return chosen;
 }
 
 function editorialTitle(item) {
   try { return editorialHeadlineForItem(item); } catch { return cleanDisplayTitle(item?.title || "חדשות עכשיו"); }
 }
 
+function mediaQueryForItem(item, editorial = "") {
+  const reports = normalizeClusterReports(item);
+  const rawTitles = [item?.title, ...reports.map((r) => r.title)].filter(Boolean);
+  const person = extractLikelyPersonName(rawTitles.map(cleanDisplayTitle));
+  const corpus = rawTitles.join(" ");
+  const entities = new Set();
+  for (const title of rawTitles) for (const e of clientEventEntities(title)) entities.add(e);
+  const entity = [...entities][0] || "";
+  // Person name or named location first; the worker also translates common Hebrew entities.
+  return [person, entity, cleanNewsroomCandidate(item?.title || ""), editorial].filter(Boolean).join(" | ").slice(0, 260);
+}
+
 const SAFE_MEDIA_CACHE = new Map();
 let safeMediaRequests = 0;
 async function fetchSafeMedia(query, category = "other") {
-  const normalized = String(query || "").trim().slice(0, 180);
+  const normalized = String(query || "").trim().slice(0, 260);
   if (!normalized) return null;
   const key = `${category}|${normalized}`;
   if (SAFE_MEDIA_CACHE.has(key)) return SAFE_MEDIA_CACHE.get(key);
-  if (safeMediaRequests >= 18) return null;
+  if (safeMediaRequests >= 36) return null;
   safeMediaRequests += 1;
   const promise = fetch(`/api/media?q=${encodeURIComponent(normalized)}&category=${encodeURIComponent(category)}`, { cache: "force-cache" })
     .then((r) => r.ok ? r.json() : null)
@@ -1196,7 +1259,7 @@ async function fetchSafeMedia(query, category = "other") {
 
 async function hydrateLeadSafeMedia(winner, leadTitle) {
   if (!el.leadStoryImage || !el.leadStoryMedia) return;
-  const query = [leadTitle, winner?.item?.sourceName].filter(Boolean).join(" ");
+  const query = mediaQueryForItem(winner?.item, leadTitle);
   const media = await fetchSafeMedia(query, winner?.item?.category || "other");
   // Abort if the lead changed while the media lookup was running.
   if (winner && leadFingerprint(winner) !== state.displayedLeadFingerprint) return;
@@ -1216,7 +1279,7 @@ async function hydrateLeadSafeMedia(winner, leadTitle) {
 
 async function hydrateSafeMediaSlots() {
   if (!state.showImages) return;
-  const slots = [...document.querySelectorAll('.safe-media-slot[data-media-query]:not([data-hydrated="1"])')].slice(0, 12);
+  const slots = [...document.querySelectorAll('.safe-media-slot[data-media-query]:not([data-hydrated="1"])')].slice(0, 28);
   await Promise.all(slots.map(async (slot) => {
     slot.dataset.hydrated = "1";
     const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
@@ -1226,7 +1289,13 @@ async function hydrateSafeMediaSlots() {
     img.src = media.url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
     img.addEventListener('error', () => a?.remove(), { once:true });
     slot.replaceWith(img);
-    if (a && media.attribution) a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
+    if (a && media.attribution) {
+      a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
+      const credit = document.createElement("span");
+      credit.className = "media-credit";
+      credit.textContent = media.shortAttribution || media.attribution;
+      a.appendChild(credit);
+    }
   }));
 }
 
@@ -1358,7 +1427,7 @@ function newsCardHtml(item) {
   const verifyBadge = reportCount >= 2 ? `<span class="verification-badge" title="רמת אימות לפי מספר וסוג המקורות">✓ ${verification.label}</span>` : "";
   const isSite = item.sourceKind === "site";
   const storyUrl = safeUrl(item.url);
-  const mediaQuery = escapeHtml(`${safeTitle} ${category}`);
+  const mediaQuery = escapeHtml(mediaQueryForItem(item, safeTitle));
   const imageHtml = state.showImages
     ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה"><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" aria-hidden="true"></span></a>`
     : "";
