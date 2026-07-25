@@ -140,3 +140,15 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Modal reduced in size and compressed so 5 updates fit without needing internal scrolling in normal cases.
 - Bottom “סגירה” button moved to the left side of the footer (RTL-left via flex-end).
 - Card spacing, rank badge, metadata chips and source button sizes tightened for a cleaner fit.
+
+
+## V56 — quick brief fit + backdrop
+- Darker blurred backdrop added behind the quick-brief modal for stronger focus.
+- Close button kept on the left side and given more inset space so it no longer clips.
+- Modal width/height reduced and the 5 update cards compacted further to avoid internal scrolling in common cases.
+
+## V57 — About + information pages
+- Rebuilt the About modal with a clear explanation of collection, clustering, corroboration, ranking and source linking.
+- Added feature overview: Red Alert, weather, Shabbat times, FX rates, news notifications, 30-second brief and Home Screen installation.
+- Rewrote and redesigned About, How It Works, Privacy, Copyright/Takedown and Contact pages into one consistent premium information system.
+- Updated old v34 asset references on informational pages to the current release.

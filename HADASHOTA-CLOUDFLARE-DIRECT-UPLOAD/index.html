@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#f7f8fb" />
   <meta name="color-scheme" content="light dark" />
   <meta name="application-name" content="חדשותא" />
-  <meta name="generator" content="Hadashota 55.0.0" />
+  <meta name="generator" content="Hadashota 57.0.0" />
   <meta name="apple-mobile-web-app-title" content="חדשותא" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="canonical" href="__SITE_URL__/" />
-  <link rel="icon" href="/favicon.svg?v=55.0.0" type="image/svg+xml" />
-  <link rel="icon" href="/favicon-32.png?v=55.0.0" sizes="32x32" type="image/png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=55.0.0" sizes="180x180" />
-  <link rel="manifest" href="/site.webmanifest?v=55.0.0" />
+  <link rel="icon" href="/favicon.svg?v=57.0.0" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png?v=57.0.0" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=57.0.0" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest?v=57.0.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -82,7 +82,7 @@
     ]
   }
   </script>
-  <link rel="stylesheet" href="/styles.css?v=55.0.0" />
+  <link rel="stylesheet" href="/styles.css?v=57.0.0" />
 </head>
 <body>
   <a class="skip-link" href="#mainContent">דלג לתוכן הראשי</a>
@@ -515,14 +515,33 @@
 
   <div class="site-modal hidden" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle" aria-hidden="true">
     <button class="modal-backdrop" type="button" data-modal-close aria-label="סגירת החלון"></button>
-    <section class="modal-card" tabindex="-1">
+    <section class="modal-card about-modal-card" tabindex="-1">
       <button class="modal-close" type="button" data-modal-close aria-label="סגירה">×</button>
       <div class="modal-icon" aria-hidden="true">i</div>
       <span class="modal-eyebrow">אודות חדשותא</span>
-      <h2 id="aboutModalTitle">כל החדשות החשובות, במסך אחד.</h2>
-      <p>חדשותא הוא דשבורד חדשות ישראלי חי שמרכז במקום אחד עדכונים מאתרי חדשות, מקורות רשמיים וערוצי Telegram ציבוריים.</p>
-      <p>המערכת אוספת כותרות ועדכונים בזמן אמת, מזהה דיווחים דומים ומקבצת אותם לידיעה אחת — כדי לצמצם כפילויות ולאפשר לראות במהירות מה חדש, מי מדווח וכמה מקורות עוסקים באותו אירוע.</p>
-      <div class="modal-note"><strong>חשוב לדעת</strong><span>כל ידיעה מפנה למקור המקורי: כתבה באתר החדשות או ההודעה הספציפית ב־Telegram. חדשותא אינו מעתיק כתבות מלאות ואינו מחליף את המקור העיתונאי.</span></div>
+      <h2 id="aboutModalTitle">לדעת מה באמת קורה עכשיו.</h2>
+      <p class="about-lead"><strong>חדשותא</strong> היא מערכת חדשות חיה שמרכזת במקום אחד דיווחים מאתרי חדשות, מקורות רשמיים וערוצי Telegram ציבוריים — ומנסה להפוך את שטף המידע לתמונה ברורה, מהירה ושימושית.</p>
+
+      <div class="about-process" aria-label="כך חדשותא עובדת">
+        <div><b>1</b><span><strong>אוספים</strong><small>עדכונים ממקורות שונים לאורך היום.</small></span></div>
+        <div><b>2</b><span><strong>מצליבים</strong><small>מזהים דיווחים שמתייחסים לאותו אירוע ומקבצים אותם יחד.</small></span></div>
+        <div><b>3</b><span><strong>מדרגים</strong><small>טריות, מספר מקורות, קצב הדיווחים ומקור רשמי משפיעים על חשיבות הסיפור.</small></span></div>
+        <div><b>4</b><span><strong>מפנים למקור</strong><small>כל דיווח נשאר מקושר למקום שבו פורסם במקור.</small></span></div>
+      </div>
+
+      <div class="about-feature-grid">
+        <div><span>🔥</span><b>הסיפור המרכזי</b><small>עדיפות לסיפור שמאומת בכמה מקורות שונים, עם סימון רמת האימות וה־Hot Score.</small></div>
+        <div><span>⚡</span><b>30 שניות להבין</b><small>חמישה עדכונים טריים ומרוכזים כדי להבין במהירות מה קורה עכשיו.</small></div>
+        <div><span>🚨</span><b>התרעות צבע אדום</b><small>התרעות חירום בזמן אמת לפי האזורים שבחרתם. מידע משלים בלבד — לא תחליף לפיקוד העורף.</small></div>
+        <div><span>🌤️</span><b>מזג אוויר</b><small>מזג האוויר והטמפרטורה לפי העיר שנבחרה.</small></div>
+        <div><span>🕯️</span><b>כניסת ויציאת שבת</b><small>זמני שבת והפרשה הקרובה לפי העיר.</small></div>
+        <div><span>💱</span><b>שערי מטבע</b><small>דולר ואירו מול השקל, עם מקור חלופי במקרה של תקלה.</small></div>
+        <div><span>🔔</span><b>התראות חדשות</b><small>אפשר לקבל התראה כשהסיפור המרכזי מתחלף לאחר אימות במספר מקורות.</small></div>
+        <div><span>📲</span><b>כמו אפליקציה</b><small>אפשר להוסיף את חדשותא למסך הבית ולפתוח אותה בחלון עצמאי.</small></div>
+      </div>
+
+      <div class="modal-note about-note"><strong>שקיפות</strong><span>חדשותא אינה גוף חדשות שמדווח מהשטח ואינה מחליפה את המקורות. המערכת אוספת, מקבצת, מדרגת ומפנה לדיווחים המקוריים. חדשות בזמן אמת עשויות להשתנות ולכן תמיד מומלץ לפתוח את מקור הידיעה לעדכון המלא.</span></div>
+      <a class="about-more-link" href="/how-it-works">קראו איך חדשותא עובדת מאחורי הקלעים ←</a>
     </section>
   </div>
 
@@ -579,6 +598,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=55.0.0" defer></script>
+  <script src="/app.js?v=57.0.0" defer></script>
 </body>
 </html>
