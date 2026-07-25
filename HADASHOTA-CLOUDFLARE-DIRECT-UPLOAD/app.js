@@ -19,6 +19,7 @@ const state = {
   dataDelayed: false,
   dataDelaySeverity: "ok",
   delayedShards: [],
+  hasLocalNewsFallback: false,
   lastDataGeneratedAt: null,
   city: localStorage.getItem("hadashota.city") || "telaviv",
   lastVisitAt: Number((localStorage.getItem("hadashota.lastVisitAt") ?? localStorage.getItem("pulse.lastVisitAt"))) || 0,
@@ -226,13 +227,13 @@ function init() {
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
   // Render the saved snapshot immediately, then bypass every news cache for a fresh entry snapshot.
-  loadNews(true);
+  loadNews(false);
   window.setTimeout(() => {
     const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
     const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 90_000;
     if (!state.loading && (state.dataDelayed || tooOld)) {
       state.lastForegroundRefreshAt = 0;
-      loadNews(true, true);
+      loadNews(false, true);
     }
   }, 20_000);
   restartAutoRefresh();
@@ -702,8 +703,10 @@ function refreshNewsOnForeground(reason = "foreground") {
   const now = Date.now();
   if (now - state.lastForegroundRefreshAt < FOREGROUND_FRESHNESS_MS) return;
   state.lastForegroundRefreshAt = now;
-  // force=true reaches the Worker as ?force=1 and bypasses its short-lived shard cache.
-  loadNews(true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
+  // Automatic foreground refreshes intentionally join the shared Worker snapshot.
+  // This keeps Safari, desktop and the installed iPhone Home Screen app on the
+  // same newsroom data instead of each device independently refreshing origins.
+  loadNews(false, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
 async function loadNews(force = false, fromRetry = false) {
@@ -754,6 +757,7 @@ async function loadNews(force = false, fromRetry = false) {
     state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
     state.dataDelayed = delayed || freshShards < NEWS_SHARDS.length;
     state.delayedShards = delayedShards;
+    state.hasLocalNewsFallback = payloads.some((payload) => !!payload.localFallback);
     state.dataDelaySeverity = getDataDelaySeverity({ delayed: state.dataDelayed, freshShards, delayedShards, generatedAt: data.generatedAt });
 
     if (!state.dataDelayed) {
@@ -854,6 +858,7 @@ function restoreLocalLastGood() {
   state.sources = data.sources;
   state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
   state.dataDelayed = true;
+  state.hasLocalNewsFallback = true;
   state.dataDelaySeverity = "major";
   state.delayedShards = NEWS_SHARDS.map((shard) => ({ shard, reason: "local_fallback", localFallback: true }));
   el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
@@ -868,7 +873,7 @@ function scheduleNewsRetry() {
   const delays = [4, 8, 15, 25];
   const seconds = delays[Math.min(state.retryAttempt, delays.length - 1)];
   state.retryAttempt += 1;
-  state.retryTimer = setTimeout(() => loadNews(true, true), seconds * 1000);
+  state.retryTimer = setTimeout(() => loadNews(false, true), seconds * 1000);
 }
 
 function getDataDelaySeverity({ delayed, freshShards, delayedShards, generatedAt }) {
@@ -1848,8 +1853,20 @@ function leadQualificationAt(reports) {
   return times.length >= 3 ? new Date(times[2]).toISOString() : null;
 }
 
+function newsroomReferenceNow() {
+  const serverNow = Date.parse(state.lastDataGeneratedAt || "");
+  return Number.isFinite(serverNow) ? serverNow : Date.now();
+}
+
 function renderLeadStory() {
-  const now = Date.now();
+  // A client-local fallback can differ between Safari, PWA and desktop. Never
+  // derive a new main headline from that mixed local state. Wait for a shared
+  // server-backed snapshot instead.
+  if (state.hasLocalNewsFallback) {
+    el.leadStory.classList.remove("hidden");
+    return;
+  }
+  const now = newsroomReferenceNow();
   const corroborationWindowMs = 150 * 60 * 1000;
   const allEntries = state.items.map((item) => {
     const latestAt = clusterLatestAt(item);
@@ -1877,35 +1894,31 @@ function renderLeadStory() {
     return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, qualificationAt, score, hotScore, hasOfficial, spreadMinutes };
   });
 
-  // Tier A: a corroborated, genuinely current story. 3+ distinct sources remain the gold standard.
+  // Canonical lead policy shared by every device:
+  // 1) 3+ DISTINCT publishers in the last 60 minutes.
+  // 2) Only if no such story exists, use 2+ distinct publishers.
+  // 3) A single-source item NEVER becomes the main story.
   const verified = allEntries
-    .filter((e) => e.uniqueSources >= 3 && e.qualificationAt && e.ageMinutes <= VERIFIED_LEAD_MAX_AGE_MS / 60000)
+    .filter((e) => e.uniqueSources >= 3 && e.qualificationAt && e.ageMinutes <= 60)
     .sort((a,b) => b.score-a.score || Date.parse(b.latestAt)-Date.parse(a.latestAt));
 
-  // Tier B: when no 3-source story is current, do NOT freeze yesterday's headline.
-  // Prefer a fresh developing story with two sources, then a fresh official report.
-  const developing = allEntries
-    .filter((e) => e.ageMinutes <= 45 && (e.uniqueSources >= 2 || e.hasOfficial))
+  const developingTwoSources = allEntries
+    .filter((e) => e.uniqueSources >= 2 && e.ageMinutes <= 60)
     .sort((a,b) => b.score-a.score || Date.parse(b.latestAt)-Date.parse(a.latestAt));
 
-  // Tier C: last resort is simply the freshest substantial story, capped at 60 minutes.
-  const freshFallback = allEntries
-    .filter((e) => e.ageMinutes <= 60)
-    .sort((a,b) => b.score-a.score || Date.parse(b.latestAt)-Date.parse(a.latestAt));
+  const olderCorroborated = allEntries
+    .filter((e) => e.uniqueSources >= 2 && e.ageMinutes <= 180)
+    .sort((a,b) => Date.parse(b.latestAt)-Date.parse(a.latestAt) || b.score-a.score);
 
-  let winner = verified[0] || developing[0] || freshFallback[0] || null;
-  const storedQualified = state.lastQualifiedLead || readStoredLeadSnapshot();
+  const winner = verified[0] || developingTwoSources[0] || olderCorroborated[0] || null;
 
-  // If a refresh is partial, a still-current verified snapshot may bridge the gap,
-  // but never for hours. Freshness always beats a stale headline.
-  if (state.dataDelayed && storedQualified?.entry?.item && leadSnapshotIsFresh(storedQualified, VERIFIED_LEAD_MAX_AGE_MS)) {
-    const storedLatest = Date.parse(storedQualified.entry.latestAt || 0);
-    const liveLatest = Date.parse(winner?.latestAt || 0);
-    if (!winner || (Number.isFinite(storedLatest) && (!Number.isFinite(liveLatest) || storedLatest > liveLatest))) winner = storedQualified.entry;
+  // Do not let Safari/PWA/desktop choose from their own local lead history.
+  // If the shared snapshot has no corroborated candidate, keep the lead in its
+  // loading/current state until the next shared refresh.
+  if (!winner) {
+    el.leadStory.classList.remove("hidden");
+    return;
   }
-
-  if (!winner) winner = buildFallbackLeadCandidate();
-  if (!winner) { el.leadStory.classList.remove("hidden"); return; }
 
   winner.leadMode = Number(winner.uniqueSources) >= 3 ? "verified" : "developing";
   const winnerFingerprint = leadFingerprint(winner);
@@ -2667,7 +2680,7 @@ function storyHotScore(item) {
   if (Number.isFinite(Number(item.hotScore))) return Math.max(0, Math.min(100, Math.round(Number(item.hotScore))));
   const reports = normalizeClusterReports(item);
   const latestMs = Date.parse(clusterLatestAt(item) || 0);
-  const age = Number.isFinite(latestMs) ? Math.max(0, (Date.now() - latestMs) / 60000) : 999;
+  const age = Number.isFinite(latestMs) ? Math.max(0, (newsroomReferenceNow() - latestMs) / 60000) : 999;
   const recent = reports.filter(r => Math.abs(latestMs - Date.parse(r.publishedAt || 0)) <= 120*60000);
   const count = recent.length;
   const times = recent.map(r => Date.parse(r.publishedAt || 0)).filter(Number.isFinite);
@@ -2705,7 +2718,7 @@ function annotateStoryIntelligence() {
 
 function isImportantStory(item) {
   const reports = normalizeClusterReports(item);
-  const age = Date.now() - Date.parse(clusterLatestAt(item) || 0);
+  const age = newsroomReferenceNow() - Date.parse(clusterLatestAt(item) || 0);
   const official = reports.some(r => r.official);
   return storyHotScore(item) >= 55 || reports.length >= 3 || (official && age <= 3*60*60*1000);
 }

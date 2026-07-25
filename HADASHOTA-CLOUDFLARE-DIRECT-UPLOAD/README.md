@@ -109,3 +109,22 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Two-source fallback is limited to recent/corroborated stories; older fallback is capped at 3 hours.
 - Official status alone no longer bypasses the 2-source minimum.
 - Push headline-change notifications remain restricted to 3+ sources.
+
+## V51 — visual layout polish
+- Desktop lead story and Latest panel now share the same fixed outer height.
+- Lead image reduced to a compact square: 238px desktop, 210px mid-size.
+- Main headline capped at four lines with automatic smaller sizing for long titles.
+- Summary capped at two lines; sources and intelligence badges are compact.
+- “למקור הידיעה” owns a dedicated bottom row and remains visible without scrolling.
+- Mobile remains natural auto-height with the existing responsive layout.
+- Reviewed global card sizing, touch target sizing and radius consistency.
+
+
+## V52 — canonical cross-device newsroom snapshot
+- Automatic cold-open, foreground and retry loads join the same Worker cache snapshot; manual refresh remains forced.
+- Shared snapshot TTL is 15 seconds.
+- Main headline ranking uses server generatedAt instead of the device clock.
+- Client-local cached shards never choose a new main headline.
+- Device-local saved lead history no longer participates in current lead selection.
+- Lead policy: 3+ distinct publishers in the last hour; only if none exists, 2+; never a single source.
+- iPhone Home Screen full-resume reload remains active and now rejoins the same canonical snapshot as Safari and desktop.
