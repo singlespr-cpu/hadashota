@@ -21,7 +21,15 @@ const SOURCES = [
   { id: "bhol-news", publisher: "bhol", name: "בחדרי חרדים", kind: "site", adapter: "jsonld", url: "https://www.bhol.co.il/categories/1072/", home: "https://www.bhol.co.il/categories/1072/", language: "he", verified: true },
   { id: "jdn", publisher: "jdn", name: "JDN", kind: "site", adapter: "jsonld", url: "https://www.jdn.co.il/", home: "https://www.jdn.co.il/", language: "he", verified: true },
 
+
+  // ---------- Official institutional sources (direct public pages) ----------
+  { id: "govil-news", publisher: "govil", name: "Gov.il חדשות הממשלה", kind: "site", adapter: "htmlnews", url: "https://www.gov.il/he/collectors/news", home: "https://www.gov.il/he/collectors/news", language: "he", verified: true, official: true },
+  { id: "boi-press", publisher: "boi", name: "בנק ישראל - הודעות לעיתונות", kind: "site", adapter: "htmlnews", url: "https://www.boi.org.il/publications/pressreleases/", home: "https://www.boi.org.il/publications/pressreleases/", language: "he", verified: true, official: true },
+  { id: "knesset-press", publisher: "knesset", name: "הכנסת - חדשות הכנסת", kind: "site", adapter: "htmlnews", url: "https://main.knesset.gov.il/News/PressReleases/Pages/default.aspx", home: "https://main.knesset.gov.il/News/PressReleases/Pages/default.aspx", language: "he", verified: true, official: true, defaultCategory: "politics" },
+  { id: "iaa-updates", publisher: "iaa", name: "רשות שדות התעופה - עדכונים", kind: "site", adapter: "htmlnews", url: "https://www.iaa.gov.il/airports/ben-gurion/notifications-and-updates/", home: "https://www.iaa.gov.il/airports/ben-gurion/notifications-and-updates/", language: "he", verified: true, official: true },
+
   // ---------- Telegram public preview pages ----------
+  { id: "tg-health", publisher: "health", name: "משרד הבריאות", kind: "telegram", adapter: "telegram", url: "https://t.me/s/MOHreport", home: "https://t.me/MOHreport", language: "he", verified: true, official: true },
   { id: "tg-idf", publisher: "idf", name: "צה״ל - הערוץ הרשמי", kind: "telegram", adapter: "telegram", url: "https://t.me/s/idf_telegram", home: "https://t.me/idf_telegram", language: "he", verified: true, official: true, defaultCategory: "security" },
   { id: "tg-homefront", publisher: "homefront", name: "פיקוד העורף", kind: "telegram", adapter: "telegram", url: "https://t.me/s/PikudHaOref_all", home: "https://t.me/PikudHaOref_all", language: "he", verified: true, official: true, defaultCategory: "security" },
   { id: "tg-police", publisher: "police", name: "משטרת ישראל", kind: "telegram", adapter: "telegram", url: "https://t.me/s/israelpoliceforce", home: "https://t.me/israelpoliceforce", language: "he", verified: true, official: true },
@@ -82,6 +90,12 @@ export default {
       return handleNews(request, ctx);
     }
 
+    if (url.pathname === "/api/media") {
+      if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handleOpenMedia(url, ctx);
+    }
+
     if (url.pathname === "/api/utilities") {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
@@ -135,14 +149,18 @@ export default {
 
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
-    if (url.pathname === "/" || url.pathname === "/index.html") return serveIndex(request, env, url.origin);
+    if (url.pathname === "/" || url.pathname === "/index.html") return serveHtmlAsset(request, env, url.origin, "/index.html");
+    if (url.pathname === "/about" || url.pathname === "/about/") return serveHtmlAsset(request, env, url.origin, "/about.html");
+    if (url.pathname === "/how-it-works" || url.pathname === "/how-it-works/") return serveHtmlAsset(request, env, url.origin, "/how-it-works.html");
+    if (url.pathname === "/contact" || url.pathname === "/contact/") return serveHtmlAsset(request, env, url.origin, "/contact.html");
+    if (url.pathname === "/copyright" || url.pathname === "/copyright/") return serveHtmlAsset(request, env, url.origin, "/copyright.html");
 
     return env.ASSETS.fetch(request);
   }
 };
 
-async function serveIndex(request, env, origin) {
-  const assetRequest = new Request(new URL("/index.html", request.url), request);
+async function serveHtmlAsset(request, env, origin, assetPath) {
+  const assetRequest = new Request(new URL(assetPath, request.url), request);
   const asset = await env.ASSETS.fetch(assetRequest);
   if (!asset.ok) return asset;
   const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
@@ -162,8 +180,17 @@ function robotsResponse(origin) {
 }
 
 function sitemapResponse(origin) {
-  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${escapeXml(origin)}/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>\n</urlset>`;
-  return new Response(body, { headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+  const today = new Date().toISOString();
+  const safeOrigin = escapeXml(origin);
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${safeOrigin}/</loc><lastmod>${today}</lastmod><changefreq>hourly</changefreq><priority>1.0</priority></url>
+  <url><loc>${safeOrigin}/about</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>${safeOrigin}/how-it-works</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>${safeOrigin}/contact</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>${safeOrigin}/copyright</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+</urlset>`;
+  return new Response(body, { headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=1800" } });
 }
 
 function escapeXml(value) {
@@ -221,6 +248,72 @@ function normalizeOrefCurrentAlerts(payload) {
       rawTime: row.time || row.alertDate || null
     }];
   }).filter((alert) => !alert.isDrill);
+}
+
+
+async function handleOpenMedia(url, ctx) {
+  const raw = cleanText(url.searchParams.get("q") || "").slice(0, 180);
+  const category = cleanText(url.searchParams.get("category") || "other");
+  const fallbackMap = {
+    security: "Israel security city night military",
+    politics: "Israel parliament government politics",
+    diplomatic: "diplomacy flags meeting middle east",
+    other: "Israel news city people"
+  };
+  const query = raw || fallbackMap[category] || fallbackMap.other;
+  const cache = caches.default;
+  const cacheKey = new Request(`https://hadashota.media.local/openverse?q=${encodeURIComponent(query)}&c=${encodeURIComponent(category)}`);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cors(cached);
+
+  const searchUrl = new URL("https://api.openverse.org/v1/images/");
+  searchUrl.searchParams.set("q", query);
+  searchUrl.searchParams.set("page_size", "12");
+  searchUrl.searchParams.set("license_type", "commercial");
+  searchUrl.searchParams.set("mature", "false");
+
+  let data = null;
+  try {
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/39 (+news aggregator; open-licensed media lookup)" } });
+    if (res.ok) data = await res.json();
+  } catch {}
+
+  const allowed = new Set(["cc0","pdm","by","by-sa"]);
+  let results = Array.isArray(data?.results) ? data.results : [];
+  let chosen = results.find((img) => allowed.has(String(img?.license || "").toLowerCase()) && /^https?:\/\//.test(img?.url || img?.thumbnail || ""));
+  // A breaking-news headline may be too specific (especially in Hebrew). If it yields no
+  // licensed result, use a broad thematic query rather than falling back to a publisher-owned image.
+  if (!chosen && raw) {
+    try {
+      const fallbackUrl = new URL("https://api.openverse.org/v1/images/");
+      fallbackUrl.searchParams.set("q", fallbackMap[category] || fallbackMap.other);
+      fallbackUrl.searchParams.set("page_size", "12");
+      fallbackUrl.searchParams.set("license_type", "commercial");
+      fallbackUrl.searchParams.set("mature", "false");
+      const fallbackRes = await fetch(fallbackUrl.toString(), { headers: { "Accept":"application/json", "User-Agent":"Hadashota/39 (+news aggregator; open-licensed media lookup)" } });
+      if (fallbackRes.ok) {
+        const fallbackData = await fallbackRes.json();
+        results = Array.isArray(fallbackData?.results) ? fallbackData.results : [];
+        chosen = results.find((img) => allowed.has(String(img?.license || "").toLowerCase()) && /^https?:\/\//.test(img?.url || img?.thumbnail || ""));
+      }
+    } catch {}
+  }
+  const payload = chosen ? {
+    image: {
+      url: chosen.url || chosen.thumbnail,
+      thumbnail: chosen.thumbnail || chosen.url,
+      creator: chosen.creator || "",
+      license: chosen.license || "",
+      licenseUrl: chosen.license_url || "",
+      landingUrl: chosen.foreign_landing_url || chosen.detail_url || "",
+      attribution: chosen.attribution || [chosen.creator, String(chosen.license || "").toUpperCase()].filter(Boolean).join(" · "),
+      provider: chosen.provider || "Openverse"
+    },
+    note: "Open-licensed media result; license metadata should remain attributable and is subject to the original license."
+  } : { image: null };
+  const response = json(payload, 200, { "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400" });
+  ctx?.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 }
 
 async function handleUtilities(request, ctx) {
@@ -533,6 +626,30 @@ async function handleNews(request, ctx) {
       .filter((result) => result.error)
       .map((result) => ({ id: result.source.id, name: result.source.name, error: result.error }));
 
+    const sourceHealth = settled.map((result) => {
+      const recentItems = result.items.filter((item) => {
+        const t = Date.parse(item.publishedAt);
+        return Number.isFinite(t) && t >= cutoff && t <= now + 10 * 60 * 1000;
+      });
+      const lastItemAt = recentItems[0]?.publishedAt || result.items[0]?.publishedAt || null;
+      const freshnessMinutes = lastItemAt ? Math.max(0, (now - Date.parse(lastItemAt)) / 60000) : 9999;
+      let healthScore = 100;
+      if (result.error) healthScore -= 70;
+      if (!recentItems.length) healthScore -= 20;
+      if (result.latencyMs > 5000) healthScore -= 18;
+      else if (result.latencyMs > 3000) healthScore -= 9;
+      if (freshnessMinutes > 360) healthScore -= 12;
+      healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
+      const healthStatus = healthScore < 35 ? "offline" : healthScore < 70 ? "degraded" : "healthy";
+      return {
+        id: result.source.id, publisher: result.source.publisher, name: result.source.name,
+        kind: result.source.kind, home: result.source.home, verified: !!result.source.verified,
+        official: !!result.source.official, independent: !!result.source.independent,
+        itemCount: recentItems.length, latencyMs: result.latencyMs, lastItemAt,
+        healthScore, healthStatus, error: result.error || null
+      };
+    }).sort((a,b) => Number(b.official)-Number(a.official) || b.healthScore-a.healthScore || Date.parse(b.lastItemAt||0)-Date.parse(a.lastItemAt||0));
+
     // A severely degraded refresh must never overwrite or replace a healthy feed.
     // When only a handful of sources answered, serve the previous good shard and retry soon.
     const minimumHealthySources = shard === "telegram" ? 3 : 4;
@@ -548,7 +665,7 @@ async function handleNews(request, ctx) {
       stale: false,
       tookMs: Date.now() - started,
       items: clustered,
-      sources: activeSources,
+      sources: sourceHealth,
       stats: {
         configuredSources: SOURCES.length,
         configuredShardSources: shardSources.length,
@@ -557,14 +674,17 @@ async function handleNews(request, ctx) {
         officialSources: activeSources.filter((source) => source.official).length,
         telegramSources: activeSources.filter((source) => source.kind === "telegram").length,
         failedSources: failedSources.length,
-        retriesUsed: 6 - retryBudget.remaining
+        retriesUsed: 6 - retryBudget.remaining,
+        healthySources: sourceHealth.filter((source) => source.healthStatus === "healthy").length,
+        degradedSources: sourceHealth.filter((source) => source.healthStatus === "degraded").length,
+        offlineSources: sourceHealth.filter((source) => source.healthStatus === "offline").length
       },
       failures: failedSources.slice(0, 12)
     };
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "25.0.0",
+      "X-Hadashota-Version": "38.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -592,7 +712,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "25.0.0"
+        "X-Hadashota-Version": "38.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -631,7 +751,7 @@ async function fetchSource(source, retryBudget = { remaining: 0 }) {
 
   while (attempt < 2) {
     try {
-      const timeoutMs = source.adapter === "telegram" ? 5400 : source.adapter === "jsonld" ? 6200 : 5600;
+      const timeoutMs = source.adapter === "telegram" ? 5400 : source.adapter === "jsonld" || source.adapter === "htmlnews" ? 6200 : 5600;
       const response = await fetchWithTimeout(source.url, timeoutMs);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -643,6 +763,7 @@ async function fetchSource(source, retryBudget = { remaining: 0 }) {
       if (source.adapter === "rss") items = parseRss(body, source);
       if (source.adapter === "telegram") items = parseTelegram(body, source);
       if (source.adapter === "jsonld") items = parseJsonLd(body, source);
+      if (source.adapter === "htmlnews") items = parseOfficialHtmlNews(body, source);
 
       items = dedupeSameSource(items)
         .filter((item) => item.title && item.url && item.publishedAt)
@@ -722,6 +843,38 @@ function parseRss(xml, source) {
     items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(description), imageUrl }));
   }
   return items;
+}
+
+
+function parseOfficialHtmlNews(html, source) {
+  const text = String(html || "");
+  const out = [];
+  const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = anchorRe.exec(text)) && out.length < 90) {
+    const href = absoluteUrl(match[1], source.home);
+    const title = cleanText(match[2]);
+    if (!href || !title || title.length < 18 || title.length > 320) continue;
+    const lower = href.toLowerCase();
+    const relevant = source.publisher === "govil" ? /\/departments\/news\//.test(lower)
+      : source.publisher === "boi" ? /pressreleases|press-releases/.test(lower)
+      : source.publisher === "knesset" ? /\/news\/pressreleases\/pages\/press/i.test(lower)
+      : source.publisher === "iaa" ? /notifications-and-updates|\/item\//.test(lower)
+      : true;
+    if (!relevant) continue;
+    const around = text.slice(Math.max(0, match.index - 700), Math.min(text.length, anchorRe.lastIndex + 900));
+    const iso = around.match(/(?:datetime|content)=["'](20\d{2}-\d{2}-\d{2}(?:T[^"']+)?)['"]/i)?.[1];
+    const dmy = around.match(/\b([0-3]?\d)[\.\/-]([01]?\d)[\.\/-](20\d{2})\b/);
+    const heDate = around.match(/\b(20\d{2})[-\/]([01]\d)[-\/]([0-3]\d)\b/);
+    let dateRaw = iso || null;
+    if (!dateRaw && dmy) dateRaw = `${dmy[3]}-${String(dmy[2]).padStart(2,"0")}-${String(dmy[1]).padStart(2,"0")}T12:00:00+03:00`;
+    if (!dateRaw && heDate) dateRaw = `${heDate[1]}-${heDate[2]}-${heDate[3]}T12:00:00+03:00`;
+    const publishedAt = safeIso(dateRaw || "");
+    if (!publishedAt) continue;
+    const preview = trimPreview(cleanText(around.replace(match[0], " ")), 220);
+    out.push(makeItem({ source, title, url: href, publishedAt, preview, imageUrl: null }));
+  }
+  return out;
 }
 
 function parseTelegram(html, source) {
@@ -848,7 +1001,7 @@ function makeItem({ source, title, url, publishedAt, preview, imageUrl = null })
     language: source.language || "he",
     title: normalizeSpace(title),
     preview: normalizeSpace(preview || ""),
-    imageUrl: sanitizeImageUrl(imageUrl),
+    imageUrl: source.imageReuse === "allowed" ? sanitizeImageUrl(imageUrl) : null,
     url,
     publishedAt,
     defaultCategory: source.defaultCategory || null
@@ -919,9 +1072,17 @@ function clusterItems(items) {
         reportCount: 1,
         firstReportAt: item.publishedAt,
         latestReportAt: item.publishedAt,
-        related: [relatedEntry]
+        related: [relatedEntry],
+        updates: [relatedEntry]
       });
       continue;
+    }
+
+    match.updates = Array.isArray(match.updates) ? match.updates : [...(match.related || [])];
+    if (!match.updates.some((update) => update.url === relatedEntry.url && update.publishedAt === relatedEntry.publishedAt)) {
+      match.updates.push(relatedEntry);
+      match.updates.sort((a,b) => Date.parse(a.publishedAt || 0) - Date.parse(b.publishedAt || 0));
+      if (match.updates.length > 24) match.updates = match.updates.slice(-24);
     }
 
     const existing = match.related.find((related) => related.publisher === item.publisher);
@@ -942,11 +1103,12 @@ function clusterItems(items) {
     const candidateScore = Number(item.sourceKind === "site") * 100 + Number(item.official) * 20 + Number(item.verified) * 5;
     if (candidateScore > representativeScore || (candidateScore === representativeScore && itemTime > Date.parse(match.publishedAt))) {
       const related = match.related;
+      const updates = match.updates;
       const reportCount = match.reportCount;
       const latestReportAt = match.latestReportAt;
       const firstReportAt = match.firstReportAt;
       const clusterImage = match.imageUrl || item.imageUrl || null;
-      Object.assign(match, item, { related, reportCount, latestReportAt, firstReportAt, imageUrl: clusterImage });
+      Object.assign(match, item, { related, updates, reportCount, latestReportAt, firstReportAt, imageUrl: clusterImage });
     }
   }
 

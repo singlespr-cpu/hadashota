@@ -52,3 +52,22 @@
 ## הערת בטיחות
 
 מרכז ההתרעות באתר הוא מידע משלים בלבד ואינו תחליף לצופרים, ליישומון פיקוד העורף או להנחיות הרשמיות.
+
+
+V39: Smart PWA install/home-screen recommendation with Chromium install prompt, iOS Add to Home Screen guidance, install-state detection, snooze memory, and a manual install entry in display preferences.
+
+
+## V39 Intelligence
+- Hot Score לכל סיפור, רמת אימות, התפתחות סיפור וטיימליין.
+- מצב רק חשוב, חם עכשיו, תקציר 30 שניות ומה השתנה מאז הביקור האחרון.
+- Trending עם מומנטום ולא רק ספירת מילים.
+- Health Score לכל מקור, כולל מקורות שאינם זמינים זמנית.
+- מקורות רשמיים נוספים: Gov.il, בנק ישראל, הכנסת ורשות שדות התעופה.
+- שמירת ההעדפה 'רק חשוב' מקומית במכשיר.
+
+
+## V39 editorial/legal-safety layer
+- Publisher-owned images are not displayed automatically unless a source is explicitly marked reusable.
+- Visuals are looked up through Openverse using commercial-compatible open licenses (CC0/PDM/CC BY/CC BY-SA), with attribution metadata retained when available.
+- Hadashota synthesizes display headlines from corroborated event facts; source names and direct links remain visible.
+- Added /copyright notice-and-takedown page.

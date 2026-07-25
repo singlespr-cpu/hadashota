@@ -2933,3 +2933,106 @@ html[data-theme="dark"] .lead-story-media.image-unavailable::after { color:#6670
 .currency-card .utility-head > .utility-label { order: 1 !important; }
 .shabbat-card .utility-head > .utility-icon,
 .currency-card .utility-head > .utility-icon { order: 2 !important; }
+
+
+/* V34 — brand slogan + SEO navigation */
+.brand-copy small { white-space:nowrap; letter-spacing:0; font-weight:600; }
+.footer-seo-links { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.footer-seo-links a { color:inherit; font-weight:700; text-decoration:none; }
+.footer-seo-links a:hover { text-decoration:underline; }
+@media (max-width:620px) {
+  .brand-copy small { display:block !important; font-size:8.5px !important; line-height:1.05; color:#7b8797; }
+  .brand-copy { gap:3px !important; }
+}
+@media (max-width:390px) {
+  .brand-copy small { font-size:8.2px !important; }
+  .brand-copy strong { font-size:16px !important; }
+}
+html[data-theme="dark"] .brand-copy small { color:#9aa5b4 !important; }
+
+
+/* V35 — persistent display preferences */
+.settings-save-note { margin:-3px 0 8px; color:#98a2b3; font-size:10px; font-weight:600; }
+.settings-reset-button { width:100%; margin-top:10px; border:1px solid rgba(17,24,39,.11); background:transparent; color:#667085; border-radius:10px; padding:8px 10px; font:inherit; font-size:10px; font-weight:800; cursor:pointer; }
+.settings-reset-button:hover { background:rgba(17,24,39,.035); color:#344054; }
+html[data-theme="dark"] .settings-reset-button { border-color:rgba(255,255,255,.1); color:#aeb7c4; }
+html[data-theme="dark"] .settings-reset-button:hover { background:rgba(255,255,255,.045); color:#eef2f7; }
+body.hide-feed-images .feed .news-image { display:none !important; }
+body.hide-feed-images .feed .news-card.has-image .news-main { grid-template-columns:minmax(0,1fr) auto !important; }
+@media (max-width:720px) { body.hide-feed-images .feed .news-card.has-image .news-main { grid-template-columns:minmax(0,1fr) !important; } }
+\n\n/* V36 — smart headline notification opt-in */\n.notification-offer-card {\n  width:min(92vw,480px);\n  text-align:center;\n  padding:28px 28px 24px;\n  border-radius:22px;\n  overflow:hidden;\n}\n.notification-offer-card::before {\n  content:""; position:absolute; inset:0 0 auto; height:4px;\n  background:linear-gradient(90deg,#e82937,#ff5b62);\n}\n.notification-offer-bell {\n  width:56px; height:56px; margin:0 auto 12px; border-radius:18px; display:grid; place-items:center;\n  background:rgba(232,41,55,.09); color:#d92735;\n}\n.notification-offer-bell svg { width:27px; height:27px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }\n.notification-offer-card .modal-eyebrow { color:#d92735; }\n.notification-offer-card h2 { margin:5px auto 10px; max-width:390px; font-size:clamp(21px,3vw,28px); line-height:1.15; }\n.notification-offer-card > p { margin:0 auto; max-width:405px; color:#5d6675; font-size:13.5px; line-height:1.72; }\n.notification-offer-highlight {\n  margin:17px 0 18px; padding:11px 13px; border:1px solid rgba(232,41,55,.11); border-radius:13px;\n  background:rgba(232,41,55,.045); display:flex; align-items:flex-start; gap:9px; text-align:right; color:#4b5565; font-size:12px; line-height:1.5;\n}\n.notification-offer-highlight i { width:8px; height:8px; margin-top:5px; border-radius:50%; background:#e82937; box-shadow:0 0 0 4px rgba(232,41,55,.10); flex:0 0 auto; }\n.notification-offer-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }\n.notification-offer-actions button { border:0; border-radius:11px; padding:11px 13px; font:inherit; font-size:12px; font-weight:900; cursor:pointer; transition:transform .15s ease,box-shadow .15s ease,background .15s ease; }\n.notification-offer-actions button:active { transform:translateY(1px); }\n.notification-offer-accept { background:#e82937; color:#fff; box-shadow:0 8px 22px rgba(232,41,55,.18); }\n.notification-offer-accept:hover { background:#d82331; }\n.notification-offer-decline { background:#f1f3f6; color:#5b6573; }\n.notification-offer-decline:hover { background:#e9edf2; }\n.notification-offer-note { display:block; margin-top:11px; color:#98a2b3; font-size:9.5px; font-weight:600; }\nhtml[data-theme="dark"] .notification-offer-bell { background:rgba(255,79,91,.12); color:#ff727c; }\nhtml[data-theme="dark"] .notification-offer-card > p, html[data-theme="dark"] .notification-offer-highlight { color:#b8c0cb; }\nhtml[data-theme="dark"] .notification-offer-highlight { background:rgba(255,79,91,.055); border-color:rgba(255,114,124,.13); }\nhtml[data-theme="dark"] .notification-offer-decline { background:#202731; color:#c6ced8; }\nhtml[data-theme="dark"] .notification-offer-decline:hover { background:#28313d; }\n@media (max-width:520px) {\n  .notification-offer-card { width:calc(100vw - 28px); padding:24px 18px 20px; border-radius:19px; }\n  .notification-offer-bell { width:50px; height:50px; border-radius:16px; margin-bottom:10px; }\n  .notification-offer-card h2 { font-size:21px; max-width:310px; }\n  .notification-offer-card > p { font-size:12.5px; line-height:1.65; }\n  .notification-offer-highlight { font-size:11px; margin:14px 0 15px; }\n  .notification-offer-actions { grid-template-columns:1fr; }\n  .notification-offer-actions button { min-height:44px; font-size:12.5px; }\n  .notification-offer-decline { order:2; }\n}\n
+/* V38 — smart PWA / home-screen install experience */
+.settings-install-button {
+  width:100%; margin-top:10px; border:1px solid rgba(232,41,55,.18); background:rgba(232,41,55,.055);
+  color:#cf2633; border-radius:10px; padding:9px 10px; font:inherit; font-size:10px; font-weight:900; cursor:pointer;
+  transition:background .15s ease,border-color .15s ease,transform .15s ease;
+}
+.settings-install-button:hover { background:rgba(232,41,55,.09); border-color:rgba(232,41,55,.28); }
+.settings-install-button:active { transform:translateY(1px); }
+.settings-install-button:disabled { cursor:default; opacity:.72; color:#667085; background:rgba(17,24,39,.035); border-color:rgba(17,24,39,.09); }
+html[data-theme="dark"] .settings-install-button { color:#ff8b94; background:rgba(255,79,91,.07); border-color:rgba(255,114,124,.16); }
+html[data-theme="dark"] .settings-install-button:disabled { color:#9aa5b3; background:#171e27; border-color:#303947; }
+
+.install-offer-card { width:min(92vw,500px); text-align:center; padding:28px 28px 24px; border-radius:22px; overflow:hidden; }
+.install-offer-card::before { content:""; position:absolute; inset:0 0 auto; height:4px; background:linear-gradient(90deg,#e82937,#ff6a72); }
+.install-offer-icon { width:58px; height:58px; margin:0 auto 12px; border-radius:18px; display:grid; place-items:center; background:rgba(232,41,55,.085); color:#d92735; }
+.install-offer-icon svg { width:29px; height:29px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.install-offer-card .modal-eyebrow { color:#d92735; }
+.install-offer-card h2 { margin:5px auto 10px; max-width:410px; font-size:clamp(21px,3vw,28px); line-height:1.15; }
+.install-offer-card > p { margin:0 auto; max-width:420px; color:#5d6675; font-size:13.5px; line-height:1.72; }
+.install-instructions { margin:17px 0 18px; padding:11px 13px; border:1px solid rgba(17,24,39,.08); background:#f8fafc; border-radius:14px; text-align:right; display:grid; gap:8px; }
+.install-step { display:flex; align-items:flex-start; gap:9px; color:#4f5968; font-size:12px; line-height:1.55; }
+.install-step > b { flex:0 0 22px; width:22px; height:22px; display:grid; place-items:center; border-radius:7px; background:#fff; color:#d92735; border:1px solid rgba(232,41,55,.12); font-size:10px; }
+.install-step span strong { color:#252d38; }
+.install-step em { font-style:normal; font-size:17px; vertical-align:-1px; }
+.install-offer-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.install-offer-actions button { border:0; border-radius:11px; min-height:42px; padding:11px 13px; font:inherit; font-size:12px; font-weight:900; cursor:pointer; transition:transform .15s ease,background .15s ease,box-shadow .15s ease; }
+.install-offer-actions button:active { transform:translateY(1px); }
+.install-offer-accept { background:#e82937; color:#fff; box-shadow:0 8px 22px rgba(232,41,55,.18); }
+.install-offer-accept:hover { background:#d82331; }
+.install-offer-later { background:#f1f3f6; color:#5b6573; }
+.install-offer-later:hover { background:#e9edf2; }
+.install-offer-note { display:block; margin-top:11px; color:#98a2b3; font-size:9.5px; font-weight:600; }
+html[data-theme="dark"] .install-offer-icon { background:rgba(255,79,91,.12); color:#ff727c; }
+html[data-theme="dark"] .install-offer-card > p { color:#b8c0cb; }
+html[data-theme="dark"] .install-instructions { background:#10161e; border-color:#2c3541; }
+html[data-theme="dark"] .install-step { color:#b8c0cb; }
+html[data-theme="dark"] .install-step > b { background:#171e27; border-color:rgba(255,114,124,.15); color:#ff818a; }
+html[data-theme="dark"] .install-step span strong { color:#eef2f6; }
+html[data-theme="dark"] .install-offer-later { background:#202731; color:#c6ced8; }
+html[data-theme="dark"] .install-offer-later:hover { background:#28313d; }
+@media (max-width:520px) {
+  .install-offer-card { width:calc(100vw - 28px); padding:24px 18px 20px; border-radius:19px; }
+  .install-offer-icon { width:50px; height:50px; border-radius:16px; margin-bottom:10px; }
+  .install-offer-card h2 { font-size:21px; max-width:320px; }
+  .install-offer-card > p { font-size:12.5px; line-height:1.65; }
+  .install-instructions { margin:14px 0 15px; padding:10px 11px; }
+  .install-step { font-size:11.5px; }
+  .install-offer-actions { grid-template-columns:1fr; }
+  .install-offer-actions button { min-height:44px; font-size:12.5px; }
+  .install-offer-later { order:2; }
+}
+
+
+/* V38 — Hadashota Intelligence */
+.intelligence-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 14px;padding:12px 14px;border:1px solid var(--border,#e7e9ee);border-radius:16px;background:linear-gradient(135deg,rgba(255,255,255,.98),rgba(248,249,252,.98));box-shadow:0 8px 25px rgba(16,24,40,.05)}
+.hot-now-pill{display:flex;align-items:center;gap:8px;min-width:0}.hot-now-pill i{width:9px;height:9px;border-radius:50%;background:#ef233c;box-shadow:0 0 0 5px rgba(239,35,60,.1);animation:pulseHot 1.8s infinite}.hot-now-pill strong{font-size:13px}.hot-now-pill small{font-size:10px;color:#7b8494}.intelligence-actions{display:flex;gap:8px}.intelligence-actions button{border:1px solid #dfe3ea;background:#fff;border-radius:11px;padding:8px 12px;font:inherit;font-size:11px;font-weight:800;cursor:pointer}.intelligence-actions button.active{background:#111827;color:#fff;border-color:#111827}.intelligence-actions #quickBriefBtn{background:#e9002b;color:#fff;border-color:#e9002b}
+.since-visit{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0;padding:8px 12px;border-radius:11px;background:#f0f7ff;color:#175cd3;font-size:11px;border:1px solid #d6e8ff}.since-visit span{font-size:15px}.since-visit.hidden{display:none}
+.lead-intelligence{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.lead-intelligence span{font-size:10px;font-weight:800;padding:5px 8px;border-radius:999px;background:#f6f7f9;border:1px solid #e5e7eb;color:#344054}.lead-intelligence span:first-child{color:#b42318;background:#fff4f2;border-color:#ffd6d2}
+.lead-timeline-details{margin-top:10px;border-top:1px solid #edf0f3;padding-top:8px}.lead-timeline-details.hidden{display:none}.lead-timeline-details summary{cursor:pointer;font-size:11px;font-weight:800;color:#475467;list-style:none}.lead-timeline{display:grid;gap:6px;margin-top:8px}.lead-timeline a{display:grid;grid-template-columns:42px 95px 1fr;gap:7px;align-items:center;text-decoration:none;color:inherit;padding:6px 8px;background:#fafbfc;border-radius:9px}.lead-timeline time{font-size:10px;color:#667085}.lead-timeline span{font-size:10px;font-weight:800;color:#344054;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lead-timeline b{font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hot-badge,.verification-badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 6px;font-size:9px!important;font-weight:800!important}.hot-badge{background:#fff3f0;color:#c4320a}.hot-badge.hot-very{background:#fee4e2;color:#b42318}.verification-badge{background:#ecfdf3;color:#027a48}.story-timeline-mini .related-link{display:grid;grid-template-columns:42px 90px 1fr;align-items:center;gap:6px}.story-timeline-mini .related-link b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.story-timeline-mini time{font-size:10px;color:#667085}
+.source-health{display:block;font-style:normal;font-size:9px;margin-top:2px;color:#667085}.source-health.health-healthy{color:#027a48}.source-health.health-degraded{color:#b54708}.source-health.health-offline{color:#b42318}.source-state.degraded{background:#f79009!important}.source-state.offline{background:#f04438!important}
+.quick-brief-card{max-width:680px}.quick-brief-list{display:grid;gap:8px;margin-top:14px}.brief-story{display:flex;align-items:flex-start;gap:10px;text-decoration:none;color:inherit;border:1px solid #e9ecf1;border-radius:13px;padding:10px;background:#fff}.brief-story em{display:grid;place-items:center;min-width:25px;height:25px;border-radius:8px;background:#111827;color:#fff;font-style:normal;font-weight:900;font-size:11px}.brief-story div{display:grid;gap:4px}.brief-story b{font-size:13px;line-height:1.35}.brief-story small{color:#667085;font-size:10px}
+@keyframes pulseHot{50%{box-shadow:0 0 0 8px rgba(239,35,60,0)}}
+html[data-theme="dark"] .intelligence-bar,html[data-theme="dark"] .brief-story{background:#111720;border-color:#2b3442}html[data-theme="dark"] .intelligence-actions button{background:#171e28;color:#e5e7eb;border-color:#303947}html[data-theme="dark"] .lead-intelligence span,html[data-theme="dark"] .lead-timeline a{background:#171e28;border-color:#303947;color:#d0d5dd}html[data-theme="dark"] .since-visit{background:#10223b;border-color:#1d3c66;color:#84adff}
+@media(max-width:700px){.intelligence-bar{align-items:stretch;flex-direction:column;padding:10px 11px}.hot-now-pill{display:grid;grid-template-columns:auto 1fr}.hot-now-pill small{grid-column:2}.intelligence-actions{display:grid;grid-template-columns:1fr 1.35fr}.intelligence-actions button{padding:9px 7px;font-size:10px}.lead-timeline a{grid-template-columns:38px 72px 1fr}.story-timeline-mini .related-link{grid-template-columns:38px 72px 1fr}.brief-story b{font-size:12px}}
+.hot-now-pill{border:0;background:transparent;text-align:right;font:inherit;color:inherit;cursor:pointer;padding:0}.hot-now-pill.active strong{color:#d92d20}.hot-now-pill:focus-visible{outline:2px solid #175cd3;outline-offset:5px;border-radius:8px}
+
+
+/* V39 — licensed/open-media presentation */
+.safe-news-image { position:relative; overflow:hidden; background:linear-gradient(135deg,#eef2f7,#dce5ef); }
+.safe-media-slot { display:block; width:100%; height:100%; min-height:110px; background:linear-gradient(135deg,rgba(17,24,39,.04),rgba(239,68,68,.08)); }
+.safe-media-slot::after { content:"חדשותא"; position:absolute; inset:0; display:grid; place-items:center; font-weight:900; font-size:18px; color:rgba(17,24,39,.18); letter-spacing:.04em; }
+.lead-story-media[data-media-credit]::after { content:attr(data-media-credit); position:absolute; left:8px; bottom:7px; max-width:75%; padding:3px 7px; border-radius:7px; background:rgba(0,0,0,.58); color:#fff; font-size:9px; line-height:1.2; z-index:3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+html[data-theme="dark"] .safe-news-image { background:linear-gradient(135deg,#161c25,#222b38); }
+html[data-theme="dark"] .safe-media-slot::after { color:rgba(255,255,255,.2); }
