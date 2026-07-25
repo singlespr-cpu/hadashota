@@ -1,213 +1,100 @@
-# חדשותא — HADASHOTA FINAL V25 LAUNCH
+# חדשותא — HADASHOTA V66 iOS / COLD-EDGE FIX
 
-גרסת production לפריסה ב-Cloudflare Workers + Static Assets.
+חדשותא הוא אגרגטור חדשות ישראלי בעברית וב־RTL, המשלב אתרי חדשות, מקורות רשמיים וערוצי Telegram ציבוריים. המערכת מקבצת דיווחים על אותו אירוע, מדרגת סיפורים ומציגה פיד עדכונים, סיפור מרכזי, התרעות חירום, מזג אוויר, זמני שבת, מט״ח ופיצ'רים משלימים.
 
-## עיקרי V25
+## פריסה
 
-- סיפור מרכזי חכם עם סף קשיח של לפחות 3 מקורות שונים.
-- אימות הסיפור הראשי נספר רק מדיווחים שהופיעו בחלון זמן של עד 45 דקות סביב אותו אירוע, כדי למנוע ניפוח ממקורות ישנים.
-- יציבות לכותרת הראשית: סיפור חדש מחליף את הקיים רק כשהוא חזק משמעותית, כשהקיים מתיישן או כשאירוע טרי ומגובה במקור רשמי פורץ קדימה.
-- תג הסיפור הראשי מסביר את קצב האימות, למשל “4 מקורות · תוך 9 דק׳”.
-- אזור “האחרונים” ממוין כרונולוגית, עד 20 ידיעות, עם גלילה אוטומטית עדינה בדסקטופ והרחבה ידנית במובייל.
-- מרכז התרעות פיקוד העורף עם סינון יישובים, צליל, התראות דפדפן ובדיקת מערכת.
-- התאמת יישובים הוקשחה לגבולות מילים כדי להימנע מהתאמות שגויות בין שמות דומים.
-- תיקון ניקוי BOM בתשובת ההתרעות ותיקון נרמול רווחים בשמות יישובים.
-- שיפור נגישות: התרעת screen reader מופעלת רק בעת שינוי אמיתי בהתרעה ולא בכל בדיקת polling.
-- כפתור חזרה למעלה נוסף בפועל לממשק.
-- H1 סמוי ונגיש נוסף למסמך.
-- תיקון מדד retriesUsed ב-health/stats.
-- מט״ח: Yahoo Finance כמקור שוק ראשי, Frankfurter כגיבוי גלובלי ובנק ישראל כגיבוי נוסף.
-- מזג אוויר Open-Meteo וזמני שבת Hebcal.
-- Last Good Data, retry אוטומטי, פיצול sites/telegram, מצב כהה, PWA והתראות כותרת ראשית.
-
-## רענון ועמידות
-
-- שני shards: `sites` ו-`telegram`.
-- Cache חדשות קצר של כ-25 שניות.
-- רענון לקוח: 30 שניות בטאב פעיל / 60 שניות ברקע.
-- Retry בעת עיכוב: 4 / 8 / 15 / 25 שניות.
-- Last Good Data נשמר ב-Cloudflare ובדפדפן.
-- עיכוב קל של shard יחיד מוצג כסטטוס קומפקטי; פס צהוב גדול נשמר לעיכוב משמעותי.
+1. מעלים את כל תוכן ה־ZIP לשורש פרויקט Cloudflare Workers + Static Assets / Pages התומך ב־`_worker.js` וב־`env.ASSETS`.
+2. אין צורך במפתח API עבור Open-Meteo, Hebcal או Frankfurter.
+3. `index.html` ועמודי המידע מכילים `__SITE_URL__`; ה־Worker מחליף אותו ב־origin האמיתי בזמן הגשת HTML.
+4. להפעלת בדיקת health עמוקה יש להגדיר ב־Cloudflare משתנה סודי בשם `HADASHOTA_DIAGNOSTIC_KEY`. ללא המשתנה, `/api/health?deep=...` חסום בכוונה.
 
 ## API
 
 - `/api/news?shard=sites`
 - `/api/news?shard=telegram`
-- `/api/news?shard=sites&force=1`
-- `/api/health`
-- `/api/health?deep=1`
-- `/api/health?deep=telegram`
+- `/api/news?shard=sites&force=1` — רענון כפוי מתוך האתר; מוגבל ומוגן נגד שימוש מופרז.
+- `/api/news?shard=telegram&force=1`
 - `/api/utilities?city=telaviv`
 - `/api/alerts`
+- `/api/media?q=...&category=...`
+- `/api/health`
+- `/api/health?deep=sites` — דורש מפתח diagnostics.
 - `/robots.txt`
 - `/sitemap.xml`
 
-## פריסה
+## מדיניות הסיפור המרכזי
 
-1. מעלים את כל תוכן ה-ZIP לשורש הפרויקט המחובר ל-Cloudflare.
-2. מבצעים Deploy/Commit כרגיל.
-3. אין צורך במפתח API עבור Open-Meteo, Hebcal או Frankfurter.
-4. `index.html` מכיל `__SITE_URL__`; ה-Worker מחליף אותו אוטומטית ב-origin האמיתי בזמן הגשת דף הבית.
+- ידיעה ממקור יחיד לעולם אינה יכולה להיות הסיפור המרכזי.
+- סיפור עם 3 מפרסמים שונים ומעלה מקבל עדיפות כאשר יש דיווחים תומכים מהשעה האחרונה.
+- ירידה ל־2 מקורות מותרת רק כאשר snapshot החדשות עצמו מכיל לפחות שעה מלאה של היסטוריה ולא נמצא בה סיפור 3+ מקורות מתאים.
+- fallback של 2 מקורות מוגבל לסיפור בן עד 3 שעות וגם כפוף לאותו כלל.
+- ספירת מקורות נעשית לפי publisher ייחודי, לא לפי מספר פריטים מאותו אתר/ערוץ.
 
-## הערת בטיחות
+## Freshness ו־cache ב־V66
 
-מרכז ההתרעות באתר הוא מידע משלים בלבד ואינו תחליף לצופרים, ליישומון פיקוד העורף או להנחיות הרשמיות.
+- פתיחה קרה מציגה snapshot משותף קצר ואז מבצעת מיד משיכה כפויה אמיתית.
+- `force=1` עוקף גם את cache של `/api/news` וגם את cache המשיכות ל־RSS/HTML/Telegram במקור.
+- מקסימום 6 משיכות מקורות בו־זמנית.
+- תגובת הלקוח ברענון אמיתי היא `no-store`; עותק cache נפרד נכתב ל־Worker snapshot קצר.
+- force מוגבל לכ־8 שניות לכל IP + shard כדי לצמצם abuse.
+- Cache API אינו משתמש ב־`stale-while-revalidate`; לכן V66 מגדירה TTL מפורש וקצר ללא directive שאינו נתמך.
+- Last Good מקומי נשמר רק מתגובה טרייה ואינו יכול להישמר מחדש מתוך stale fallback.
+- Last Good מקומי פג אחרי 15 דקות.
+- Last Good של ה־Worker לא מוחזר אם הוא בן יותר מ־30 דקות.
+- freshness מחושב בנפרד ל־sites ול־telegram; shard טרי לא מסתיר shard ישן.
+- `sw.js` מוגש ללא cache והרישום משתמש ב־`updateViaCache: "none"`.
 
+## תמונות
 
-V39: Smart PWA install/home-screen recommendation with Chromium install prompt, iOS Add to Home Screen guidance, install-state detection, snooze memory, and a manual install entry in display preferences.
+- תמונות מקור נשמרות רק עבור source שהוגדר מפורשות עם הרשאת reuse.
+- ברירת המחדל היא Wikimedia Commons / Openverse עם מנגנון התאמה סמנטית.
+- תמונת fallback שאינה צילום האירוע מסומנת כאילוסטרציה.
+- תוצאות media נשמרות 30 דקות בלבד; no-match נשמר 5 דקות.
+- תמונות פיד נטענות עם `IntersectionObserver` רק כשהן מתקרבות למסך.
 
+## התרעות
 
-## V39 Intelligence
-- Hot Score לכל סיפור, רמת אימות, התפתחות סיפור וטיימליין.
-- מצב רק חשוב, חם עכשיו, תקציר 30 שניות ומה השתנה מאז הביקור האחרון.
-- Trending עם מומנטום ולא רק ספירת מילים.
-- Health Score לכל מקור, כולל מקורות שאינם זמינים זמנית.
-- מקורות רשמיים נוספים: Gov.il, בנק ישראל, הכנסת ורשות שדות התעופה.
-- שמירת ההעדפה 'רק חשוב' מקומית במכשיר.
+- הלקוח בודק התרעות כל 2 שניות כשהאתר פעיל וכל 5 שניות ברקע.
+- ה־Worker משתף תוצאת OREF למשך 2 שניות בכל edge location, כך שמשתמשים רבים אינם גורמים בהכרח לבקשת origin נפרדת בכל poll.
+- התרעות חדשותא הן מידע משלים בלבד ואינן תחליף ליישומון פיקוד העורף, לצופרים או להנחיות הרשמיות.
+- התראת "סיפור מרכזי" הנוכחית היא Notification מקומית כשהאתר/PWA עדיין פעיל; Push אמיתי כשהאפליקציה סגורה דורש אחסון subscriptions + VAPID + trigger מתוזמן בצד Cloudflare, ולכן אינו מוצג כיכולת קיימת ב־V66.
 
+## אבטחה ונגישות
 
-## V39 editorial/legal-safety layer
-- Publisher-owned images are not displayed automatically unless a source is explicitly marked reusable.
-- Visuals are looked up through Openverse using commercial-compatible open licenses (CC0/PDM/CC BY/CC BY-SA), with attribution metadata retained when available.
-- Hadashota synthesizes display headlines from corroborated event facts; source names and direct links remain visible.
-- Added /copyright notice-and-takedown page.
+- CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy ו־COOP מוגדרים ב־HTML.
+- diagnostics עמוקים חסומים ללא secret.
+- force refresh מאומת כבקשה שמגיעה מהאתר ומוגבל בזמן.
+- כל הפופאפים משתמשים ב־`aria-modal`, background `inert`, focus trap, Escape והחזרת focus לאלמנט שפתח אותם.
+- מערכת המודאלים מותאמת ל־safe areas ול־`100dvh`; תוכן ארוך גולל במקום להיחתך.
 
+## הערה על סנכרון בין מכשירים
 
-## V40 newsroom + media resolver
-- Front-page and feed headlines use an upgraded newsroom-style synthesis: punchier phrasing while avoiding simple verbatim mirroring of a publisher headline.
-- Media resolver now tries Wikimedia Commons first for named people/places/institutions, then Openverse, with Hebrew-to-English entity/action expansion and category fallbacks.
-- Only public-domain / CC0 / CC BY / CC BY-SA results are accepted, and visible attribution metadata is preserved.
-- Feed media hydration capacity was increased so substantially more visible stories receive licensed imagery.
-
-## V42 — Fresh Lead + Consensus Newsroom
-- הסיפור המרכזי המאומת (3+ מקורות) מוגבל לעד שעתיים מהעדכון האחרון; כותרת ישנה לא נשמרת שעות רק בגלל שהייתה מאומתת.
-- אם אין כרגע סיפור טרי עם 3 מקורות, מוצג סיפור מתפתח טרי (2 מקורות / מקור רשמי / הסיפור הטרי והמשמעותי ביותר). התראות Push על החלפת סיפור מרכזי עדיין נשלחות רק לסיפור עם 3+ מקורות.
-- חלון איחוד הדיווחים הורחב בזהירות כדי לזהות ניסוחים שונים של אותו אירוע בין אתרים ו-Telegram.
-- מנוע הכותרות בוחר ניסוח "מדואיד" שמקבל את מירב התמיכה משאר כותרות האשכול ומלטש אותו, במקום תבניות דרמטיות קבועות.
-- מנוע התמונות דורש התאמה חזקה יותר לאדם/אירוע; תמונות מקום/ארכיון מסומנות במפורש כאילוסטרציה.
-
-
-## V48 FINAL STABLE
-- Forced fresh news request on every cold open.
-- Fresh refresh on iOS/PWA BFCache restore, return from background, and network reconnect.
-- HTML shell is no-store/revalidated so an old installed PWA page is not retained after deploy.
-- Local last-good is visual fallback only while the system retries a fresh network load.
-- Third-party source images are disabled unless explicitly whitelisted for reuse; open-license media remains enabled.
-- Copyright/takedown and privacy pages updated.
-
-## V49 — iPhone Home Screen refresh fix
-- iOS standalone/Home Screen mode is explicitly detected with display-mode/navigator.standalone.
-- Returning to a suspended Home Screen web app after 3+ seconds performs a full same-origin reload.
-- BFCache page restores also force a full reload in standalone mode.
-- Reload-loop guard is stored in sessionStorage.
-- Normal Safari/desktop behavior remains network-refresh based without forced page reload.
-
-## V50 — Main story corroboration lock
-- A one-source story can never become the main story.
-- Primary rule: 3+ distinct publishers within the last 60 minutes.
-- Only when no such 3-source story exists may the system use a 2-source story.
-- Two-source fallback is limited to recent/corroborated stories; older fallback is capped at 3 hours.
-- Official status alone no longer bypasses the 2-source minimum.
-- Push headline-change notifications remain restricted to 3+ sources.
-
-## V51 — visual layout polish
-- Desktop lead story and Latest panel now share the same fixed outer height.
-- Lead image reduced to a compact square: 238px desktop, 210px mid-size.
-- Main headline capped at four lines with automatic smaller sizing for long titles.
-- Summary capped at two lines; sources and intelligence badges are compact.
-- “למקור הידיעה” owns a dedicated bottom row and remains visible without scrolling.
-- Mobile remains natural auto-height with the existing responsive layout.
-- Reviewed global card sizing, touch target sizing and radius consistency.
-
-## V53 — canonical lead hotfix
-- Fixed the hero being stuck on “מזהה את הסיפור המרכזי”.
-- Automatic desktop/Safari/Home-Screen loads now join the same shared Worker snapshot.
-- Only the explicit manual Refresh button bypasses the shared snapshot.
-- Lead ranking uses the server snapshot timestamp for deterministic cross-device selection.
-- 3+ distinct publishers is the primary main-story rule; if none exists in the last hour, 2+ is allowed.
-- A one-source item can never masquerade as a corroborated main story; it is shown only as “עדכון מתפתח עכשיו” so the hero is never blank.
-- Push notifications remain 3+ sources only.
-
-## V54 — desktop install button hotfix
-- Fixed missing click event bindings for the install modal buttons.
-- “התקינו את חדשותא” now calls the browser's native beforeinstallprompt when available.
-- Manual “הוספת חדשותא למכשיר” opens the install offer correctly.
-- “לא עכשיו” now closes the modal and snoozes it.
-- Unsupported desktop browsers show real install/favorites instructions instead of appearing unresponsive.
-
-## V55 — quick brief modal polish
-- The “30 seconds to understand what’s happening” modal now shows the 5 items in chronological order (newest first), using the shared server snapshot clock.
-- Modal reduced in size and compressed so 5 updates fit without needing internal scrolling in normal cases.
-- Bottom “סגירה” button moved to the left side of the footer (RTL-left via flex-end).
-- Card spacing, rank badge, metadata chips and source button sizes tightened for a cleaner fit.
+V66 מקשיחה את מקור הבעיה הפרקטי של Safari/PWA: local snapshot ישן כבר אינו יכול להישאר לאורך זמן, ופתיחה מבצעת רענון אמיתי עד המקורות. ה־snapshot המשותף הקצר עדיין מבוסס על Cloudflare Cache API, ולכן אין הבטחה ארכיטקטונית ל־state זהה לחלוטין בין data centers שונים. הבטחה גלובלית strong-consistency דורשת binding מתמשך שמוגדר בצד Cloudflare, כגון Durable Object; ZIP סטטי לבדו אינו יכול ליצור binding כזה אוטומטית.
 
 
-## V56 — quick brief fit + backdrop
-- Darker blurred backdrop added behind the quick-brief modal for stronger focus.
-- Close button kept on the left side and given more inset space so it no longer clips.
-- Modal width/height reduced and the 5 update cards compacted further to avoid internal scrolling in common cases.
+### תיקוני V66 לאייפון / Chrome iOS
 
-## V57 — About + information pages
-- Rebuilt the About modal with a clear explanation of collection, clustering, corroboration, ranking and source linking.
-- Added feature overview: Red Alert, weather, Shabbat times, FX rates, news notifications, 30-second brief and Home Screen installation.
-- Rewrote and redesigned About, How It Works, Privacy, Copyright/Takedown and Contact pages into one consistent premium information system.
-- Updated old v34 asset references on informational pages to the current release.
+- טעינת החדשות פרוגרסיבית: ה־shard הראשון שחוזר מוצג מיד, בלי לחכות ל־shard השני.
+- ל־Worker יש budget זמן קשיח לכל איסוף shard, כדי ש־edge קר לא יחזיק בקשת מובייל עד timeout.
+- timeout בצד הלקוח הוגדל ל־28 שניות כרשת ביטחון, אך ה־Worker אמור לסיים קודם.
+- בקשת `/api/news` מהדפדפן פושטָה: ללא `Cache-Control` מותאם אישית; `cache: no-store` + cache-busting query נשארים.
+- הוסר RegExp lookbehind מה־JavaScript של הלקוח לשיפור תאימות WebKit/Chrome iOS.
+- מפתח Last Good הועבר ל־v66, כך ש־snapshot מקומי ישן מ־V66 לא יוחזר בטעות אחרי העלאה.
 
-## V58 — Smart Newsroom
-- “מה חדש בסיפור?” shows the newest distinct developments inside the lead story.
-- “למה זה הסיפור?” explains source count, freshness, Hot Score, verification and ranking reasons.
-- Automatic Emergency Mode appears while matching Home Front Command alerts are active.
-- “מה קורה לידך” uses the selected city to combine live alert state, current weather, local online news mentions and transport-related online reports; it also links to the official Ministry of Transport real-time planner.
-- “חדשותא עכשיו” shows connected sources, hot stories and corroborated stories.
-- Local transport information is never invented: it is displayed only from currently collected online reports.
+## V66 — שינויים מרכזיים
 
-## V59 — strict semantic image matching
-- Fixed false-positive imagery such as a car for a motorcycle story and a road for an OpenAI/ChatGPT outage.
-- Added hard subject constraints for motorcycle/scooter and major technology brands.
-- Added explicit OpenAI/ChatGPT, outage, motorcycle, scooter and traffic-accident query concepts.
-- Removed the generic “Israel news” image fallback for uncategorized stories.
-- Raised media relevance thresholds and changed the media cache namespace so previously cached bad matches are not reused.
-- When no semantically credible licensed image exists, the site now prefers its contextual fallback over a misleading photograph.
-
-## V60 — image coverage + source link repair
-- Added subject-rescue image queries for OpenAI/ChatGPT and motorcycle/scooter stories while keeping hard semantic mismatch protection.
-- Commons searches may now use vector files for technology-brand imagery such as OpenAI logos.
-- Lowered relevance thresholds only for strict named/subject concepts; generic stories remain conservative.
-- Media cache namespace bumped so previous no-image/bad-image decisions are not reused.
-- Added server-side /go resolver for ynet and Walla links.
-- ynet/Walla links are validated only when clicked; valid redirected URLs open normally.
-- If a publisher URL is genuinely dead/404, the user is sent to that publisher's own search page with the exact headline instead of a 404 page.
-
-## V61 — outbound link 1101 hotfix
-- Removed the timer-based ynet/Walla link validator that could throw inside Cloudflare Workers.
-- /go is now fully exception-safe and can no longer intentionally return a relative redirect URL.
-- ynet/Walla links use a lightweight HEAD check; 403/405/check failures fail open to the original article.
-- Only explicit 404/410 responses use a fallback search: Walla's own search, and a site-restricted ynet search.
-- The redirect route is wrapped in a top-level try/catch so a source-link failure cannot crash the site Worker.
-
-## V62 — mobile modal + fresh entry hardening
-- Unified all mobile modals under one safe-area-aware bottom-sheet system.
-- Every modal can scroll internally on short screens; no content can be permanently clipped.
-- Modal X close control is sticky and remains visible while scrolling.
-- Quick Brief cards are more compact on mobile and its bottom “סגירה” action is sticky above the iPhone safe area.
-- About, Near You, Why this story, alert settings, notification and install dialogs inherit the same mobile safety rules.
-- Every cold entry now performs a forced server news collection after instantly rendering local last-good data.
-- Returning after 15+ seconds/background or a >45-second server snapshot forces a fresh collection.
-- Partial/failed entry refreshes retry faster (2s, 5s, 10s, 20s) and retries bypass the short server cache.
-
-
-## V63 — production audit
-- Main-story hard lock: never one source.
-- 3+ distinct publishers remain mandatory for the first hour; only after no qualifying 3+ story exists for a full hour can 2+ sources take over.
-- Two-source fallback is capped at three hours.
-- ynet/Walla clicks now use publisher URLs directly; no /go intermediary.
-- RSS parsing ranks link, href, guid and id candidates and prefers article-shaped ynet/Walla URLs.
-
-## V64 — iPhone / desktop fresh-entry convergence
-- Root cause addressed: Safari, desktop and iOS Home-Screen have separate local storage, so a forced cold-open collection could leave the iPhone visibly sitting on its old local snapshot while the Worker was still collecting.
-- Cold open is now two-stage: render the shared Worker snapshot first, then immediately force a real source collection and replace the feed if newer data exists.
-- Returning after 3+ seconds in the background forces a fresh collection; server snapshots older than 30 seconds also force refresh.
-- pageshow always resets the foreground freshness gate.
-- iOS standalone hard-reload guard shortened from 8 seconds to 4.5 seconds.
-- Shared Worker cache reduced to 12 seconds with 30-second stale-while-revalidate.
-- Existing content remains visible during forced refresh with “מרענן עכשיו…” instead of appearing frozen.
+- תיקון force end-to-end.
+- תיקון חילוץ URL מ־RSS: כתובות לא עוברות יותר ניקוי טקסט, ותוקן regex שהיה עלול להשחית `https://` ומילים באנגלית.
+- תיקון cache.put של no-store באמצעות response נפרד ל־cache.
+- concurrency 6.
+- Last Good מוגבל גיל ולא נשמר מ־stale.
+- freshness לכל shard.
+- כלל 3→2 מפורש גם במצב fallback.
+- SW update hardening.
+- OREF shared edge cache קצר.
+- lazy media hydration.
+- CSP + diagnostics protection.
+- focus trap + inert לפופאפים.
+- הגדלת טקסטים קטנים מדי ב־Quick Brief במובייל.
+- גרסת assets/PWA: `66.0.0`.

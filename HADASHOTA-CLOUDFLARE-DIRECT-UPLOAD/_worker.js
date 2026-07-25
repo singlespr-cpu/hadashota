@@ -87,7 +87,7 @@ export default {
     if (url.pathname === "/api/news") {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
-      return handleNews(request, ctx);
+      return handleNews(request, env, ctx);
     }
 
     if (url.pathname === "/api/media") {
@@ -105,17 +105,22 @@ export default {
     if (url.pathname === "/api/alerts") {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
-      return handleEmergencyAlerts();
+      return handleEmergencyAlerts(ctx);
     }
 
     if (url.pathname === "/api/health") {
       const deep = url.searchParams.get("deep");
       if (deep) {
+        const configuredKey = String(env?.HADASHOTA_DIAGNOSTIC_KEY || "");
+        const suppliedKey = request.headers.get("X-Hadashota-Diagnostic-Key") || url.searchParams.get("key") || "";
+        if (!configuredKey || suppliedKey !== configuredKey) {
+          return json({ error: "Deep diagnostics are disabled" }, 403, { "Cache-Control": "no-store" });
+        }
         const shard = deep === "telegram" || url.searchParams.get("shard") === "telegram" ? "telegram" : "sites";
         const checkedAt = new Date().toISOString();
         const retryBudget = { remaining: 2 };
         const shardSources = getShardSources(shard);
-        const results = await fetchSourcesWithLimit(shardSources, 6, retryBudget);
+        const results = await fetchSourcesWithLimit(shardSources, 6, retryBudget, true, 18_000);
         const sourceStatus = results.map((r) => ({
           id: r.source.id,
           name: r.source.name,
@@ -147,6 +152,7 @@ export default {
       });
     }
 
+    if (url.pathname === "/sw.js") return serveNoCacheAsset(request, env, "/sw.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
     if (url.pathname === "/" || url.pathname === "/index.html") return serveHtmlAsset(request, env, url.origin, "/index.html");
@@ -160,6 +166,17 @@ export default {
   }
 };
 
+async function serveNoCacheAsset(request, env, assetPath, contentType = "application/octet-stream") {
+  const assetRequest = new Request(new URL(assetPath, request.url), request);
+  const asset = await env.ASSETS.fetch(assetRequest);
+  if (!asset.ok) return asset;
+  const headers = new Headers(asset.headers);
+  headers.set("Content-Type", contentType);
+  headers.set("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate");
+  headers.set("X-Content-Type-Options", "nosniff");
+  return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
+}
+
 async function serveHtmlAsset(request, env, origin, assetPath) {
   const assetRequest = new Request(new URL(assetPath, request.url), request);
   const asset = await env.ASSETS.fetch(assetRequest);
@@ -171,7 +188,9 @@ async function serveHtmlAsset(request, env, origin, assetPath) {
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("Permissions-Policy", "geolocation=(self)");
+  headers.set("Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=(), usb=()");
+  headers.set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests");
+  headers.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   return new Response(html, { status: 200, headers });
 }
 
@@ -198,34 +217,47 @@ function escapeXml(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[ch]));
 }
 
-async function handleEmergencyAlerts() {
+async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
+  const cache = caches.default;
+  const cacheKey = new Request("https://hadashota.internal/v66/oref-current", { method: "GET" });
+  const cached = await cache.match(cacheKey);
+  if (cached) return cors(cached);
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("timeout"), 3500);
   try {
     const response = await fetch(endpoint, {
       signal: controller.signal,
-      cache: "no-store",
+      redirect: "follow",
       headers: {
         "Accept": "application/json,text/plain,*/*",
         "Referer": "https://www.oref.org.il/",
         "X-Requested-With": "XMLHttpRequest",
-        "User-Agent": "Mozilla/5.0 (compatible; Hadashota/25.0; +https://www.oref.org.il/)"
-      }
+        "User-Agent": "Mozilla/5.0 (compatible; Hadashota/65.0; +https://www.oref.org.il/)",
+        "Cache-Control": "no-cache"
+      },
+      cf: { cacheEverything: true, cacheTtl: 2 }
     });
     if (!response.ok) throw new Error(`OREF HTTP ${response.status}`);
     const raw = (await response.text()).replace(/^\uFEFF/, "").trim();
     const parsed = raw && raw !== "null" ? JSON.parse(raw) : null;
-    return json({
+    const payload = {
       ok: true,
       source: "פיקוד העורף",
       official: true,
       checkedAt: new Date().toISOString(),
       alerts: normalizeOrefCurrentAlerts(parsed)
-    }, 200, {
+    };
+    const clientResponse = json(payload, 200, {
       "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
       "Pragma":"no-cache"
     });
+    const sharedResponse = json(payload, 200, {
+      "Cache-Control":"public, max-age=0, s-maxage=2"
+    });
+    ctx?.waitUntil(cache.put(cacheKey, sharedResponse));
+    return clientResponse;
   } catch (error) {
     return json({ ok:false, source:"פיקוד העורף", official:true, checkedAt:new Date().toISOString(), alerts:[], error:String(error?.message || error) }, 502, { "Cache-Control":"no-store" });
   } finally { clearTimeout(timeout); }
@@ -276,7 +308,14 @@ function mediaQueryVariants(raw, category = "other") {
   const translate = (value) => {
     let q = cleanText(value);
     for (const [re, replacement] of map) q = q.replace(re, ` ${replacement} `);
-    return q.replace(/[א-ת]{2,}/g, " ").replace(/[|•:;–—-]+/g, " ").replace(/\s+/g, " ").trim();
+    const normalized = q.replace(/[א-ת]+/g, " ").replace(/[|•:;–—-]+/g, " ").replace(/\s+/g, " ").trim();
+    const seen = new Set();
+    return normalized.split(/\s+/).filter((token) => {
+      const key = token.toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).join(" ");
   };
   const fallbackMap = {
     security: "Israel military security",
@@ -436,7 +475,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/60 (+strict semantic media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/66 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -487,7 +526,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/60 (+news aggregator; strict semantic media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/66 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -534,7 +573,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v64?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v66?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -564,7 +603,8 @@ async function handleOpenMedia(url, ctx) {
     image: { ...chosen, matchedQuery },
     note: "Licensed/open-media result. Attribution and license metadata are preserved; source-license accuracy should still be independently verifiable."
   } : { image: null };
-  const response = json(payload, 200, { "Cache-Control": "public, max-age=21600, stale-while-revalidate=86400" });
+  const ttl = chosen ? 1800 : 300;
+  const response = json(payload, 200, { "Cache-Control": `public, max-age=0, s-maxage=${ttl}` });
   ctx?.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
 }
@@ -802,15 +842,28 @@ function numberOrNull(value) {
 }
 
 function getShardSources(shard) {
-  return SOURCES.filter((source) => shard === "telegram" ? source.kind === "telegram" : source.kind !== "telegram");
+  const filtered = SOURCES.filter((source) => shard === "telegram" ? source.kind === "telegram" : source.kind !== "telegram");
+  const mainstreamOrder = new Map([
+    ["ynet", 120], ["walla", 118], ["n12", 116], ["kan", 114], ["israelhayom", 112],
+    ["13tv", 110], ["maariv", 108], ["jpost", 102], ["timesofisrael", 100], ["globes", 96],
+    ["calcalist", 92], ["srugim", 88], ["arutz7", 86], ["kikar", 84], ["now14", 82]
+  ]);
+  const priority = (source) => {
+    if (source.kind === "telegram") return (source.official ? 120 : 0) + (source.verified ? 35 : 0) + (source.independent ? -5 : 0);
+    return (mainstreamOrder.get(source.publisher) || 60)
+      + (source.adapter === "rss" ? 8 : source.adapter === "jsonld" ? 4 : 0)
+      + (source.official ? 2 : 0);
+  };
+  return filtered.sort((a, b) => priority(b) - priority(a));
 }
 
-async function handleNews(request, ctx) {
+async function handleNews(request, env, ctx) {
   const requestUrl = new URL(request.url);
   const shard = requestUrl.searchParams.get("shard") === "telegram" ? "telegram" : "sites";
-  const force = requestUrl.searchParams.get("force") === "1";
+  const forceRequested = requestUrl.searchParams.get("force") === "1";
   const shardSources = getShardSources(shard);
   const cache = caches.default;
+  const force = forceRequested ? await claimForceRefreshSlot(request, cache, shard, ctx) : false;
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
@@ -832,7 +885,10 @@ async function handleNews(request, ctx) {
     // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
     // even when an origin redirects or several sources fail at the same time.
     const retryBudget = { remaining: 6 };
-    const settled = await fetchSourcesWithLimit(shardSources, 16, retryBudget);
+    const collectionBudgetMs = shard === "telegram"
+      ? (force ? 12_000 : 9_000)
+      : (force ? 14_000 : 11_000);
+    const settled = await fetchSourcesWithLimit(shardSources, 6, retryBudget, force, collectionBudgetMs);
     const rawItems = settled.flatMap((result) => result.items);
     const now = Date.now();
     const cutoff = now - 30 * 60 * 60 * 1000;
@@ -911,8 +967,10 @@ async function handleNews(request, ctx) {
       if (previousGood) return await lastGoodOrError(cache, lastGoodKey, shard, `partial_refresh_${activeSources.length}_sources`);
     }
 
+    const generatedAt = new Date().toISOString();
     const payload = {
-      generatedAt: new Date().toISOString(),
+      generatedAt,
+      snapshotId: stableId(`${shard}|${generatedAt}|${clustered.slice(0, 12).map((item) => item.id).join("|")}`),
       refreshAfterSeconds: 30,
       shard,
       stale: false,
@@ -936,16 +994,22 @@ async function handleNews(request, ctx) {
     };
 
     const response = json(payload, 200, {
-      "Cache-Control": force ? "no-store, max-age=0" : "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
-      "X-Hadashota-Version": "64.0.0",
+      "Cache-Control": "no-store, max-age=0",
+      "X-Hadashota-Version": "66.0.0",
+      "X-Hadashota-Shard": shard,
+      "X-Hadashota-Force": force ? "1" : "0"
+    });
+    const sharedSnapshotResponse = json(payload, 200, {
+      "Cache-Control": "public, max-age=0, s-maxage=12",
+      "X-Hadashota-Version": "66.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
-      "Cache-Control": "public, max-age=0, s-maxage=21600, stale-while-revalidate=86400"
+      "Cache-Control": "public, max-age=0, s-maxage=1800"
     });
 
     ctx.waitUntil(Promise.all([
-      cache.put(cacheKey, response.clone()),
+      cache.put(cacheKey, sharedSnapshotResponse),
       cache.put(lastGoodKey, lastGoodResponse)
     ]));
     return response;
@@ -959,13 +1023,17 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
   if (cached) {
     try {
       const payload = await cached.json();
+      const generatedMs = Date.parse(payload.generatedAt || "");
+      if (!Number.isFinite(generatedMs) || Date.now() - generatedMs > 30 * 60 * 1000) {
+        throw new Error("LAST_GOOD_TOO_OLD");
+      }
       payload.stale = true;
       payload.staleReason = reason;
       payload.servedAt = new Date().toISOString();
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "64.0.0"
+        "X-Hadashota-Version": "66.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -980,32 +1048,64 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
   }, 503, { "Cache-Control": "no-store", "Retry-After": "8" });
 }
 
-async function fetchSourcesWithLimit(sources, concurrency = 8, retryBudget = { remaining: 0 }) {
+async function claimForceRefreshSlot(request, cache, shard, ctx) {
+  const requestUrl = new URL(request.url);
+  const fetchSite = String(request.headers.get("Sec-Fetch-Site") || "").toLowerCase();
+  const origin = request.headers.get("Origin") || "";
+  const referer = request.headers.get("Referer") || "";
+  const sameOriginHeader = fetchSite === "same-origin"
+    || (origin && origin === requestUrl.origin)
+    || (referer && (() => { try { return new URL(referer).origin === requestUrl.origin; } catch { return false; } })());
+  if (!sameOriginHeader) return false;
+
+  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "anonymous";
+  const key = new Request(`https://hadashota.internal/v66/force-gate/${shard}/${stableId(ip)}`, { method: "GET" });
+  const existing = await cache.match(key);
+  if (existing) return false;
+  const gate = new Response("1", { headers: { "Cache-Control": "public, max-age=0, s-maxage=8" } });
+  ctx?.waitUntil(cache.put(key, gate));
+  return true;
+}
+
+async function fetchSourcesWithLimit(sources, concurrency = 6, retryBudget = { remaining: 0 }, forceFresh = false, deadlineMs = 0) {
   const results = new Array(sources.length);
   let cursor = 0;
   const workerCount = Math.min(Math.max(1, concurrency), sources.length || 1);
+  const deadlineAt = deadlineMs > 0 ? Date.now() + deadlineMs : Infinity;
 
   async function runner() {
     while (true) {
       const index = cursor++;
       if (index >= sources.length) return;
-      results[index] = await fetchSource(sources[index], retryBudget);
+      const source = sources[index];
+      if (Date.now() >= deadlineAt - 600) {
+        results[index] = { source, items: [], latencyMs: 0, error: "COLLECTION_DEADLINE", attempts: 0 };
+        continue;
+      }
+      results[index] = await fetchSource(source, retryBudget, forceFresh, deadlineAt);
     }
   }
 
   await Promise.all(Array.from({ length: workerCount }, runner));
-  return results;
+  return results.map((result, index) => result || ({
+    source: sources[index], items: [], latencyMs: 0, error: "COLLECTION_DEADLINE", attempts: 0
+  }));
 }
 
-async function fetchSource(source, retryBudget = { remaining: 0 }) {
+async function fetchSource(source, retryBudget = { remaining: 0 }, forceFresh = false, deadlineAt = Infinity) {
   const started = Date.now();
   let lastError = null;
   let attempt = 0;
 
   while (attempt < 2) {
     try {
-      const timeoutMs = source.adapter === "telegram" ? 3200 : source.adapter === "jsonld" || source.adapter === "htmlnews" ? 4200 : 3600;
-      const response = await fetchWithTimeout(source.url, timeoutMs);
+      const baseTimeoutMs = source.adapter === "telegram" ? 3200 : source.adapter === "jsonld" || source.adapter === "htmlnews" ? 4200 : 3600;
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs <= 650) throw new Error("COLLECTION_DEADLINE");
+      const timeoutMs = Number.isFinite(remainingMs)
+        ? Math.min(baseTimeoutMs, Math.max(500, remainingMs - 180))
+        : baseTimeoutMs;
+      const response = await fetchWithTimeout(source.url, timeoutMs, forceFresh);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const contentLength = Number(response.headers.get("content-length") || 0);
@@ -1027,7 +1127,8 @@ async function fetchSource(source, retryBudget = { remaining: 0 }) {
     } catch (error) {
       lastError = error;
       const retryable = isRetryableSourceError(error);
-      if (attempt === 0 && retryable && retryBudget.remaining > 0) {
+      const enoughTimeForRetry = !Number.isFinite(deadlineAt) || deadlineAt - Date.now() > 1_200;
+      if (attempt === 0 && retryable && retryBudget.remaining > 0 && enoughTimeForRetry) {
         retryBudget.remaining -= 1;
         attempt += 1;
         await delay(140 + Math.floor(Math.random() * 180));
@@ -1055,19 +1156,26 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchWithTimeout(url, timeoutMs) {
+async function fetchWithTimeout(url, timeoutMs, forceFresh = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   try {
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/66.0; +news-aggregator)",
+      "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
+      "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
+    };
+    if (forceFresh) {
+      headers["Cache-Control"] = "no-cache, no-store, max-age=0";
+      headers["Pragma"] = "no-cache";
+    }
     return await fetch(url, {
       signal: controller.signal,
       redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/1.0; +news-aggregator)",
-        "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
-        "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
-      },
-      cf: { cacheEverything: true, cacheTtl: 45 }
+      headers,
+      cf: forceFresh
+        ? { cacheEverything: false, cacheTtl: 0 }
+        : { cacheEverything: true, cacheTtl: 30 }
     });
   } finally {
     clearTimeout(timeout);
@@ -1077,7 +1185,7 @@ async function fetchWithTimeout(url, timeoutMs) {
 function rssArticleCandidates(block, source) {
   const candidates = [];
   const add = (value) => {
-    const absolute = absoluteUrl(cleanText(value || ""), source.home);
+    const absolute = absoluteUrl(cleanUrlValue(value), source.home);
     if (absolute && !candidates.includes(absolute)) candidates.push(absolute);
   };
   add(firstTag(block, ["link"]));
@@ -1140,7 +1248,7 @@ function parseOfficialHtmlNews(html, source) {
   const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
   while ((match = anchorRe.exec(text)) && out.length < 90) {
-    const href = absoluteUrl(match[1], source.home);
+    const href = absoluteUrl(cleanUrlValue(match[1]), source.home);
     const title = cleanText(match[2]);
     if (!href || !title || title.length < 18 || title.length > 320) continue;
     const lower = href.toLowerCase();
@@ -1202,7 +1310,7 @@ function parseJsonLd(html, source) {
     .map((obj) => {
       const title = cleanText(obj.headline || obj.name || "");
       const rawUrl = typeof obj.url === "string" ? obj.url : obj.mainEntityOfPage?.['@id'] || obj.mainEntityOfPage || obj['@id'];
-      const url = absoluteUrl(rawUrl, source.home);
+      const url = absoluteUrl(cleanUrlValue(rawUrl), source.home);
       const publishedAt = safeIso(obj.datePublished || obj.dateModified || obj.uploadDate);
       const preview = cleanText(obj.description || "");
       const imageUrl = jsonLdImage(obj.image, source.home);
@@ -1260,7 +1368,7 @@ function jsonLdImage(image, base) {
   const values = Array.isArray(image) ? image : [image];
   for (const value of values) {
     const raw = typeof value === "string" ? value : value?.url || value?.contentUrl || value?.['@id'];
-    const url = absoluteUrl(raw, base);
+    const url = absoluteUrl(cleanUrlValue(raw), base);
     if (url) return url;
   }
   return null;
@@ -1537,12 +1645,23 @@ function cleanText(value) {
   return normalizeSpace(stripMarkupArtifacts(stripHtml(decoded)));
 }
 
+// URLs must never pass through prose cleanup. The legacy permissive markup
+// cleanup could remove the letter "p" from https:// and corrupt article links.
+function cleanUrlValue(value) {
+  return decodeEntities(decodeEntities(unwrapCdata(value || "")))
+    .replace(/<[^>]+>/g, " ")
+    .trim()
+    .replace(/^[\s"']+|[\s"']+$/g, "");
+}
+
 function stripMarkupArtifacts(value) {
   return String(value || "")
     .replace(/\bimg\s+[^<>]{0,700}?(?:\/?>|(?=\s{2,}|$))/gi, " ")
     .replace(/\b(?:height|width|align|src|class|style|alt|loading)\s*=\s*(?:["'][^"']*["']|[^\s>]+)/gi, " ")
-    .replace(/(?:<|&lt;)?\/?br\s*\/?(?:>|&gt;)?/gi, " ")
-    .replace(/(?:<|&lt;)?\/?(?:p|div|span)\s*(?:>|&gt;)?/gi, " ");
+    // Require actual/encoded angle brackets so ordinary words such as https,
+    // Trump or breaking are never mistaken for HTML tags.
+    .replace(/(?:<|&lt;)\s*\/?\s*br\s*\/?\s*(?:>|&gt;)/gi, " ")
+    .replace(/(?:<|&lt;)\s*\/?\s*(?:p|div|span)\b[^>]*?(?:>|&gt;)/gi, " ");
 }
 
 function stripHtml(value) {

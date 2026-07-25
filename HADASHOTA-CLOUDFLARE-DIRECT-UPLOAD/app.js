@@ -19,6 +19,7 @@ const state = {
   dataDelayed: false,
   dataDelaySeverity: "ok",
   delayedShards: [],
+  shardFreshness: {},
   lastDataGeneratedAt: null,
   city: localStorage.getItem("hadashota.city") || "telaviv",
   lastVisitAt: Number((localStorage.getItem("hadashota.lastVisitAt") ?? localStorage.getItem("pulse.lastVisitAt"))) || 0,
@@ -209,8 +210,9 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v6.";
-const CLIENT_NEWS_TIMEOUT_MS = 18_000;
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v66.";
+const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
+const CLIENT_NEWS_TIMEOUT_MS = 28_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
 const CATEGORY_LABELS = {
@@ -251,7 +253,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V64 cold-open strategy:
+  // V66 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -560,6 +562,8 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
+    const openModal = document.querySelector(".site-modal:not(.hidden)");
+    if (openModal && trapModalTab(event, openModal)) return;
     if (event.key === "Escape") {
       const openModal = document.querySelector(".site-modal:not(.hidden)");
       if (openModal) {
@@ -747,6 +751,50 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
+function setModalBackgroundInert(activeModal = null) {
+  for (const child of document.body.children) {
+    if (activeModal && child === activeModal) continue;
+    if (activeModal) {
+      if (!child.hasAttribute("inert")) {
+        child.setAttribute("inert", "");
+        child.dataset.hadashotaModalInert = "1";
+      }
+    } else if (child.dataset.hadashotaModalInert === "1") {
+      child.removeAttribute("inert");
+      delete child.dataset.hadashotaModalInert;
+    }
+  }
+}
+
+function modalFocusableElements(modal) {
+  if (!modal) return [];
+  return [...modal.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter((node) => !node.matches('.modal-backdrop, .site-modal-backdrop') && !node.closest('[hidden], .hidden') && node.getClientRects().length > 0);
+}
+
+function trapModalTab(event, modal) {
+  if (event.key !== "Tab" || !modal) return false;
+  const focusable = modalFocusableElements(modal);
+  if (!focusable.length) {
+    event.preventDefault();
+    modal.querySelector(".modal-card")?.focus();
+    return true;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
+}
+
 function openSiteModal(modal, trigger) {
   if (!modal) return;
   modalReturnFocus = trigger || document.activeElement;
@@ -754,14 +802,21 @@ function openSiteModal(modal, trigger) {
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
-  requestAnimationFrame(() => modal.querySelector(".modal-card")?.focus());
+  setModalBackgroundInert(modal);
+  requestAnimationFrame(() => {
+    const focusable = modalFocusableElements(modal);
+    (focusable[0] || modal.querySelector(".modal-card"))?.focus();
+  });
 }
 
 function closeSiteModal(modal, restoreFocus = true) {
   if (!modal) return;
   modal.classList.add("hidden");
   modal.setAttribute("aria-hidden", "true");
-  if (!document.querySelector(".site-modal:not(.hidden)")) document.body.classList.remove("modal-open");
+  if (!document.querySelector(".site-modal:not(.hidden)")) {
+    document.body.classList.remove("modal-open");
+    setModalBackgroundInert(null);
+  }
   if (restoreFocus && modalReturnFocus instanceof HTMLElement) modalReturnFocus.focus();
 }
 
@@ -793,7 +848,20 @@ async function loadNews(force = false, fromRetry = false) {
   }
 
   try {
-    const results = await Promise.allSettled(NEWS_SHARDS.map((shard) => fetchNewsShard(shard, force)));
+    // V66 iPhone/WebKit first-paint fix: do not wait for both shards before
+    // showing anything. A cold Cloudflare edge can make one shard noticeably
+    // slower than the other. Render the first usable network shard immediately,
+    // then replace it with the fully merged snapshot when both requests settle.
+    let progressiveRendered = false;
+    const shardRequests = NEWS_SHARDS.map((shard) =>
+      fetchNewsShard(shard, force).then((value) => {
+        if (!progressiveRendered && Array.isArray(value?.items) && value.items.length) {
+          progressiveRendered = renderProgressiveShardPayload(shard, value);
+        }
+        return value;
+      })
+    );
+    const results = await Promise.allSettled(shardRequests);
     const payloads = [];
     let delayed = false;
     let freshShards = 0;
@@ -803,10 +871,10 @@ async function loadNews(force = false, fromRetry = false) {
       const shard = NEWS_SHARDS[index];
       if (result.status === "fulfilled" && Array.isArray(result.value?.items) && result.value.items.length) {
         payloads.push(result.value);
-        persistShardLastGood(shard, result.value);
+        if (!result.value.stale) persistShardLastGood(shard, result.value);
         if (result.value.stale) {
           delayed = true;
-          delayedShards.push({ shard, reason: result.value.staleReason || "stale", localFallback: !!result.value.localFallback });
+          delayedShards.push({ shard, reason: result.value.staleReason || "stale", localFallback: !!result.value.localFallback, generatedAt: result.value.generatedAt || null });
         } else {
           freshShards += 1;
         }
@@ -816,10 +884,10 @@ async function loadNews(force = false, fromRetry = false) {
       const cached = readShardLastGood(shard);
       if (cached?.items?.length) {
         payloads.push({ ...cached, stale: true, localFallback: true });
-        delayedShards.push({ shard, reason: "local_fallback", localFallback: true });
+        delayedShards.push({ shard, reason: "local_fallback", localFallback: true, generatedAt: cached.generatedAt || null });
         delayed = true;
       } else {
-        delayedShards.push({ shard, reason: "unavailable", localFallback: false });
+        delayedShards.push({ shard, reason: "unavailable", localFallback: false, generatedAt: null });
         delayed = true;
       }
     });
@@ -832,9 +900,10 @@ async function loadNews(force = false, fromRetry = false) {
     state.items = data.items;
     state.sources = data.sources;
     state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
+    state.shardFreshness = data.shardFreshness || {};
     state.dataDelayed = delayed || freshShards < NEWS_SHARDS.length;
     state.delayedShards = delayedShards;
-    state.dataDelaySeverity = getDataDelaySeverity({ delayed: state.dataDelayed, freshShards, delayedShards, generatedAt: data.generatedAt });
+    state.dataDelaySeverity = getDataDelaySeverity({ delayed: state.dataDelayed, freshShards, delayedShards, shardFreshness: data.shardFreshness });
 
     if (!state.dataDelayed) {
       el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
@@ -880,6 +949,36 @@ async function loadNews(force = false, fromRetry = false) {
   }
 }
 
+function renderProgressiveShardPayload(shard, payload) {
+  try {
+    if (!payload || !Array.isArray(payload.items) || !payload.items.length) return false;
+    if (!payload.stale) persistShardLastGood(shard, payload);
+
+    const data = mergeNewsPayloads([payload]);
+    if (!data.items.length) return false;
+
+    state.items = data.items;
+    state.sources = data.sources;
+    state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
+    state.shardFreshness = data.shardFreshness || {};
+    state.dataDelayed = true;
+    state.delayedShards = NEWS_SHARDS
+      .filter((name) => name !== shard)
+      .map((name) => ({ shard: name, reason: "pending", localFallback: false, generatedAt: null }));
+    state.dataDelaySeverity = payload.stale ? "major" : "minor";
+
+    const label = payload.stale ? "נתונים אחרונים" : "עדכון ראשוני";
+    if (el.lastUpdated) el.lastUpdated.textContent = `${label} · ${formatClock(data.generatedAt)}`;
+    renderStats(data);
+    render();
+    setDataStatus(true, true, state.dataDelaySeverity);
+    return true;
+  } catch (error) {
+    console.warn("Progressive shard render failed", error);
+    return false;
+  }
+}
+
 async function fetchNewsShard(shard, force = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("client_timeout"), CLIENT_NEWS_TIMEOUT_MS);
@@ -888,9 +987,13 @@ async function fetchNewsShard(shard, force = false) {
     if (force) params.set("force", "1");
     params.set("_", String(Math.floor(Date.now() / 15000)));
     const response = await fetch(`/api/news?${params}`, {
-      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      // Keep the request as simple as possible for iOS/WebKit. The cache-busting
+      // query plus Request.cache=no-store is sufficient; a custom Cache-Control
+      // request header is unnecessary and has caused proxy/WebView edge cases.
+      headers: { Accept: "application/json" },
       signal: controller.signal,
-      cache: "no-store"
+      cache: "no-store",
+      credentials: "same-origin"
     });
     if (!response.ok) throw new Error(`HTTP ${response.status} (${shard})`);
     return await response.json();
@@ -900,10 +1003,13 @@ async function fetchNewsShard(shard, force = false) {
 }
 
 function persistShardLastGood(shard, payload) {
-  if (!payload?.items?.length) return;
+  // A server fallback is intentionally marked stale. Never re-label it locally as
+  // a fresh "last good" snapshot or its age can be extended indefinitely.
+  if (!payload?.items?.length || payload.stale) return;
   try {
     const compact = {
       ...payload,
+      _savedAt: Date.now(),
       items: payload.items.slice(0, shard === "telegram" ? 360 : 320),
       failures: []
     };
@@ -914,13 +1020,24 @@ function persistShardLastGood(shard, payload) {
 }
 
 function readShardLastGood(shard) {
+  const key = `${LAST_GOOD_PREFIX}${shard}`;
   try {
-    const raw = localStorage.getItem(`${LAST_GOOD_PREFIX}${shard}`);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed?.items) || !parsed.items.length) return null;
+
+    const generatedMs = Date.parse(parsed.generatedAt || "");
+    const savedMs = Number(parsed._savedAt || 0);
+    const referenceMs = Number.isFinite(generatedMs) ? generatedMs : savedMs;
+    const ageMs = Number.isFinite(referenceMs) && referenceMs > 0 ? Date.now() - referenceMs : Infinity;
+    if (ageMs < -5 * 60 * 1000 || ageMs > LOCAL_LAST_GOOD_MAX_AGE_MS) {
+      localStorage.removeItem(key);
+      return null;
+    }
     return parsed;
   } catch {
+    localStorage.removeItem(key);
     return null;
   }
 }
@@ -933,9 +1050,13 @@ function restoreLocalLastGood() {
   state.items = data.items;
   state.sources = data.sources;
   state.lastDataGeneratedAt = data.generatedAt || state.lastDataGeneratedAt;
+  state.shardFreshness = data.shardFreshness || {};
   state.dataDelayed = true;
   state.dataDelaySeverity = "major";
-  state.delayedShards = NEWS_SHARDS.map((shard) => ({ shard, reason: "local_fallback", localFallback: true }));
+  const restoredShards = new Set(payloads.map((payload) => payload.shard).filter(Boolean));
+  state.delayedShards = NEWS_SHARDS.map((shard) => restoredShards.has(shard)
+    ? { shard, reason: "local_fallback", localFallback: true, generatedAt: data.shardFreshness?.[shard]?.generatedAt || null }
+    : { shard, reason: "unavailable", localFallback: false, generatedAt: null });
   el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
   renderStats(data);
   render();
@@ -951,15 +1072,19 @@ function scheduleNewsRetry() {
   state.retryTimer = setTimeout(() => loadNews(true, true), seconds * 1000);
 }
 
-function getDataDelaySeverity({ delayed, freshShards, delayedShards, generatedAt }) {
+function getDataDelaySeverity({ delayed, freshShards, delayedShards, shardFreshness = {} }) {
   if (!delayed) return "ok";
   if (freshShards <= 0 || delayedShards.length >= NEWS_SHARDS.length) return "major";
 
-  const generatedMs = Date.parse(generatedAt || "");
-  const ageSeconds = Number.isFinite(generatedMs) ? Math.max(0, (Date.now() - generatedMs) / 1000) : 999;
   const hasHardFailure = delayedShards.some((entry) => entry.reason === "unavailable" || entry.reason === "request_failed");
-  if (hasHardFailure || ageSeconds > 180) return "major";
-  return "minor";
+  if (hasHardFailure) return "major";
+
+  const delayedAges = delayedShards.map((entry) => {
+    const generatedAt = entry.generatedAt || shardFreshness?.[entry.shard]?.generatedAt || "";
+    const generatedMs = Date.parse(generatedAt);
+    return Number.isFinite(generatedMs) ? Math.max(0, (Date.now() - generatedMs) / 1000) : Infinity;
+  });
+  return delayedAges.some((ageSeconds) => ageSeconds > 180) ? "major" : "minor";
 }
 
 function formatDelayedShardShort(entries = state.delayedShards) {
@@ -1002,13 +1127,24 @@ function mergeNewsPayloads(payloads) {
   const mergedItems = mergeClustersClient(items)
     .sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt))
     .slice(0, 650);
-  const generatedAt = payloads
+  const generatedTimes = payloads
     .map((payload) => payload.generatedAt)
     .filter(Boolean)
-    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || new Date().toISOString();
+    .sort((a, b) => Date.parse(b) - Date.parse(a));
+  const generatedAt = generatedTimes[0] || new Date().toISOString();
+  const shardFreshness = Object.fromEntries(payloads
+    .filter((payload) => payload?.shard)
+    .map((payload) => [payload.shard, {
+      generatedAt: payload.generatedAt || null,
+      snapshotId: payload.snapshotId || null,
+      stale: !!payload.stale,
+      localFallback: !!payload.localFallback
+    }]));
 
   return {
     generatedAt,
+    oldestGeneratedAt: generatedTimes[generatedTimes.length - 1] || generatedAt,
+    shardFreshness,
     refreshAfterSeconds: Math.min(...payloads.map((payload) => Number(payload.refreshAfterSeconds) || 30), 30),
     items: mergedItems,
     sources: [...sourcesById.values()].sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0)),
@@ -1299,7 +1435,8 @@ function conciseLeadHeadline(base, category = "other", titles = [], reportCount 
     if (b.length > 70 || /אמר|לדבריו|לדבריהם|הודיע|הודיעה|ציין|ציינה/.test(b)) return `${a}: ${b}`;
     return `${a}: ${b}`;
   });
-  const firstChunk = t.split(/(?<=[.!?])\s+/)[0];
+  const firstChunkMatch = t.match(/^.*?[.!?](?:\s|$)/);
+  const firstChunk = firstChunkMatch ? firstChunkMatch[0].trim() : t;
   if (firstChunk.length >= 26 && firstChunk.length <= 96) t = firstChunk;
   if (t.includes(':') && t.length > 92) {
     const [pre, post] = t.split(/:\s*/, 2);
@@ -1484,7 +1621,7 @@ async function fetchSafeMedia(query, category = "other") {
   if (SAFE_MEDIA_CACHE.has(key)) return SAFE_MEDIA_CACHE.get(key);
   if (safeMediaRequests >= 36) return null;
   safeMediaRequests += 1;
-  const promise = fetch(`/api/media?q=${encodeURIComponent(normalized)}&category=${encodeURIComponent(category)}`, { cache: "force-cache" })
+  const promise = fetch(`/api/media?q=${encodeURIComponent(normalized)}&category=${encodeURIComponent(category)}`, { cache: "no-store" })
     .then((r) => r.ok ? r.json() : null)
     .then((data) => data?.image?.url ? data.image : null)
     .catch(() => null);
@@ -1567,64 +1704,88 @@ function leadMediaFallbackLabel(item, title = "") {
   return item?.category === "security" ? "אירוע ביטחוני" : item?.category === "politics" ? "פוליטיקה" : item?.category === "diplomatic" ? "הזירה המדינית" : "חדשותא";
 }
 
-async function hydrateSafeMediaSlots() {
-  if (!state.showImages) return;
-  const slots = [...document.querySelectorAll('.safe-media-slot[data-media-query]:not([data-hydrated="1"])')].slice(0, 30);
-  await Promise.all(slots.map(async (slot) => {
-    slot.dataset.hydrated = "1";
-    const a = slot.closest('a.news-image');
-    const directUrl = a?.dataset?.sourceImage || "";
-    const directCredit = a?.dataset?.sourceCredit || "";
-    const showDirect = (url) => {
-      const img = document.createElement('img');
-      img.src = url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
-      img.addEventListener('error', async () => {
-        if (!slot.isConnected) {
-          const replacement = document.createElement("span");
-          replacement.className = "safe-media-slot";
-          replacement.dataset.mediaQuery = a?.dataset?.mediaQuery || slot.dataset.mediaQuery || "";
-          replacement.dataset.category = a?.dataset?.category || slot.dataset.category || "other";
-          replacement.dataset.hydrated = "1";
-          img.replaceWith(replacement);
-        }
-      }, { once:true });
-      slot.replaceWith(img);
-      if (a && directCredit) {
-        const credit = document.createElement('span');
-        credit.className = 'media-credit';
-        credit.textContent = directCredit;
-        a.appendChild(credit);
-      }
-      return true;
-    };
-    if (directUrl && /^https?:\/\//i.test(directUrl)) {
-      showDirect(directUrl);
-      return;
-    }
-    const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
-    if (!slot.isConnected) return;
-    if (!media?.url) {
-      slot.classList.add("contextual-media-fallback");
-      slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
-      return;
-    }
+let safeMediaObserver = null;
+
+async function hydrateSafeMediaSlot(slot) {
+  if (!slot?.isConnected || slot.dataset.hydrated === "1") return;
+  slot.dataset.hydrated = "1";
+  const a = slot.closest('a.news-image');
+  const directUrl = a?.dataset?.sourceImage || "";
+  const directCredit = a?.dataset?.sourceCredit || "";
+  const showDirect = (url) => {
     const img = document.createElement('img');
-    img.src = media.url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+    img.src = url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
     img.addEventListener('error', () => {
+      if (!img.isConnected) return;
       const replacement = document.createElement("span");
       replacement.className = "safe-media-slot contextual-media-fallback";
       replacement.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
       img.replaceWith(replacement);
     }, { once:true });
     slot.replaceWith(img);
-    if (a && media.attribution) {
-      a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
-      const credit = document.createElement("span");
-      credit.className = "media-credit";
-      credit.textContent = `${media.illustrative ? "אילוסטרציה · " : ""}${media.shortAttribution || media.attribution}`;
+    if (a && directCredit) {
+      const credit = document.createElement('span');
+      credit.className = 'media-credit';
+      credit.textContent = directCredit;
       a.appendChild(credit);
     }
-  }));
+  };
+
+  if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    showDirect(directUrl);
+    return;
+  }
+
+  const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
+  if (!slot.isConnected) return;
+  if (!media?.url) {
+    slot.classList.add("contextual-media-fallback");
+    slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
+    return;
+  }
+  const img = document.createElement('img');
+  img.src = media.url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+  img.addEventListener('error', () => {
+    const replacement = document.createElement("span");
+    replacement.className = "safe-media-slot contextual-media-fallback";
+    replacement.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
+    img.replaceWith(replacement);
+  }, { once:true });
+  slot.replaceWith(img);
+  if (a && media.attribution) {
+    a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
+    const credit = document.createElement("span");
+    credit.className = "media-credit";
+    credit.textContent = `${media.illustrative ? "אילוסטרציה · " : ""}${media.shortAttribution || media.attribution}`;
+    a.appendChild(credit);
+  }
+}
+
+function hydrateSafeMediaSlots() {
+  if (!state.showImages) return;
+  const slots = [...document.querySelectorAll('.safe-media-slot[data-media-query]:not([data-hydrated="1"]):not([data-media-observed="1"])')];
+  if (!slots.length) return;
+
+  if ("IntersectionObserver" in window) {
+    if (!safeMediaObserver) {
+      safeMediaObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          safeMediaObserver.unobserve(entry.target);
+          hydrateSafeMediaSlot(entry.target).catch((error) => console.warn("Media hydration failed", error));
+        }
+      }, { rootMargin: "500px 0px", threshold: 0.01 });
+    }
+    for (const slot of slots) {
+      slot.dataset.mediaObserved = "1";
+      safeMediaObserver.observe(slot);
+    }
+    return;
+  }
+
+  // Legacy fallback: hydrate only the first screenful-ish batch instead of firing
+  // dozens of open-media lookups at once.
+  slots.slice(0, 12).forEach((slot) => hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error)));
 }
 
 function render() {
@@ -1847,7 +2008,6 @@ function renderSources() {
 
 const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
 const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
-const VERIFIED_LEAD_MAX_AGE_MS = 120 * 60 * 1000;
 const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 
 function leadSnapshotIsFresh(parsed, hardMaxMs = STORED_LEAD_HARD_MAX_AGE_MS) {
@@ -1922,33 +2082,6 @@ function buildLeadSnapshot(entry) {
   };
 }
 
-function buildFallbackLeadCandidate() {
-  const now = Date.now();
-  const item = state.items
-    .filter(Boolean)
-    .sort((a, b) => Date.parse(clusterLatestAt(b) || 0) - Date.parse(clusterLatestAt(a) || 0))[0];
-  if (!item) return null;
-
-  const reports = normalizeClusterReports(item);
-  const latestAt = clusterLatestAt(item);
-  const latestMs = Date.parse(latestAt || 0);
-  const ageMinutes = Number.isFinite(latestMs) ? Math.max(0, (now - latestMs) / 60_000) : 0;
-  const reportTimes = reports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
-  const spreadMinutes = reportTimes.length > 1 ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000)) : 0;
-  return {
-    item,
-    reports,
-    recentReports: reports,
-    uniqueSources: Math.max(1, reports.length),
-    ageMinutes,
-    latestAt,
-    score: 0,
-    hasOfficial: reports.some((report) => report.official),
-    spreadMinutes,
-    fallback: true
-  };
-}
-
 function leadQualificationAt(reports) {
   const times = (Array.isArray(reports) ? reports : [])
     .map((report) => Date.parse(report?.publishedAt || 0))
@@ -2000,7 +2133,7 @@ function renderLeadStory() {
     Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
     String(a.item?.id || a.item?.url || a.item?.title || "").localeCompare(String(b.item?.id || b.item?.url || b.item?.title || ""), "he");
 
-  // V63 lead policy — hard editorial lock.
+  // V66 lead policy — hard editorial lock.
   // A single-source item can NEVER be the main story.
   // For the first 60 minutes we keep/choose only a 3+ source story.
   // Only after there has been no qualifying 3+ source story for a full hour
@@ -2009,18 +2142,26 @@ function renderLeadStory() {
     .filter((entry) => entry.uniqueSources >= 3 && entry.ageMinutes <= 60)
     .sort(deterministicSort);
 
-  const storedQualified = [state.lastQualifiedLead, readStoredLeadSnapshot()]
-    .map((row) => row?.entry)
-    .filter((entry) => entry?.item && Number(entry.uniqueSources) >= 3)
-    .filter((entry) => {
-      const latest = Date.parse(entry.latestAt || entry.item?.latestReportAt || entry.item?.publishedAt || 0);
-      return Number.isFinite(latest) && now - latest <= 60 * 60 * 1000;
-    })
-    .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0));
+  // The winner is derived only from the current merged server snapshot.
+  // Never let a device-local saved lead influence eligibility: that used to make
+  // desktop, Safari and an installed PWA disagree even when they received the same feed.
+  let winner = verified[0] || null;
+  const retainedThreeSource = allEntries
+    .filter((entry) => entry.uniqueSources >= 3 && entry.ageMinutes > 60 && entry.ageMinutes <= 180)
+    .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) || deterministicSort(a,b));
 
-  let winner = verified[0] || storedQualified[0] || null;
+  // A 2-source story is permitted only when the current snapshot contains a full
+  // hour of observable history and no 3+ source story appears anywhere in that
+  // hour. This makes the rule deterministic across clients and prevents a newly
+  // opened device from starting its own private one-hour timer.
+  const observedReportTimes = allEntries.flatMap((entry) => entry.reports || [])
+    .map((report) => Date.parse(report?.publishedAt || 0))
+    .filter(Number.isFinite);
+  const oldestObservedMs = observedReportTimes.length ? Math.min(...observedReportTimes) : Infinity;
+  const hasFullHourObservation = Number.isFinite(oldestObservedMs) && oldestObservedMs <= now - 60 * 60 * 1000;
+  const noThreeSourceStoryForHour = verified.length === 0 && hasFullHourObservation;
 
-  if (!winner) {
+  if (!winner && noThreeSourceStoryForHour) {
     const freshTwoSource = allEntries
       .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes <= 60)
       .sort(deterministicSort);
@@ -2030,22 +2171,23 @@ function renderLeadStory() {
     winner = freshTwoSource[0] || olderTwoSource[0] || null;
   }
 
-  if (!winner && state.dataDelayed) {
-    const saved = [state.displayedLeadSnapshot, readDisplayedLeadSnapshot(), state.lastQualifiedLead, readStoredLeadSnapshot()]
-      .map((row) => row?.entry)
-      .filter((entry) => entry?.item && Number(entry.uniqueSources) >= 2)
-      .filter((entry) => {
-        const latest = Date.parse(entry.latestAt || entry.item?.latestReportAt || entry.item?.publishedAt || 0);
-        return Number.isFinite(latest) && now - latest <= 3 * 60 * 60 * 1000;
-      })
-      .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0));
-    winner = saved[0] || null;
-  }
+  // If there is no eligible 2-source replacement, retain the most recent already
+  // corroborated 3+ source story for at most three hours. This keeps the main
+  // block stable without reviving very old headlines.
+  if (!winner) winner = retainedThreeSource[0] || null;
+
+  // Delayed shards are already represented in state.items by the server/local
+  // last-good snapshot. Do not inject a separate device-local headline here;
+  // doing so would reintroduce cross-device divergence and could revive a story
+  // that no longer exists in the current merged feed.
 
   if (!winner) {
     state.currentLeadEntry = null;
-    el.leadStoryTitle.textContent = "מתחבר לעדכונים האחרונים…";
-    el.leadStoryPreview.textContent = "המערכת אוספת כעת דיווחים ממקורות החדשות.";
+    const hasFeed = state.items.length > 0;
+    el.leadStoryTitle.textContent = hasFeed ? "ממתין לאימות ממקורות נוספים" : "מתחבר לעדכונים האחרונים…";
+    el.leadStoryPreview.textContent = hasFeed
+      ? "העדכונים האחרונים כבר מוצגים. הסיפור המרכזי יופיע לאחר הצלבה בין מקורות שונים."
+      : "המערכת אוספת כעת דיווחים ממקורות החדשות.";
     el.leadStorySource.textContent = "חדשותא";
     el.leadStoryAge.textContent = "עכשיו";
     el.leadStoryCount.textContent = "";
@@ -2146,7 +2288,7 @@ function renderLeadStory() {
 
   el.leadStory.classList.remove("hidden");
 
-  // Push notifications remain strictly 3+ sources.
+  // Local browser notifications remain strictly 3+ sources.
   if (Number(winner.uniqueSources) >= 3) updateLeadHeadlineTracking(winner);
 }
 
@@ -2337,7 +2479,10 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js");
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+    // iOS can keep a Home-Screen web app process alive for a long time. Ask for a
+    // lightweight SW update check on every real page load without caching sw.js.
+    state.serviceWorkerRegistration.update().catch(() => {});
   } catch (error) {
     console.warn("Service worker registration failed", error);
   }
