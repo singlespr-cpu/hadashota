@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#f7f8fb" />
   <meta name="color-scheme" content="light dark" />
   <meta name="application-name" content="חדשותא" />
-  <meta name="generator" content="Hadashota 61.0.0" />
+  <meta name="generator" content="Hadashota 71.0.0" />
   <meta name="apple-mobile-web-app-title" content="חדשותא" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="canonical" href="__SITE_URL__/" />
-  <link rel="icon" href="/favicon.svg?v=61.0.0" type="image/svg+xml" />
-  <link rel="icon" href="/favicon-32.png?v=61.0.0" sizes="32x32" type="image/png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=61.0.0" sizes="180x180" />
-  <link rel="manifest" href="/site.webmanifest?v=61.0.0" />
+  <link rel="icon" href="/favicon.svg?v=71.0.0" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png?v=71.0.0" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=71.0.0" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest?v=71.0.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -82,7 +82,7 @@
     ]
   }
   </script>
-  <link rel="stylesheet" href="/styles.css?v=61.0.0" />
+  <link rel="stylesheet" href="/styles.css?v=71.0.0" />
 </head>
 <body>
   <a class="skip-link" href="#mainContent">דלג לתוכן הראשי</a>
@@ -362,15 +362,15 @@
       </div>
 
       <div class="control-row filter-scroll" id="categoryFilters" aria-label="קטגוריות">
-        <button class="filter-chip active" data-category="all"><span class="chip-dot all"></span>הכל</button>
-        <button class="filter-chip" data-category="security"><span class="chip-dot security"></span>ביטחוני</button>
-        <button class="filter-chip" data-category="politics"><span class="chip-dot politics"></span>פוליטי</button>
-        <button class="filter-chip" data-category="diplomatic"><span class="chip-dot diplomatic"></span>מדיני</button>
+        <button type="button" class="filter-chip active" data-category="all"><span class="chip-dot all"></span>הכל</button>
+        <button type="button" class="filter-chip" data-category="security"><span class="chip-dot security"></span>ביטחוני</button>
+        <button type="button" class="filter-chip" data-category="politics"><span class="chip-dot politics"></span>פוליטי</button>
+        <button type="button" class="filter-chip" data-category="diplomatic"><span class="chip-dot diplomatic"></span>מדיני</button>
         <span class="filter-divider"></span>
-        <button class="filter-chip source-kind active" data-kind="all">כל המקורות</button>
-        <button class="filter-chip source-kind" data-kind="site">אתרי חדשות</button>
-        <button class="filter-chip source-kind" data-kind="telegram">Telegram</button>
-        <button class="filter-chip source-kind" data-kind="official">רשמי בלבד</button>
+        <button type="button" class="filter-chip source-kind active" data-kind="all">כל המקורות</button>
+        <button type="button" class="filter-chip source-kind" data-kind="site">אתרי חדשות</button>
+        <button type="button" class="filter-chip source-kind" data-kind="telegram">Telegram</button>
+        <button type="button" class="filter-chip source-kind" data-kind="official">רשמי בלבד</button>
       </div>
     </section>
 
@@ -449,7 +449,7 @@
             <i></i>
           </label>
           <label class="switch-row">
-            <span><b>התראות סיפור מרכזי</b><small>התראה כשהאירוע המרכזי מתחלף</small></span>
+            <span><b>התראות סיפור מרכזי</b><small>התראה כשהאירוע המרכזי מתחלף, כל עוד חדשותא פעילה</small></span>
             <input id="notificationToggle" type="checkbox" />
             <i></i>
           </label>
@@ -476,6 +476,7 @@
       <p class="footer-seo-links"><a href="/about">אודות</a><span>·</span><a href="/how-it-works">איך חדשותא עובד</a><span>·</span><a href="/contact">יצירת קשר</a><span>·</span><a href="/copyright">זכויות יוצרים והסרת תוכן</a><span>·</span><a href="/privacy">פרטיות</a></p>
       <p>לפרטים נוספים ויצירת קשר: <a href="mailto:singles.pr@gmail.com">singles.pr@gmail.com</a></p>
       <small>המערכת אינה מעתיקה כתבות מלאות. כל ידיעה מפנה למקור המקורי — כתבות לאתר החדשות ודיווחי Telegram להודעת המקור.</small>
+      <small id="siteVersion" class="site-version" aria-label="גרסת האתר ומצב ה-API">גרסה V71 · בודק API…</small>
     </div>
   </footer>
 
@@ -594,7 +595,7 @@
         <div><span>🌤️</span><b>מזג אוויר</b><small>מזג האוויר והטמפרטורה לפי העיר שנבחרה.</small></div>
         <div><span>🕯️</span><b>כניסת ויציאת שבת</b><small>זמני שבת והפרשה הקרובה לפי העיר.</small></div>
         <div><span>💱</span><b>שערי מטבע</b><small>דולר ואירו מול השקל, עם מקור חלופי במקרה של תקלה.</small></div>
-        <div><span>🔔</span><b>התראות חדשות</b><small>אפשר לקבל התראה כשהסיפור המרכזי מתחלף לאחר אימות במספר מקורות.</small></div>
+        <div><span>🔔</span><b>התראות חדשות</b><small>אפשר לקבל התראה כשהסיפור המרכזי מתחלף לאחר אימות במספר מקורות, כל עוד האתר או ה־PWA פעילים.</small></div>
         <div><span>📲</span><b>כמו אפליקציה</b><small>אפשר להוסיף את חדשותא למסך הבית ולפתוח אותה בחלון עצמאי.</small></div>
         <div><span>🧠</span><b>מה באמת השתנה</b><small>העדכונים החדשים שנוספו בתוך הסיפור המרכזי, לפי זמן ומקור.</small></div>
         <div><span>📍</span><b>מה קורה לידך</b><small>חדשות, התרעות, מזג אוויר ותחבורה לפי העיר שנבחרה — ממידע אונליין.</small></div>
@@ -629,7 +630,7 @@
       </div>
       <span class="modal-eyebrow">התראות חדשותא</span>
       <h2 id="notificationOfferTitle">רוצים לדעת כשיש חדשות שבאמת חמות?</h2>
-      <p id="notificationOfferText">חדשותא מזהה <strong>סיפור מרכזי</strong> רק כאשר לפחות <strong>3 מקורות שונים</strong> מדווחים על אותו אירוע. כשהסיפור המרכזי מתחלף, נוכל להתריע כדי שלא תפספסו אירוע משמעותי.</p>
+      <p id="notificationOfferText">חדשותא מזהה <strong>סיפור מרכזי</strong> להתראה רק כאשר לפחות <strong>3 מקורות שונים</strong> מדווחים על אותו אירוע. כשהסיפור מתחלף, נוכל להתריע כל עוד חדשותא עדיין פעילה בדפדפן או כ־PWA.</p>
       <div class="notification-offer-highlight"><i></i><span><strong>לא מציפים בכל מבזק.</strong> מתריעים כשהחדשות באמת מתחממות.</span></div>
       <div class="notification-offer-actions">
         <button class="notification-offer-accept" id="notificationOfferAccept" type="button">כן, עדכנו אותי</button>
@@ -659,6 +660,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=61.0.0" defer></script>
+  <script src="/app.js?v=71.0.0" defer></script>
 </body>
 </html>
