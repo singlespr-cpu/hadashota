@@ -78,3 +78,10 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Media resolver now tries Wikimedia Commons first for named people/places/institutions, then Openverse, with Hebrew-to-English entity/action expansion and category fallbacks.
 - Only public-domain / CC0 / CC BY / CC BY-SA results are accepted, and visible attribution metadata is preserved.
 - Feed media hydration capacity was increased so substantially more visible stories receive licensed imagery.
+
+## V42 — Fresh Lead + Consensus Newsroom
+- הסיפור המרכזי המאומת (3+ מקורות) מוגבל לעד שעתיים מהעדכון האחרון; כותרת ישנה לא נשמרת שעות רק בגלל שהייתה מאומתת.
+- אם אין כרגע סיפור טרי עם 3 מקורות, מוצג סיפור מתפתח טרי (2 מקורות / מקור רשמי / הסיפור הטרי והמשמעותי ביותר). התראות Push על החלפת סיפור מרכזי עדיין נשלחות רק לסיפור עם 3+ מקורות.
+- חלון איחוד הדיווחים הורחב בזהירות כדי לזהות ניסוחים שונים של אותו אירוע בין אתרים ו-Telegram.
+- מנוע הכותרות בוחר ניסוח "מדואיד" שמקבל את מירב התמיכה משאר כותרות האשכול ומלטש אותו, במקום תבניות דרמטיות קבועות.
+- מנוע התמונות דורש התאמה חזקה יותר לאדם/אירוע; תמונות מקום/ארכיון מסומנות במפורש כאילוסטרציה.

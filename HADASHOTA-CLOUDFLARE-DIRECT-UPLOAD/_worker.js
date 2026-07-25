@@ -293,10 +293,16 @@ function mediaQueryVariants(raw, category = "other") {
   if (translatedAll) {
     const words = translatedAll.split(/\s+/).filter(Boolean);
     if (words.length > 2) push(words.slice(0, 7).join(" "), 2);
+    // Location-only queries are allowed only as illustrative archive imagery.
+    // They are deliberately lower-specificity than event/person searches.
+    const knownPlaces = ["Iran","Kuwait","Bahrain","Qatar","Jordan","Iraq","Saudi Arabia","Yemen","Tehran","Lebanon","Beirut","Syria","Damascus","Israel","Ben Gurion Airport","Knesset Israel"];
+    for (const place of knownPlaces) if (translatedAll.toLowerCase().includes(place.toLowerCase())) push(place, 1);
   }
-  // Generic category query is last-resort only and receives a low specificity score.
+  // Generic category imagery is a true last resort. It is explicitly marked as
+  // illustrative in the response so users never mistake an archive/location photo
+  // for a photograph of the exact event.
   push(fallbackMap[category] || fallbackMap.other, 0);
-  return out.slice(0, 8);
+  return out.slice(0, 10);
 }
 
 function mediaTokens(value) {
@@ -313,6 +319,12 @@ function mediaCandidateScore(query, candidateText, specificity = 1) {
   for (const token of q) if (c.has(token)) hits += 1;
   const ratio = hits / Math.max(1, q.size);
   let score = hits * 18 + ratio * 34 + specificity * 7;
+  // For a specific multi-token query (for example "Iran Bahrain missile"),
+  // a candidate matching only the place name is not an image of the event.
+  // Push it below the exact-event threshold; a separate location-only query may
+  // still use it later as clearly-labelled illustration.
+  if (specificity >= 2 && q.size >= 2 && hits < 2) score -= 48;
+  if (specificity >= 3 && q.size >= 3 && hits < 2) score -= 24;
   // Exact named-entity phrase overlap is especially valuable for people/places.
   const qText = cleanText(query).toLowerCase();
   const cText = cleanText(candidateText).toLowerCase();
@@ -342,7 +354,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/41 (+licensed relevance media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/42 (+licensed relevance media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -362,7 +374,7 @@ async function findCommonsMedia(query, specificity = 1) {
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
     // Specific queries must actually match. A wrong photo is worse than a branded fallback.
-    const threshold = specificity >= 3 ? 28 : specificity >= 1 ? 20 : 42;
+    const threshold = specificity >= 3 ? 36 : specificity >= 2 ? 30 : specificity >= 1 ? 26 : 52;
     if (!best || best.score < threshold) return null;
     const attributionRequired = !String(best.license).toUpperCase().includes("PUBLIC DOMAIN") && String(best.license).toUpperCase() !== "CC0";
     return {
@@ -375,7 +387,8 @@ async function findCommonsMedia(query, specificity = 1) {
       attribution: [best.creator, best.license, "Wikimedia Commons"].filter(Boolean).join(" · "),
       shortAttribution: attributionRequired ? [best.creator || "Wikimedia Commons", best.license].filter(Boolean).join(" · ") : "Wikimedia Commons · נחלת הכלל",
       provider: "Wikimedia Commons",
-      relevanceScore: Math.round(best.score)
+      relevanceScore: Math.round(best.score),
+      illustrative: specificity <= 1
     };
   } catch {}
   return null;
@@ -388,7 +401,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/41 (+news aggregator; relevance licensed media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/42 (+news aggregator; relevance licensed media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -405,7 +418,7 @@ async function findOpenverseMedia(query, specificity = 1) {
     }
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
-    const threshold = specificity >= 3 ? 30 : specificity >= 1 ? 22 : 46;
+    const threshold = specificity >= 3 ? 38 : specificity >= 2 ? 32 : specificity >= 1 ? 28 : 54;
     if (!best || best.score < threshold) return null;
     const img = best.img;
     const creator = cleanText(img?.creator || "");
@@ -419,7 +432,8 @@ async function findOpenverseMedia(query, specificity = 1) {
       attribution: img?.attribution || [creator, String(img?.license || "").toUpperCase(), "Openverse"].filter(Boolean).join(" · "),
       shortAttribution: [creator || "Openverse", String(img?.license || "").toUpperCase()].filter(Boolean).join(" · "),
       provider: img?.provider || "Openverse",
-      relevanceScore: Math.round(best.score)
+      relevanceScore: Math.round(best.score),
+      illustrative: specificity <= 1
     };
   } catch {}
   return null;
@@ -430,7 +444,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v41?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v42?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1193,7 +1207,7 @@ function clusterItems(items) {
         if (!report?.title) return false;
         const reportTime = Date.parse(report.publishedAt || 0);
         const reportDeltaMs = Number.isFinite(reportTime) && Number.isFinite(itemTime) ? Math.abs(itemTime - reportTime) : timeDeltaMs;
-        return reportDeltaMs <= 120 * 60 * 1000 && sameEvent(item.title, report.title, reportDeltaMs);
+        return reportDeltaMs <= 180 * 60 * 1000 && sameEvent(item.title, report.title, reportDeltaMs);
       });
       if (directMatch || relatedMatch) {
         match = cluster;
@@ -1274,7 +1288,7 @@ function sameEvent(a, b, timeDeltaMs = Infinity) {
   const jaccard = union ? intersection / union : 0;
   const containment = intersection / Math.max(1, Math.min(A.size, B.size));
   if (jaccard >= 0.50 || (intersection >= 3 && containment >= 0.46) || (intersection >= 4 && containment >= 0.40)) return true;
-  if (timeDeltaMs <= 120 * 60 * 1000) {
+  if (timeDeltaMs <= 180 * 60 * 1000) {
     const entitiesA = eventEntities(a);
     const entitiesB = eventEntities(b);
     const actionsA = eventActions(a);
@@ -1283,7 +1297,7 @@ function sameEvent(a, b, timeDeltaMs = Infinity) {
     const sharedActions = [...actionsA].filter((x) => actionsB.has(x)).length;
     if (sharedEntities >= 2 && sharedActions >= 1) return true;
     if (sharedEntities >= 1 && sharedActions >= 2 && intersection >= 2) return true;
-    if (timeDeltaMs <= 90 * 60 * 1000 && sharedEntities >= 1 && sharedActions >= 1) {
+    if (timeDeltaMs <= 150 * 60 * 1000 && sharedEntities >= 1 && sharedActions >= 1) {
       const specificTargets = new Set(["כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","טהרן","ביירות","דמשק"]);
       const sharedSpecificTarget = [...entitiesA].some((entity) => entitiesB.has(entity) && specificTargets.has(entity));
       if (sharedSpecificTarget) return true;

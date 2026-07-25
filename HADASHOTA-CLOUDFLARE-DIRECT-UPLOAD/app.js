@@ -900,7 +900,7 @@ function mergeClustersClient(items) {
         if (!report?.title) return false;
         const reportTime = Date.parse(report.publishedAt || 0);
         const reportDeltaMs = Number.isFinite(reportTime) && Number.isFinite(itemTime) ? Math.abs(itemTime - reportTime) : timeDeltaMs;
-        return reportDeltaMs <= 120 * 60 * 1000 && sameEventClient(item.title, report.title, reportDeltaMs);
+        return reportDeltaMs <= 180 * 60 * 1000 && sameEventClient(item.title, report.title, reportDeltaMs);
       });
       if (directMatch || relatedMatch) { match = candidate; break; }
     }
@@ -1025,7 +1025,7 @@ function sameEventClient(a, b, timeDeltaMs = Infinity) {
   const containment = intersection / Math.max(1, Math.min(A.size, B.size));
   if (jaccard >= 0.50 || (intersection >= 3 && containment >= 0.46) || (intersection >= 4 && containment >= 0.40)) return true;
 
-  if (timeDeltaMs <= 120 * 60 * 1000) {
+  if (timeDeltaMs <= 180 * 60 * 1000) {
     const entitiesA = clientEventEntities(a);
     const entitiesB = clientEventEntities(b);
     const actionsA = clientEventActions(a);
@@ -1037,7 +1037,7 @@ function sameEventClient(a, b, timeDeltaMs = Infinity) {
     // Breaking regional events are often phrased very differently across Hebrew,
     // English and Telegram. A shared specific target + the same conflict action
     // within 90 minutes is enough to treat them as one developing event.
-    if (timeDeltaMs <= 90 * 60 * 1000 && sharedEntities >= 1 && sharedActions >= 1) {
+    if (timeDeltaMs <= 150 * 60 * 1000 && sharedEntities >= 1 && sharedActions >= 1) {
       const specificTargets = new Set(["כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","טהרן","ביירות","דמשק"]);
       const sharedSpecificTarget = [...entitiesA].some((entity) => entitiesB.has(entity) && specificTargets.has(entity));
       if (sharedSpecificTarget) return true;
@@ -1100,12 +1100,57 @@ function clientEventActions(value) {
 
 
 
-// V40 — Newsroom editorial layer.
-// We do not simply mirror a publisher headline. Instead we choose the strongest factual
-// formulation from the corroborating reports and rebuild it in Hadashota's own newsroom voice.
+// V42 — Consensus newsroom engine.
+// Headlines are built from the wording that is best-supported across the cluster,
+// then lightly edited into a natural front-page headline. This keeps the human
+// newsroom quality of the source material without blindly mirroring one publisher.
+function titleSimilarityScore(a, b) {
+  const A = clientTitleTokens(cleanDisplayTitle(a || ""));
+  const B = clientTitleTokens(cleanDisplayTitle(b || ""));
+  if (!A.size || !B.size) return 0;
+  let hit = 0;
+  for (const token of A) if (B.has(token)) hit += 1;
+  const union = A.size + B.size - hit;
+  const jaccard = union ? hit / union : 0;
+  const containment = hit / Math.max(1, Math.min(A.size, B.size));
+  return Math.max(jaccard, containment * .82);
+}
+
+function repeatedPhraseCandidate(titles) {
+  const stop = new Set(["דיווח","דיווחים","היום","חדשות","עכשיו","לאחר","אחרי","לקראת","בעקבות","במהלך","של","על","עם","את","הוא","היא","עוד"]);
+  const counts = new Map();
+  for (const raw of titles) {
+    const words = cleanDisplayTitle(raw).replace(/[״׳'\"`]/g, "").split(/\s+/).filter((w) => /^[א-ת]{2,}$/.test(w) && !stop.has(w));
+    for (let n = 3; n >= 2; n--) {
+      for (let i = 0; i + n <= words.length; i++) {
+        const phrase = words.slice(i, i+n).join(" ");
+        counts.set(phrase, (counts.get(phrase) || 0) + 1);
+      }
+    }
+  }
+  return [...counts.entries()]
+    .filter(([phrase, n]) => n >= 2 && phrase.length >= 6)
+    .sort((a,b) => b[1]-a[1] || b[0].length-a[0].length)[0]?.[0] || "";
+}
+
+function consensusMedoidTitle(titles) {
+  const rows = titles.map(cleanNewsroomCandidate).filter((t) => t.length >= 14);
+  if (!rows.length) return "";
+  const scored = rows.map((title, i) => {
+    let support = 0;
+    for (let j = 0; j < rows.length; j++) if (j !== i) support += titleSimilarityScore(title, rows[j]);
+    const detail = Math.min(16, (title.match(/\d|[א-ת]{3,}/g) || []).length * .55);
+    const shape = title.length >= 34 && title.length <= 96 ? 8 : title.length <= 118 ? 4 : -5;
+    const clickbait = /^(דרמה|סערה|הלם|צפו|תיעוד|לא תאמינו)\b/.test(title) ? -8 : 0;
+    return { title, score: support * 35 + detail + shape + clickbait };
+  });
+  scored.sort((a,b) => b.score-a.score || a.title.length-b.title.length);
+  return scored[0]?.title || rows[0];
+}
+
 function editorialHeadlineForItem(item) {
   const reports = normalizeClusterReports(item);
-  const titles = reports.map((r) => cleanDisplayTitle(r.title || "")).filter(Boolean);
+  const titles = [...new Set(reports.map((r) => cleanDisplayTitle(r.title || "")).filter(Boolean))];
   if (!titles.length) return cleanDisplayTitle(item?.title || "חדשות עכשיו");
   const corpus = titles.join(" | ");
   const lower = corpus.toLowerCase();
@@ -1115,94 +1160,60 @@ function editorialHeadlineForItem(item) {
     for (const e of clientEventEntities(title)) entities.add(e);
     for (const a of clientEventActions(title)) actions.add(a);
   }
-
-  const locationOrder = ["כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","טהרן","ביירות","דמשק","לבנון","סוריה","ישראל"];
-  const place = locationOrder.find((x) => entities.has(x));
-  const iran = entities.has("איראן");
-  const usa = entities.has("ארהב");
-  const hasAttack = actions.has("attack");
-  const hasMissile = actions.has("missile");
-  const hasIntercept = actions.has("intercept");
   const reportCount = Math.max(1, Number(item?.reportCount) || reports.length || 1);
-
-  // Human-interest / missing-person stories need the person's name to stay prominent.
   const found = /(נמצא|נמצאה|אותר|אותרה|אותרו|נמצאו)/.test(lower);
   const missing = /(נעדר|נעדרת|החיפושים|אבדו עקבות|נעלם|נעלמה|חיפושים)/.test(lower);
   if (found && missing) {
-    const name = extractLikelyPersonName(titles);
+    const name = extractLikelyPersonName(titles) || repeatedPhraseCandidate(titles);
     return name ? `סוף טוב לחיפושים: ${name} אותר בשלום` : "סוף טוב לחיפושים: הנעדר אותר בשלום";
   }
 
-  // High-confidence security clusters get a true front-page treatment.
-  if (iran && place && place !== "איראן" && hasAttack) {
-    if (hasMissile && hasIntercept) return `ההסלמה מתרחבת: ירי איראני לעבר ${place} — ודיווחים על יירוטים`;
-    if (hasMissile) return `ההסלמה מתרחבת: דיווחים על ירי איראני לעבר ${place}`;
-    return `המתיחות מחריפה: דיווחים על תקיפה איראנית ב${place}`;
-  }
-  if (place && hasMissile && hasIntercept) return `לילה מתוח ב${place}: ירי ויירוטים במוקד האירועים`;
-  if (place && hasAttack && reportCount >= 3) return `אירוע מתפתח ב${place}: כמה מקורות מדווחים על תקיפה`;
-  if (iran && hasAttack) return "המתיחות מול איראן מחריפה: דיווחים חדשים מהשטח";
-  if (usa && hasAttack) return "התפתחות ביטחונית: דיווחים חדשים הנוגעים לכוחות האמריקניים";
+  let base = consensusMedoidTitle(titles) || strongestFactFromTitles(titles);
+  base = cleanNewsroomCandidate(base)
+    .replace(/^דיווחים?\s*[:\-–—]?\s*/i, "")
+    .replace(/^על פי דיווחים?\s*[:\-–—]?\s*/i, "")
+    .trim();
+  if (!base) return item?.category === "security" ? "אירוע מתפתח" : "חדשות עכשיו";
 
-  const fact = strongestFactFromTitles(titles);
-  const category = item?.category || "other";
-  if (!fact) return category === "security" ? "אירוע מתפתח" : "חדשות עכשיו";
-
-  // When several independent sources corroborate the story, the prefix makes the headline
-  // clearly Hadashota editorial copy rather than a verbatim publisher headline.
-  if (reportCount >= 3) {
-    return polishConsensusHeadline(fact, category, titles);
-  }
-
-  // Single-source feed cards stay factual and restrained.
-  return fact;
+  // Do not manufacture drama that the reports themselves do not support.
+  // Add a front-page opener only when the underlying wording clearly warrants it.
+  if (reportCount >= 3) return polishConsensusHeadline(base, item?.category || "other", titles);
+  return base;
 }
 
 function polishConsensusHeadline(fact, category, titles = []) {
   let t = cleanNewsroomCandidate(fact);
-  // Keep the concrete names, numbers and event details that make a real news headline strong.
-  // Only add an editorial opening when it actually adds information/tone, not as a canned label.
+  const all = titles.join(" ");
+  const alreadyHasPunch = /^[^:]{3,34}:/.test(t) || /(הסלמה|דרמה|טלטלה|חשש|מתיחות|פיצוץ|מטח|תקיפה|אותר|נמצא)/.test(t.slice(0, 34));
+  if (alreadyHasPunch) return t;
   if (category === "security") {
-    if (/(הרוג|הרוגים|פצוע|פצועים|נפגע|נפגעים)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `האירוע גובה מחיר: ${t}`;
-    if (/(אותר|נמצא|חולץ|שוחרר)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `אחרי שעות של מתח: ${t}`;
-    if (/(מטח|טילים|כטב|תקיפה|פיצוץ|יירוט)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `הסלמה בשטח: ${t}`;
+    if (/(הרוג|הרוגים|פצוע|פצועים|נפגע|נפגעים)/.test(all)) return `האירוע גובה מחיר: ${t}`;
+    if (/(אותר|נמצא|חולץ|שוחרר)/.test(all)) return `אחרי שעות של מתח: ${t}`;
+    if (/(מטח|טילים|כטב|תקיפה|פיצוץ|יירוט|ירי)/.test(all)) return `הסלמה בשטח: ${t}`;
   }
-  if (category === "politics") {
-    if (/(התפטר|פרש|פוטר|בחירות|פיזור|קואליציה)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `טלטלה פוליטית: ${t}`;
-  }
-  if (category === "diplomatic") {
-    if (/(הסכם|שיחות|פסגה|שליח|אולטימטום|סנקציות)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `התפתחות מדינית: ${t}`;
-  }
-  // For all other consensus stories, the strongest corroborated formulation is usually
-  // better journalism than a generic "במוקד החדשות" prefix.
+  if (category === "politics" && /(התפטר|פרש|פוטר|בחירות|פיזור|קואליציה)/.test(all)) return `טלטלה פוליטית: ${t}`;
+  if (category === "diplomatic" && /(הסכם|שיחות|פסגה|שליח|אולטימטום|סנקציות)/.test(all)) return `התפתחות מדינית: ${t}`;
   return t;
 }
 
-function newsroomSecurityPrefix(fact) {
-  const t = String(fact);
-  if (/(טיל|ירי|שיגור|תקיפה|פיצוץ|כטב)/.test(t)) return "האירוע שמסעיר את השטח";
-  if (/(חטוף|נעדר|חילוץ|נפגע|הרוג|פצוע)/.test(t)) return "הדרמה נמשכת";
-  return "אירוע מתפתח";
-}
-
-function newsroomPoliticsPrefix(fact) {
-  const t = String(fact);
-  if (/(ממשלה|קואליציה|בחירות|פיטור|פרישה|התפטר)/.test(t)) return "טלטלה במערכת הפוליטית";
-  if (/(נתניהו|ראש הממשלה|שר|כנסת)/.test(t)) return "המערכת הפוליטית סוערת";
-  return "במערכת הפוליטית";
-}
-
 function extractLikelyPersonName(titles) {
-  const stop = new Set(["הילד","הילדה","הנער","הנערה","הנעדר","הנעדרת","נעדר","נעדרת","נמצא","נמצאה","אותר","אותרה","אחרי","שעות","חיפושים","החיפושים","דיווח","דיווחים","משטרת","ישראל"]);
-  const counts = new Map();
+  const stop = new Set(["הילד","הילדה","הנער","הנערה","הנעדר","הנעדרת","נעדר","נעדרת","נמצא","נמצאה","אותר","אותרה","אחרי","שעות","חיפושים","החיפושים","דיווח","דיווחים","משטרת","ישראל","שלום","בחיים"]);
+  const phraseCounts = new Map();
   for (const title of titles) {
-    const words = String(title).replace(/[״׳'"`]/g, "").match(/[א-ת]{3,}/g) || [];
-    for (const w of words) {
-      if (stop.has(w)) continue;
-      counts.set(w, (counts.get(w) || 0) + 1);
+    const words = String(title).replace(/[״׳'\"`]/g, "").match(/[א-ת]{2,}/g) || [];
+    for (let i=0;i<words.length;i++) {
+      if (stop.has(words[i])) continue;
+      const one = words[i];
+      phraseCounts.set(one, (phraseCounts.get(one)||0)+1);
+      if (i+1 < words.length && !stop.has(words[i+1])) {
+        const two = `${words[i]} ${words[i+1]}`;
+        phraseCounts.set(two, (phraseCounts.get(two)||0)+1);
+      }
     }
   }
-  return [...counts.entries()].filter(([,n]) => n >= 2).sort((a,b) => b[1]-a[1] || b[0].length-a[0].length)[0]?.[0] || "";
+  return [...phraseCounts.entries()]
+    .filter(([phrase,n]) => n >= 2 && phrase.length >= 3)
+    .sort((a,b) => b[1]-a[1] || (b[0].includes(" ")-a[0].includes(" ")) || b[0].length-a[0].length)[0]?.[0] || "";
 }
 
 function cleanNewsroomCandidate(value) {
@@ -1211,37 +1222,33 @@ function cleanNewsroomCandidate(value) {
        .replace(/^(פרסום ראשון|בלעדי|צפו|תיעוד|דיווח ראשוני)\s*[:\-–—]\s*/i, "")
        .replace(/\s+/g, " ")
        .trim();
-  if (t.length > 112) t = t.slice(0, 109).replace(/\s+\S*$/, "") + "…";
+  if (t.length > 116) t = t.slice(0, 113).replace(/\s+\S*$/, "") + "…";
   return t;
 }
 
 function strongestFactFromTitles(titles) {
   const rows = titles.map(cleanNewsroomCandidate).filter((t) => t.length >= 14);
   if (!rows.length) return "";
-  const dramatic = /(תקיפה|ירי|טיל|פיצוץ|אותר|נמצא|דרמה|סערה|החלטה|הודיע|נחשף|לראשונה|חשש|חילוץ|הסלמה|יירוט)/;
-  const clickbait = /^(דרמה|סערה|הלם|לא תאמינו|צפו|תיעוד)\b/;
-  const scored = rows.map((t) => {
-    let score = 0;
-    const len = t.length;
-    if (len >= 38 && len <= 92) score += 18;
-    else if (len >= 25 && len <= 108) score += 10;
-    if (dramatic.test(t)) score += 9;
-    if (/[־–—:]/.test(t)) score += 4;
-    if (/\d/.test(t)) score += 3;
-    if (clickbait.test(t)) score -= 8;
-    return { t, score };
-  }).sort((a,b) => b.score-a.score || a.t.length-b.t.length);
-  let chosen = scored[0].t;
-  // Rebuild punctuation and opening so the result is editorial, punchy and not a verbatim mirror.
-  chosen = chosen.replace(/^דיווחים?\s*[:\-–—]\s*/i, "")
-                 .replace(/^על פי דיווחים?\s*[:\-–—]?\s*/i, "")
-                 .replace(/[!]{2,}/g, "!")
-                 .trim();
-  return chosen;
+  return consensusMedoidTitle(rows) || rows[0];
 }
 
 function editorialTitle(item) {
   try { return editorialHeadlineForItem(item); } catch { return cleanDisplayTitle(item?.title || "חדשות עכשיו"); }
+}
+
+
+function editorialDeckForItem(item, sourceCount = 1) {
+  const titles = [...new Set(normalizeClusterReports(item).map((r) => cleanNewsroomCandidate(r.title || "")).filter(Boolean))];
+  const main = editorialTitle(item);
+  const secondary = titles
+    .filter((t) => t !== main)
+    .map((t) => ({ t, sim: titleSimilarityScore(t, main) }))
+    .filter((x) => x.sim >= .18)
+    .sort((a,b) => b.sim-a.sim || a.t.length-b.t.length)[0]?.t;
+  if (secondary && secondary.length >= 18) return secondary;
+  return sourceCount >= 3
+    ? `${sourceCount} מקורות שונים מצליבים את פרטי האירוע. העדכונים החדשים ביותר מתעדכנים כאן בזמן אמת.`
+    : "האירוע עדיין מתפתח. חדשותא ממשיכה לאסוף דיווחים ולאמת אותם מול מקורות נוספים.";
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -1301,8 +1308,8 @@ async function hydrateLeadSafeMedia(winner, leadTitle) {
   el.leadStoryImage.referrerPolicy = "no-referrer";
   el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
   delete el.leadStoryMedia.dataset.fallbackLabel;
-  el.leadStoryMedia.dataset.mediaCredit = media.attribution || "Openverse";
-  el.leadStoryMedia.title = media.attribution ? `תמונה ברישיון פתוח · ${media.attribution}` : "תמונה ברישיון פתוח";
+  el.leadStoryMedia.dataset.mediaCredit = `${media.illustrative ? "צילום אילוסטרציה · " : ""}${media.shortAttribution || media.attribution || "מדיה ברישיון פתוח"}`;
+  el.leadStoryMedia.title = `${media.illustrative ? "צילום אילוסטרציה — " : ""}${media.attribution ? `תמונה ברישיון פתוח · ${media.attribution}` : "תמונה ברישיון פתוח"}`;
 }
 
 function mediaFallbackLabelFromSlot(slot) {
@@ -1347,7 +1354,7 @@ async function hydrateSafeMediaSlots() {
       a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
       const credit = document.createElement("span");
       credit.className = "media-credit";
-      credit.textContent = media.shortAttribution || media.attribution;
+      credit.textContent = `${media.illustrative ? "אילוסטרציה · " : ""}${media.shortAttribution || media.attribution}`;
       a.appendChild(credit);
     }
   }));
@@ -1545,13 +1552,22 @@ function renderSources() {
 
 const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
 const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
+const VERIFIED_LEAD_MAX_AGE_MS = 120 * 60 * 1000;
+const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+
+function leadSnapshotIsFresh(parsed, hardMaxMs = STORED_LEAD_HARD_MAX_AGE_MS) {
+  if (!parsed?.entry?.item || !Number(parsed.savedAt)) return false;
+  const latest = Date.parse(parsed.entry.latestAt || parsed.entry.item?.latestReportAt || parsed.entry.item?.publishedAt || 0);
+  if (!Number.isFinite(latest)) return false;
+  return Date.now() - latest <= hardMaxMs;
+}
 
 function readStoredLeadSnapshot() {
   try {
     const raw = localStorage.getItem(LEAD_SNAPSHOT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed?.entry?.item || !Number(parsed.savedAt)) return null;
+    if (!leadSnapshotIsFresh(parsed)) return null;
     return parsed;
   } catch {
     return null;
@@ -1563,7 +1579,7 @@ function readDisplayedLeadSnapshot() {
     const raw = localStorage.getItem(DISPLAYED_LEAD_SNAPSHOT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed?.entry?.item || !Number(parsed.savedAt)) return null;
+    if (!leadSnapshotIsFresh(parsed)) return null;
     return parsed;
   } catch {
     return null;
@@ -1648,11 +1664,11 @@ function leadQualificationAt(reports) {
 
 function renderLeadStory() {
   const now = Date.now();
-  const corroborationWindowMs = 90 * 60 * 1000;
+  const corroborationWindowMs = 150 * 60 * 1000;
   const allEntries = state.items.map((item) => {
     const latestAt = clusterLatestAt(item);
     const latestMs = Date.parse(latestAt);
-    const ageMinutes = Math.max(0, (now - latestMs) / 60_000);
+    const ageMinutes = Number.isFinite(latestMs) ? Math.max(0, (now - latestMs) / 60_000) : 9999;
     const reports = normalizeClusterReports(item);
     const recentReports = reports.filter((report) => {
       const reportMs = Date.parse(report.publishedAt || 0);
@@ -1660,101 +1676,79 @@ function renderLeadStory() {
       const delta = latestMs - reportMs;
       return delta >= -5 * 60 * 1000 && delta <= corroborationWindowMs;
     });
-    // normalizeClusterReports() is deduplicated by publisher/sourceId, therefore
-    // this is a count of DISTINCT sources, not a count of posts.
     const uniqueSources = recentReports.length;
     const hasOfficial = recentReports.some((report) => report.official);
     const hasVerified = recentReports.some((report) => report.verified);
     const reportTimes = recentReports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
     const spreadMinutes = reportTimes.length > 1 ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000)) : 0;
     const qualificationAt = uniqueSources >= 3 ? leadQualificationAt(recentReports) : null;
-
-    let freshness = 0;
-    if (ageMinutes <= 15) freshness = 10;
-    else if (ageMinutes <= 30) freshness = 8.5;
-    else if (ageMinutes <= 60) freshness = 6;
-    else if (ageMinutes <= 90) freshness = 3.2;
-    else if (ageMinutes <= 120) freshness = 1.2;
-
-    const sourceScore = Math.min(uniqueSources, 9) * 1.2;
-    const authority = hasOfficial ? 1.8 : hasVerified ? 0.55 : 0;
-    const activity = ageMinutes <= 12 ? 1.8 : ageMinutes <= 25 ? 1 : 0;
-    const velocity = spreadMinutes <= 10 && uniqueSources >= 4 ? 1.2 : spreadMinutes <= 20 && uniqueSources >= 3 ? 0.55 : 0;
-    const oldPenalty = ageMinutes > 75 ? (ageMinutes - 75) / 11 : 0;
-    const score = freshness + sourceScore + authority + activity + velocity - oldPenalty;
     const hotScore = storyHotScore(item);
+    const sourceBoost = Math.min(uniqueSources, 8) * 7;
+    const recencyBoost = ageMinutes <= 10 ? 34 : ageMinutes <= 25 ? 26 : ageMinutes <= 45 ? 18 : ageMinutes <= 90 ? 9 : 0;
+    const authorityBoost = hasOfficial ? 13 : hasVerified ? 5 : 0;
+    const velocityBoost = uniqueSources >= 3 && spreadMinutes <= 20 ? 12 : uniqueSources >= 2 && spreadMinutes <= 35 ? 6 : 0;
+    const score = hotScore * .75 + sourceBoost + recencyBoost + authorityBoost + velocityBoost;
     return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, qualificationAt, score, hotScore, hasOfficial, spreadMinutes };
   });
 
-  // Product rule: all devices must resolve the same lead from the same data.
-  // A story earns the lead only when the THIRD distinct source arrives. The most
-  // recently qualified story wins; a one/two-source item can never replace it.
-  const candidates = allEntries
-    .filter((entry) => entry.ageMinutes <= 12 * 60 && entry.uniqueSources >= 3 && entry.qualificationAt)
-    .sort((a, b) => {
-      const hotDelta = (Number(b.hotScore) || 0) - (Number(a.hotScore) || 0);
-      if (Math.abs(hotDelta) >= 4) return hotDelta;
-      const qualifiedDelta = Date.parse(b.qualificationAt) - Date.parse(a.qualificationAt);
-      if (qualifiedDelta) return qualifiedDelta;
-      const latestDelta = Date.parse(b.latestAt) - Date.parse(a.latestAt);
-      if (latestDelta) return latestDelta;
-      return b.score - a.score;
-    });
+  // Tier A: a corroborated, genuinely current story. 3+ distinct sources remain the gold standard.
+  const verified = allEntries
+    .filter((e) => e.uniqueSources >= 3 && e.qualificationAt && e.ageMinutes <= VERIFIED_LEAD_MAX_AGE_MS / 60000)
+    .sort((a,b) => b.score-a.score || Date.parse(b.latestAt)-Date.parse(a.latestAt));
 
-  const deterministicLead = candidates[0] || null;
+  // Tier B: when no 3-source story is current, do NOT freeze yesterday's headline.
+  // Prefer a fresh developing story with two sources, then a fresh official report.
+  const developing = allEntries
+    .filter((e) => e.ageMinutes <= 45 && (e.uniqueSources >= 2 || e.hasOfficial))
+    .sort((a,b) => b.score-a.score || Date.parse(b.latestAt)-Date.parse(a.latestAt));
+
+  // Tier C: last resort is simply the freshest substantial story, capped at 60 minutes.
+  const freshFallback = allEntries
+    .filter((e) => e.ageMinutes <= 60)
+    .sort((a,b) => b.score-a.score || Date.parse(b.latestAt)-Date.parse(a.latestAt));
+
+  let winner = verified[0] || developing[0] || freshFallback[0] || null;
   const storedQualified = state.lastQualifiedLead || readStoredLeadSnapshot();
-  const storedDisplay = state.displayedLeadSnapshot || readDisplayedLeadSnapshot();
-  let winner = deterministicLead;
 
-  // During a partial/stale refresh, never downgrade or switch the lead based on
-  // incomplete data. Keep the last qualified story until a complete refresh.
-  if (state.dataDelayed && storedQualified?.entry?.item) {
-    const storedQ = Date.parse(storedQualified.entry.qualificationAt || 0);
-    const liveQ = Date.parse(deterministicLead?.qualificationAt || 0);
-    if (!deterministicLead || !Number.isFinite(liveQ) || (Number.isFinite(storedQ) && liveQ <= storedQ)) {
-      winner = storedQualified.entry;
-    }
+  // If a refresh is partial, a still-current verified snapshot may bridge the gap,
+  // but never for hours. Freshness always beats a stale headline.
+  if (state.dataDelayed && storedQualified?.entry?.item && leadSnapshotIsFresh(storedQualified, VERIFIED_LEAD_MAX_AGE_MS)) {
+    const storedLatest = Date.parse(storedQualified.entry.latestAt || 0);
+    const liveLatest = Date.parse(winner?.latestAt || 0);
+    if (!winner || (Number.isFinite(storedLatest) && (!Number.isFinite(liveLatest) || storedLatest > liveLatest))) winner = storedQualified.entry;
   }
 
-  // If the current payload contains no 3-source story (for example immediately
-  // after first launch), keep the last qualified/displayed story. Only on a truly
-  // fresh installation do we seed the box with the newest real story + image.
-  if (!winner && storedQualified?.entry?.item) winner = storedQualified.entry;
-  if (!winner && storedDisplay?.entry?.item) winner = storedDisplay.entry;
   if (!winner) winner = buildFallbackLeadCandidate();
+  if (!winner) { el.leadStory.classList.remove("hidden"); return; }
 
-  if (!winner) {
-    el.leadStory.classList.remove("hidden");
-    return;
-  }
-
+  winner.leadMode = Number(winner.uniqueSources) >= 3 ? "verified" : "developing";
   const winnerFingerprint = leadFingerprint(winner);
   if (winnerFingerprint !== state.displayedLeadFingerprint) {
     state.displayedLeadFingerprint = winnerFingerprint;
     state.displayedLeadSince = Date.now();
   }
-
   if (Number(winner.uniqueSources) >= 3) persistQualifiedLeadSnapshot(winner);
   persistDisplayedLeadSnapshot(winner);
 
   const item = winner.item;
-  const sources = (winner.recentReports?.length ? winner.recentReports : winner.reports?.length ? winner.reports : normalizeClusterReports(item));
-  const sourceTarget = sources.find((source) => source.sourceKind === "site" && source.url)
-    || sources.find((source) => source.url)
-    || (item.url ? item : null);
+  const sources = winner.recentReports?.length ? winner.recentReports : winner.reports?.length ? winner.reports : normalizeClusterReports(item);
+  const sourceTarget = sources.find((source) => source.sourceKind === "site" && source.url) || sources.find((source) => source.url) || (item.url ? item : null);
   const unique = sources.slice(0, 5);
-
   const leadTitle = editorialHeadlineForItem(item);
   el.leadStoryTitle.textContent = leadTitle;
   el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
-  el.leadStoryPreview.textContent = `${Math.max(3, Number(winner.uniqueSources) || sources.length)} מקורות שונים מדווחים על אותו אירוע. הכותרת נוסחה במערכת חדשותא על בסיס המכנה המשותף בין הדיווחים.`;
+  el.leadStoryPreview.textContent = editorialDeckForItem(item, Math.max(1, Number(winner.uniqueSources) || sources.length));
   el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName;
   el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
   el.leadStoryCount.textContent = `${Math.max(1, Number(winner.uniqueSources) || unique.length || 1)} מקורות מדווחים`;
   const leadHot = storyHotScore(item);
   const leadVerify = storyVerification(item);
   if (el.leadHotScore) el.leadHotScore.textContent = `🔥 חום ${leadHot}/100`;
-  if (el.leadVerification) el.leadVerification.textContent = `✓ רמת אימות ${leadVerify.label}${leadVerify.hasOfficial ? " · כולל מקור רשמי" : ""}`;
+  if (el.leadVerification) {
+    el.leadVerification.textContent = winner.leadMode === "verified"
+      ? `✓ רמת אימות ${leadVerify.label}${leadVerify.hasOfficial ? " · כולל מקור רשמי" : ""}`
+      : `◌ מתפתח · ${Math.max(1, Number(winner.uniqueSources) || 1)} מקורות כרגע`;
+  }
   if (el.leadTimeline) {
     const timeline = storyTimelineReports(item, 7);
     el.leadTimeline.innerHTML = timeline.map((report) => `<a href="${safeUrl(report.url)}" target="_blank" rel="noopener noreferrer"><time>${formatClock(report.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(report.sourceName))}</span><b>עדכון מהמקור</b></a>`).join("");
@@ -1762,21 +1756,12 @@ function renderLeadStory() {
   }
   if (el.leadStoryLabelText) el.leadStoryLabelText.textContent = "הסיפור המרכזי עכשיו";
   if (el.leadStoryLiveBadge) el.leadStoryLiveBadge.classList.remove("hidden");
-  if (el.leadStorySignal) {
-    el.leadStorySignal.textContent = "";
-    el.leadStorySignal.removeAttribute("title");
-    el.leadStorySignal.classList.add("hidden");
-  }
+  if (el.leadStorySignal) { el.leadStorySignal.textContent = ""; el.leadStorySignal.removeAttribute("title"); el.leadStorySignal.classList.add("hidden"); }
 
   setOptionalLink(el.leadStoryLink, sourceTarget?.url);
   const leadHref = safeHttpHref(sourceTarget?.url);
-  if (leadHref) {
-    el.leadStoryCta.href = leadHref;
-    el.leadStoryCta.classList.remove("hidden");
-  } else {
-    el.leadStoryCta.removeAttribute("href");
-    el.leadStoryCta.classList.add("hidden");
-  }
+  if (leadHref) { el.leadStoryCta.href = leadHref; el.leadStoryCta.classList.remove("hidden"); }
+  else { el.leadStoryCta.removeAttribute("href"); el.leadStoryCta.classList.add("hidden"); }
 
   el.leadStoryMedia.classList.remove("hidden");
   el.leadStory.classList.add("has-media");
