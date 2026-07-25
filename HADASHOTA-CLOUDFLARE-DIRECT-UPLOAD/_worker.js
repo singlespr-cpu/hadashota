@@ -134,6 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
+          version: "68.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -146,6 +147,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
+        version: "68.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         newsShards: ["sites", "telegram"]
@@ -220,7 +222,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v67/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v68/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -573,7 +575,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v67?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v68?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -863,16 +865,18 @@ async function handleNews(request, env, ctx) {
   const forceRequested = requestUrl.searchParams.get("force") === "1";
   const shardSources = getShardSources(shard);
   const cache = caches.default;
-  const force = forceRequested ? await claimForceRefreshSlot(request, cache, shard, ctx) : false;
+  // V68: an explicit refresh must always reach the configured publishers.
+  // Browser-specific Sec-Fetch/Origin header differences must never silently demote it.
+  const force = forceRequested;
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}`;
+  cacheUrl.search = `?shard=${shard}&v=68`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}`;
+  lastGoodUrl.search = `?shard=${shard}&v=68`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -885,10 +889,10 @@ async function handleNews(request, env, ctx) {
     // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
     // even when an origin redirects or several sources fail at the same time.
     const retryBudget = { remaining: 6 };
-    const collectionBudgetMs = shard === "telegram"
-      ? (force ? 12_000 : 9_000)
-      : (force ? 14_000 : 11_000);
-    const settled = await fetchSourcesWithLimit(shardSources, 6, retryBudget, force, collectionBudgetMs);
+    // V68: every configured source gets one real attempt on every collection.
+    // Retries happen only after that first complete pass, so late-list sources
+    // (especially Telegram channels) can never be starved by an early timeout.
+    const settled = await fetchSourcesWithLimit(shardSources, 6, retryBudget, force);
     const rawItems = settled.flatMap((result) => result.items);
     const now = Date.now();
     const cutoff = now - 30 * 60 * 60 * 1000;
@@ -959,13 +963,9 @@ async function handleNews(request, env, ctx) {
       };
     }).sort((a,b) => Number(b.official)-Number(a.official) || b.healthScore-a.healthScore || Date.parse(b.lastItemAt||0)-Date.parse(a.lastItemAt||0));
 
-    // A severely degraded refresh must never overwrite or replace a healthy feed.
-    // When only a handful of sources answered, serve the previous good shard and retry soon.
-    const minimumHealthySources = shard === "telegram" ? 3 : 4;
-    if (activeSources.length < minimumHealthySources) {
-      const previousGood = await cache.match(lastGoodKey);
-      if (previousGood) return await lastGoodOrError(cache, lastGoodKey, shard, `partial_refresh_${activeSources.length}_sources`);
-    }
+    // V68: if even one source produced current items, return the fresh partial
+    // result instead of hiding it behind an older snapshot. The UI already marks
+    // degraded sources and the lead-story policy still requires corroboration.
 
     const generatedAt = new Date().toISOString();
     const payload = {
@@ -974,12 +974,14 @@ async function handleNews(request, env, ctx) {
       refreshAfterSeconds: 30,
       shard,
       stale: false,
+      partial: failedSources.length > 0,
       tookMs: Date.now() - started,
       items: clustered,
       sources: sourceHealth,
       stats: {
         configuredSources: SOURCES.length,
         configuredShardSources: shardSources.length,
+        attemptedSources: settled.length,
         activeSources: activeSources.length,
         items: clustered.length,
         officialSources: activeSources.filter((source) => source.official).length,
@@ -995,17 +997,17 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "67.0.0",
+      "X-Hadashota-Version": "68.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "67.0.0",
+      "X-Hadashota-Version": "68.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
-      "Cache-Control": "public, max-age=0, s-maxage=1800"
+      "Cache-Control": "public, max-age=0, s-maxage=7200"
     });
 
     ctx.waitUntil(Promise.all([
@@ -1024,7 +1026,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
     try {
       const payload = await cached.json();
       const generatedMs = Date.parse(payload.generatedAt || "");
-      if (!Number.isFinite(generatedMs) || Date.now() - generatedMs > 30 * 60 * 1000) {
+      if (!Number.isFinite(generatedMs) || Date.now() - generatedMs > 2 * 60 * 60 * 1000) {
         throw new Error("LAST_GOOD_TOO_OLD");
       }
       payload.stale = true;
@@ -1033,7 +1035,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "67.0.0"
+        "X-Hadashota-Version": "68.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1048,47 +1050,48 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
   }, 503, { "Cache-Control": "no-store", "Retry-After": "8" });
 }
 
-async function claimForceRefreshSlot(request, cache, shard, ctx) {
-  const requestUrl = new URL(request.url);
-  const fetchSite = String(request.headers.get("Sec-Fetch-Site") || "").toLowerCase();
-  const origin = request.headers.get("Origin") || "";
-  const referer = request.headers.get("Referer") || "";
-  const sameOriginHeader = fetchSite === "same-origin"
-    || (origin && origin === requestUrl.origin)
-    || (referer && (() => { try { return new URL(referer).origin === requestUrl.origin; } catch { return false; } })());
-  if (!sameOriginHeader) return false;
-
-  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "anonymous";
-  const key = new Request(`https://hadashota.internal/v67/force-gate/${shard}/${stableId(ip)}`, { method: "GET" });
-  const existing = await cache.match(key);
-  if (existing) return false;
-  const gate = new Response("1", { headers: { "Cache-Control": "public, max-age=0, s-maxage=8" } });
-  ctx?.waitUntil(cache.put(key, gate));
-  return true;
-}
-
-async function fetchSourcesWithLimit(sources, concurrency = 6, retryBudget = { remaining: 0 }, forceFresh = false, deadlineMs = 0) {
+async function fetchSourcesWithLimit(sources, concurrency = 6, retryBudget = { remaining: 0 }, forceFresh = false) {
   const results = new Array(sources.length);
-  let cursor = 0;
   const workerCount = Math.min(Math.max(1, concurrency), sources.length || 1);
-  const deadlineAt = deadlineMs > 0 ? Date.now() + deadlineMs : Infinity;
 
-  async function runner() {
-    while (true) {
-      const index = cursor++;
-      if (index >= sources.length) return;
-      const source = sources[index];
-      if (Date.now() >= deadlineAt - 600) {
-        results[index] = { source, items: [], latencyMs: 0, error: "COLLECTION_DEADLINE", attempts: 0 };
-        continue;
+  async function runIndexes(indexes, isRetry = false) {
+    let cursor = 0;
+    async function runner() {
+      while (true) {
+        const position = cursor++;
+        if (position >= indexes.length) return;
+        const index = indexes[position];
+        const source = sources[index];
+        const result = await fetchSource(source, { remaining: 0 }, forceFresh, Infinity);
+        if (isRetry && results[index]) {
+          result.attempts = Number(results[index].attempts || 1) + Number(result.attempts || 1);
+        }
+        // A retry only replaces the first result when it improves it.
+        if (!isRetry || (result.items?.length || !results[index]?.items?.length)) results[index] = result;
       }
-      results[index] = await fetchSource(source, retryBudget, forceFresh, deadlineAt);
     }
+    await Promise.all(Array.from({ length: Math.min(workerCount, indexes.length || 1) }, runner));
   }
 
-  await Promise.all(Array.from({ length: workerCount }, runner));
+  // PASS 1 — mandatory: every single configured source is attempted exactly once.
+  await runIndexes(sources.map((_, index) => index), false);
+
+  // PASS 2 — optional: only after the complete first pass, retry a small number
+  // of failed/empty sources. This protects total subrequests without starving
+  // any publisher or Telegram channel later in the list.
+  const retryIndexes = results
+    .map((result, index) => ({ result, index }))
+    .filter(({ result }) => result?.error || !result?.items?.length)
+    .slice(0, Math.max(0, Number(retryBudget.remaining || 0)))
+    .map(({ index }) => index);
+
+  if (retryIndexes.length) {
+    retryBudget.remaining = Math.max(0, Number(retryBudget.remaining || 0) - retryIndexes.length);
+    await runIndexes(retryIndexes, true);
+  }
+
   return results.map((result, index) => result || ({
-    source: sources[index], items: [], latencyMs: 0, error: "COLLECTION_DEADLINE", attempts: 0
+    source: sources[index], items: [], latencyMs: 0, error: "NOT_ATTEMPTED", attempts: 0
   }));
 }
 
@@ -1099,7 +1102,7 @@ async function fetchSource(source, retryBudget = { remaining: 0 }, forceFresh = 
 
   while (attempt < 2) {
     try {
-      const baseTimeoutMs = source.adapter === "telegram" ? 3200 : source.adapter === "jsonld" || source.adapter === "htmlnews" ? 4200 : 3600;
+      const baseTimeoutMs = source.adapter === "telegram" ? 2800 : source.adapter === "jsonld" || source.adapter === "htmlnews" ? 3600 : 3200;
       const remainingMs = deadlineAt - Date.now();
       if (remainingMs <= 650) throw new Error("COLLECTION_DEADLINE");
       const timeoutMs = Number.isFinite(remainingMs)
@@ -1161,7 +1164,7 @@ async function fetchWithTimeout(url, timeoutMs, forceFresh = false) {
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   try {
     const headers = {
-      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/67.0; +news-aggregator)",
+      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/68.0; +news-aggregator)",
       "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
       "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
     };

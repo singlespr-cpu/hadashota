@@ -210,9 +210,9 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v67.";
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v68.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
-const CLIENT_NEWS_TIMEOUT_MS = 28_000;
+const CLIENT_NEWS_TIMEOUT_MS = 40_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
 const CATEGORY_LABELS = {
@@ -249,11 +249,12 @@ function init() {
   syncControlsFromState();
   bindEvents();
   registerServiceWorker();
+  verifyApiVersion();
   restoreLocalLastGood();
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V67 cold-open strategy:
+  // V68 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -281,6 +282,33 @@ function init() {
   // Do not stack prompts. First visit gets a gentle delayed install suggestion; returning visitors see it sooner.
   window.setTimeout(() => maybeShowInstallOffer("automatic"), state.visitCount > 1 ? 7000 : 30000);
   syncInstallControl();
+}
+
+async function verifyApiVersion() {
+  const marker = document.querySelector("#siteVersion");
+  if (!marker) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort("api_health_timeout"), 5000);
+  try {
+    const response = await fetch(`/api/health?_=${Date.now()}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const apiVersion = String(data?.version || "");
+    if (!apiVersion.startsWith("68.")) {
+      marker.textContent = apiVersion ? `גרסה V68 · API ${apiVersion}` : "גרסה V68 · API לא מזוהה";
+      return;
+    }
+    marker.textContent = "גרסה V68 · API V68";
+  } catch (error) {
+    marker.textContent = "גרסה V68 · API לא מחובר";
+    console.warn("Hadashota API health check failed", error);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function bindEvents() {
@@ -848,7 +876,7 @@ async function loadNews(force = false, fromRetry = false) {
   }
 
   try {
-    // V67 iPhone/WebKit first-paint fix: do not wait for both shards before
+    // V68 iPhone/WebKit full-source refresh: do not wait for both shards before
     // showing anything. A cold Cloudflare edge can make one shard noticeably
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
@@ -940,7 +968,7 @@ async function loadNews(force = false, fromRetry = false) {
     scheduleNewsRetry();
 
     if (!restored) {
-      el.feed.innerHTML = `<div class="connection-state" role="status"><span class="connection-spinner"></span><div><strong>מתחבר למקורות החדשות…</strong><small>מתבצע ניסיון נוסף אוטומטית בעוד מספר שניות.</small></div></div>`;
+      el.feed.innerHTML = `<div class="connection-state" role="status"><span class="connection-spinner"></span><div><strong>אוסף עדכונים מכל מקורות החדשות…</strong><small>מתבצע ניסיון מכל האתרים וערוצי Telegram, ולאחר מכן ניסיון נוסף אוטומטי אם צריך.</small></div></div>`;
     }
     if (force && !fromRetry) showToast(restored ? "העדכון מתעכב — מוצגים הנתונים האחרונים" : "מתחבר מחדש למקורות…");
   } finally {
@@ -2133,7 +2161,7 @@ function renderLeadStory() {
     Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
     String(a.item?.id || a.item?.url || a.item?.title || "").localeCompare(String(b.item?.id || b.item?.url || b.item?.title || ""), "he");
 
-  // V67 lead policy — hard editorial lock.
+  // V68 lead policy — hard editorial lock.
   // A single-source item can NEVER be the main story.
   // For the first 60 minutes we keep/choose only a 3+ source story.
   // Only after there has been no qualifying 3+ source story for a full hour
@@ -2763,7 +2791,7 @@ function scheduleNextRefresh(seconds = getRefreshInterval()) {
   }
   const delayMs = Math.max(15, seconds) * 1000;
   state.nextRefreshAt = Date.now() + delayMs;
-  state.timer = setTimeout(() => loadNews(false), delayMs);
+  state.timer = setTimeout(() => loadNews(true, true), delayMs);
   updateRefreshCountdown();
 }
 
