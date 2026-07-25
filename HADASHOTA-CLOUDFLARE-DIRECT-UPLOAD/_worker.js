@@ -147,11 +147,6 @@ export default {
       });
     }
 
-    if (url.pathname === "/go") {
-      if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
-      return handleOutboundRedirect(url);
-    }
-
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
     if (url.pathname === "/" || url.pathname === "/index.html") return serveHtmlAsset(request, env, url.origin, "/index.html");
@@ -539,7 +534,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v60?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v64?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -572,62 +567,6 @@ async function handleOpenMedia(url, ctx) {
   const response = json(payload, 200, { "Cache-Control": "public, max-age=21600, stale-while-revalidate=86400" });
   ctx?.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
-}
-
-async function handleOutboundRedirect(url) {
-  const rawTarget = cleanText(url.searchParams.get("u") || "");
-  const publisher = cleanText(url.searchParams.get("p") || "").toLowerCase();
-  const title = cleanText(url.searchParams.get("t") || "").slice(0, 220);
-
-  let target;
-  try {
-    target = new URL(rawTarget);
-  } catch {
-    return Response.redirect("/", 302);
-  }
-  if (!/^https?:$/.test(target.protocol)) return Response.redirect("/", 302);
-
-  const allowedHost = publisher === "ynet"
-    ? /(^|\.)ynet\.co\.il$/i.test(target.hostname)
-    : publisher === "walla"
-      ? /(^|\.)walla\.co\.il$/i.test(target.hostname)
-      : true;
-  if (!allowedHost) return Response.redirect("/", 302);
-
-  // Known RSS publishers sometimes keep an old article path after a CMS move.
-  // Validate only on click, not during feed collection, so it costs no extra
-  // subrequests during normal news refreshes.
-  if (publisher === "ynet" || publisher === "walla") {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4200);
-    try {
-      const check = await fetch(target.toString(), {
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Hadashota/60 (+source-link-validator)",
-          "Accept": "text/html,application/xhtml+xml"
-        }
-      });
-      clearTimeout(timer);
-      if (check.ok && check.url) return Response.redirect(check.url, 302);
-    } catch {
-      clearTimeout(timer);
-    }
-
-    // Never send the user into a known 404. Fall back to the publisher's own
-    // search interface with the exact headline so the story can still be found.
-    const q = encodeURIComponent(title || "");
-    if (publisher === "ynet") {
-      return Response.redirect(`https://www.ynet.co.il/plus/search?q=${q}`, 302);
-    }
-    if (publisher === "walla") {
-      return Response.redirect(`https://search.walla.co.il/?q=${q}`, 302);
-    }
-  }
-
-  return Response.redirect(target.toString(), 302);
 }
 
 async function handleUtilities(request, ctx) {
@@ -998,7 +937,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": force ? "no-store, max-age=0" : "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
-      "X-Hadashota-Version": "60.0.0",
+      "X-Hadashota-Version": "64.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1026,7 +965,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "60.0.0"
+        "X-Hadashota-Version": "64.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1135,22 +1074,57 @@ async function fetchWithTimeout(url, timeoutMs) {
   }
 }
 
+function rssArticleCandidates(block, source) {
+  const candidates = [];
+  const add = (value) => {
+    const absolute = absoluteUrl(cleanText(value || ""), source.home);
+    if (absolute && !candidates.includes(absolute)) candidates.push(absolute);
+  };
+  add(firstTag(block, ["link"]));
+  for (const match of String(block || "").matchAll(/<link\b[^>]*href=["']([^"']+)["'][^>]*\/?\s*>/gi)) add(match[1]);
+  add(firstTag(block, ["guid"]));
+  add(firstTag(block, ["id"]));
+  return candidates;
+}
+
+function chooseRssArticleUrl(block, source) {
+  const candidates = rssArticleCandidates(block, source);
+  if (!candidates.length) return null;
+  const publisher = String(source?.publisher || "").toLowerCase();
+  const rank = (value) => {
+    try {
+      const u = new URL(value);
+      const path = u.pathname.toLowerCase();
+      let score = u.protocol === "https:" ? 2 : 0;
+      if (publisher === "ynet") {
+        if (/(^|\.)ynet\.co\.il$/i.test(u.hostname)) score += 20;
+        if (/\/news\/article\//i.test(path)) score += 60;
+        else if (/\/articles\//i.test(path)) score += 45;
+        else if (/\/article\//i.test(path)) score += 35;
+        if (/\/integration\//i.test(path) || /storyrss/i.test(path)) score -= 80;
+      } else if (publisher === "walla") {
+        if (/(^|\.)walla\.co\.il$/i.test(u.hostname)) score += 20;
+        if (/\/item\/\d+/i.test(path)) score += 60;
+        else if (/\/break\/\d+/i.test(path)) score += 55;
+        if (/\/rss/i.test(path) || /\/feed\//i.test(path)) score -= 80;
+      } else if (path.length > 4) score += 10;
+      return score;
+    } catch { return -999; }
+  };
+  return [...candidates].sort((a,b) => rank(b)-rank(a))[0] || candidates[0];
+}
+
 function parseRss(xml, source) {
   const blocks = xml.match(/<item\b[\s\S]*?<\/item>/gi) || xml.match(/<entry\b[\s\S]*?<\/entry>/gi) || [];
   const items = [];
 
   for (const block of blocks) {
     const title = cleanText(firstTag(block, ["title"]));
-    let link = cleanText(firstTag(block, ["link"]));
-    if (!link) {
-      const href = block.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*\/?\s*>/i)?.[1];
-      link = href || cleanText(firstTag(block, ["guid", "id"]));
-    }
     const dateRaw = cleanText(firstTag(block, ["pubDate", "published", "updated", "dc:date", "date"]));
     const descriptionRaw = firstTag(block, ["description", "summary", "content:encoded", "content"]);
     const description = cleanText(descriptionRaw);
     const publishedAt = safeIso(dateRaw);
-    const url = absoluteUrl(link, source.home);
+    const url = chooseRssArticleUrl(block, source);
     const imageUrl = extractRssImage(block, descriptionRaw, source.home);
 
     if (!title || !url || !publishedAt) continue;

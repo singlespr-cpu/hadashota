@@ -177,3 +177,37 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Added server-side /go resolver for ynet and Walla links.
 - ynet/Walla links are validated only when clicked; valid redirected URLs open normally.
 - If a publisher URL is genuinely dead/404, the user is sent to that publisher's own search page with the exact headline instead of a 404 page.
+
+## V61 — outbound link 1101 hotfix
+- Removed the timer-based ynet/Walla link validator that could throw inside Cloudflare Workers.
+- /go is now fully exception-safe and can no longer intentionally return a relative redirect URL.
+- ynet/Walla links use a lightweight HEAD check; 403/405/check failures fail open to the original article.
+- Only explicit 404/410 responses use a fallback search: Walla's own search, and a site-restricted ynet search.
+- The redirect route is wrapped in a top-level try/catch so a source-link failure cannot crash the site Worker.
+
+## V62 — mobile modal + fresh entry hardening
+- Unified all mobile modals under one safe-area-aware bottom-sheet system.
+- Every modal can scroll internally on short screens; no content can be permanently clipped.
+- Modal X close control is sticky and remains visible while scrolling.
+- Quick Brief cards are more compact on mobile and its bottom “סגירה” action is sticky above the iPhone safe area.
+- About, Near You, Why this story, alert settings, notification and install dialogs inherit the same mobile safety rules.
+- Every cold entry now performs a forced server news collection after instantly rendering local last-good data.
+- Returning after 15+ seconds/background or a >45-second server snapshot forces a fresh collection.
+- Partial/failed entry refreshes retry faster (2s, 5s, 10s, 20s) and retries bypass the short server cache.
+
+
+## V63 — production audit
+- Main-story hard lock: never one source.
+- 3+ distinct publishers remain mandatory for the first hour; only after no qualifying 3+ story exists for a full hour can 2+ sources take over.
+- Two-source fallback is capped at three hours.
+- ynet/Walla clicks now use publisher URLs directly; no /go intermediary.
+- RSS parsing ranks link, href, guid and id candidates and prefers article-shaped ynet/Walla URLs.
+
+## V64 — iPhone / desktop fresh-entry convergence
+- Root cause addressed: Safari, desktop and iOS Home-Screen have separate local storage, so a forced cold-open collection could leave the iPhone visibly sitting on its old local snapshot while the Worker was still collecting.
+- Cold open is now two-stage: render the shared Worker snapshot first, then immediately force a real source collection and replace the feed if newer data exists.
+- Returning after 3+ seconds in the background forces a fresh collection; server snapshots older than 30 seconds also force refresh.
+- pageshow always resets the foreground freshness gate.
+- iOS standalone hard-reload guard shortened from 8 seconds to 4.5 seconds.
+- Shared Worker cache reduced to 12 seconds with 30-second stale-while-revalidate.
+- Existing content remains visible during forced refresh with “מרענן עכשיו…” instead of appearing frozen.

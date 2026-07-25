@@ -251,17 +251,29 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // Render saved data immediately, then join the shared server snapshot.
-  // This keeps desktop, Safari and the iPhone Home-Screen app on the same dataset.
-  loadNews(false);
-  window.setTimeout(() => {
-    const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
-    const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 90_000;
-    if (!state.loading && (state.dataDelayed || tooOld)) {
+  // V64 cold-open strategy:
+  // 1) immediately join the shared Worker snapshot so Safari, desktop and the
+  //    Home-Screen app converge on the same feed instead of sitting on separate
+  //    localStorage snapshots;
+  // 2) as soon as that fast render completes, force one real source collection
+  //    and replace the screen again if newer data exists.
+  loadNews(false).finally(() => {
+    window.setTimeout(() => {
+      if (state.loading || document.hidden) return;
       state.lastForegroundRefreshAt = 0;
-      loadNews(false, true);
-    }
-  }, 20_000);
+      loadNews(true, true).finally(() => {
+        const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
+        const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 45_000;
+        if (!state.loading && (state.dataDelayed || tooOld)) {
+          window.setTimeout(() => {
+            if (state.loading || document.hidden) return;
+            state.lastForegroundRefreshAt = 0;
+            loadNews(true, true);
+          }, 2200);
+        }
+      });
+    }, 120);
+  });
   restartAutoRefresh();
   window.setTimeout(maybeShowNotificationOffer, 1400);
   // Do not stack prompts. First visit gets a gentle delayed install suggestion; returning visitors see it sooner.
@@ -537,7 +549,7 @@ function bindEvents() {
 
   window.addEventListener("pageshow", (event) => {
     if (event.persisted && hardRefreshStandalone("pageshow-bfcache")) return;
-    if (event.persisted) state.lastForegroundRefreshAt = 0;
+    state.lastForegroundRefreshAt = 0;
     refreshNewsOnForeground(event.persisted ? "pageshow-bfcache" : "pageshow");
   });
 
@@ -596,7 +608,7 @@ function hardRefreshStandalone(reason = "resume") {
     const now = Date.now();
     const last = Number(sessionStorage.getItem("hadashota.pwaHardRefreshAt") || 0);
     // Prevent a reload loop if iOS emits more than one resume lifecycle event.
-    if (now - last < 8000) return false;
+    if (now - last < 4500) return false;
     sessionStorage.setItem("hadashota.pwaHardRefreshAt", String(now));
     const url = new URL(location.href);
     url.searchParams.set("_pwa", String(now));
@@ -759,9 +771,16 @@ function refreshNewsOnForeground(reason = "foreground") {
   const now = Date.now();
   if (now - state.lastForegroundRefreshAt < FOREGROUND_FRESHNESS_MS) return;
   state.lastForegroundRefreshAt = now;
-  // Automatic foreground refresh joins the shared Worker snapshot instead of
-  // creating a device-specific collection. Manual refresh is the only force path.
-  loadNews(false, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
+
+  const hiddenFor = state.lastHiddenAt ? now - state.lastHiddenAt : 0;
+  const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
+  const snapshotAge = Number.isFinite(generatedMs) ? now - generatedMs : Infinity;
+
+  // Returning after a meaningful absence should behave like opening the site:
+  // collect a fresh server snapshot immediately. Short focus changes can reuse
+  // the shared snapshot to avoid hammering publishers.
+  const forceFresh = hiddenFor >= 3_000 || snapshotAge >= 30_000 || reason === "online" || reason === "pageshow-bfcache";
+  loadNews(forceFresh, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
 async function loadNews(force = false, fromRetry = false) {
@@ -769,6 +788,9 @@ async function loadNews(force = false, fromRetry = false) {
   state.loading = true;
   if (force) state.lastForegroundRefreshAt = Date.now();
   el.refreshBtn.classList.add("loading");
+  if (force && state.items.length && el.lastUpdated) {
+    el.lastUpdated.textContent = "מרענן עכשיו…";
+  }
 
   try {
     const results = await Promise.allSettled(NEWS_SHARDS.map((shard) => fetchNewsShard(shard, force)));
@@ -923,10 +945,10 @@ function restoreLocalLastGood() {
 
 function scheduleNewsRetry() {
   clearTimeout(state.retryTimer);
-  const delays = [4, 8, 15, 25];
+  const delays = [2, 5, 10, 20];
   const seconds = delays[Math.min(state.retryAttempt, delays.length - 1)];
   state.retryAttempt += 1;
-  state.retryTimer = setTimeout(() => loadNews(false, true), seconds * 1000);
+  state.retryTimer = setTimeout(() => loadNews(true, true), seconds * 1000);
 }
 
 function getDataDelaySeverity({ delayed, freshShards, delayedShards, generatedAt }) {
@@ -1978,29 +2000,38 @@ function renderLeadStory() {
     Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
     String(a.item?.id || a.item?.url || a.item?.title || "").localeCompare(String(b.item?.id || b.item?.url || b.item?.title || ""), "he");
 
-  // Rule 1: 3+ distinct publishers, updated within the last hour.
+  // V63 lead policy — hard editorial lock.
+  // A single-source item can NEVER be the main story.
+  // For the first 60 minutes we keep/choose only a 3+ source story.
+  // Only after there has been no qualifying 3+ source story for a full hour
+  // may a 2-source story take over.
   const verified = allEntries
     .filter((entry) => entry.uniqueSources >= 3 && entry.ageMinutes <= 60)
     .sort(deterministicSort);
 
-  // Rule 2: only if no current 3-source story exists, allow a 2-source story.
-  const twoSource = allEntries
-    .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes <= 60)
-    .sort(deterministicSort);
+  const storedQualified = [state.lastQualifiedLead, readStoredLeadSnapshot()]
+    .map((row) => row?.entry)
+    .filter((entry) => entry?.item && Number(entry.uniqueSources) >= 3)
+    .filter((entry) => {
+      const latest = Date.parse(entry.latestAt || entry.item?.latestReportAt || entry.item?.publishedAt || 0);
+      return Number.isFinite(latest) && now - latest <= 60 * 60 * 1000;
+    })
+    .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0));
 
-  // Bridge quiet periods with the most recent corroborated story, never a single-source story,
-  // and never older than three hours.
-  const olderCorroborated = allEntries
-    .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes <= 180)
-    .sort((a, b) =>
-      Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
-      deterministicSort(a, b));
+  let winner = verified[0] || storedQualified[0] || null;
 
-  let winner = verified[0] || twoSource[0] || olderCorroborated[0] || null;
+  if (!winner) {
+    const freshTwoSource = allEntries
+      .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes <= 60)
+      .sort(deterministicSort);
+    const olderTwoSource = allEntries
+      .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes > 60 && entry.ageMinutes <= 180)
+      .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) || deterministicSort(a,b));
+    winner = freshTwoSource[0] || olderTwoSource[0] || null;
+  }
 
-  // A previous corroborated lead can bridge a partial network refresh.
   if (!winner && state.dataDelayed) {
-    const saved = [state.lastQualifiedLead, readStoredLeadSnapshot(), state.displayedLeadSnapshot, readDisplayedLeadSnapshot()]
+    const saved = [state.displayedLeadSnapshot, readDisplayedLeadSnapshot(), state.lastQualifiedLead, readStoredLeadSnapshot()]
       .map((row) => row?.entry)
       .filter((entry) => entry?.item && Number(entry.uniqueSources) >= 2)
       .filter((entry) => {
@@ -2009,16 +2040,6 @@ function renderLeadStory() {
       })
       .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0));
     winner = saved[0] || null;
-  }
-
-  // Never leave the hero stuck on its HTML placeholder.
-  // If no corroborated story exists at all, show the freshest item as a clearly-labelled
-  // developing update — it is NOT treated as the main verified story and triggers no push.
-  if (!winner && allEntries.length) {
-    winner = [...allEntries].sort((a,b) =>
-      Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
-      deterministicSort(a,b))[0];
-    winner.leadMode = "single-developing";
   }
 
   if (!winner) {
@@ -2073,8 +2094,6 @@ function renderLeadStory() {
   if (el.leadVerification) {
     if (winner.leadMode === "verified") {
       el.leadVerification.textContent = `✓ רמת אימות ${leadVerify.label}${leadVerify.hasOfficial ? " · כולל מקור רשמי" : ""}`;
-    } else if (winner.leadMode === "single-developing") {
-      el.leadVerification.textContent = "◌ עדכון מתפתח · ממתינים לאימות נוסף";
     } else {
       el.leadVerification.textContent = `◌ מתפתח · ${count} מקורות כרגע`;
     }
@@ -2090,9 +2109,7 @@ function renderLeadStory() {
   }
 
   if (el.leadStoryLabelText) {
-    el.leadStoryLabelText.textContent = winner.leadMode === "single-developing"
-      ? "עדכון מתפתח עכשיו"
-      : "הסיפור המרכזי עכשיו";
+    el.leadStoryLabelText.textContent = "הסיפור המרכזי עכשיו";
   }
   if (el.leadStoryLiveBadge) el.leadStoryLiveBadge.classList.remove("hidden");
   if (el.leadStorySignal) {
@@ -2148,7 +2165,7 @@ function renderBreaking() {
 
   el.breakingTitle.textContent = editorialTitle(latest);
   el.breakingMeta.textContent = `${cleanDisplayText(latest.sourceName)} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
-  setOptionalLink(el.breakingLink, latest.url);
+  setOptionalLink(el.breakingLink, storyHref(latest));
   el.breakingBanner.classList.remove("hidden");
 }
 
@@ -3145,14 +3162,13 @@ function sourceInitial(name) {
 function sourceResolverUrl(url, title = "", publisher = "") {
   const href = safeHttpHref(url);
   if (!href) return "#";
-  const pub = String(publisher || "").toLowerCase();
-  // Walla and ynet RSS links are checked server-side before redirecting because
-  // both publishers occasionally change article URL formats.
-  if (pub === "ynet" || pub === "walla") {
-    const params = new URLSearchParams({ u: href, p: pub, t: String(title || "").slice(0, 220) });
-    return `/go?${params.toString()}`;
+  try {
+    const parsed = new URL(href);
+    if (parsed.protocol === "http:") parsed.protocol = "https:";
+    return parsed.toString();
+  } catch {
+    return href;
   }
-  return href;
 }
 
 function storyHref(itemOrReport) {

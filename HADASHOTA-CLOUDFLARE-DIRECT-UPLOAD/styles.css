@@ -3859,3 +3859,247 @@ html[data-theme="dark"] .near-you-panel,html[data-theme="dark"] #nearYouNewsList
 body.emergency-mode .alert-center-card{box-shadow:0 0 0 2px rgba(239,35,60,.16),0 14px 42px rgba(239,35,60,.11)}body.emergency-mode .news-nav{border-bottom-color:rgba(239,35,60,.38)}
 @media(max-width:1000px){.smart-now-status{display:none}.intelligence-actions{grid-template-columns:repeat(3,auto)!important}}
 @media(max-width:700px){.intelligence-actions{grid-template-columns:1fr 1fr!important}.intelligence-actions #quickBriefBtn{grid-column:1/-1}.why-metrics{grid-template-columns:1fr 1fr}.near-you-grid{grid-template-columns:1fr}#nearYouNewsList>a,#nearYouNewsList>div{grid-template-columns:52px minmax(0,1fr)}#nearYouNewsList small{grid-column:2}.emergency-mode-inner{gap:9px;min-height:72px}.emergency-mode-icon{width:32px;height:32px;font-size:17px}.emergency-mode-copy strong{font-size:14px}.emergency-mode-actions{display:grid;gap:4px}.emergency-mode-actions a,.emergency-mode-actions button{font-size:8px;padding:6px 7px}.lead-changes-list>a,.lead-changes-list>div{grid-template-columns:34px minmax(0,1fr)}.lead-changes-list small{display:none}}
+
+
+/* ==========================================================
+   HADASHOTA V62 — unified mobile modal system
+   All dialogs must remain usable on iPhone/Android regardless
+   of viewport height, browser chrome or Home-Screen safe areas.
+   ========================================================== */
+
+@media (max-width: 700px) {
+  body.modal-open {
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+  }
+
+  .site-modal {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 120 !important;
+    display: flex !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding:
+      max(8px, env(safe-area-inset-top))
+      8px
+      max(8px, env(safe-area-inset-bottom)) !important;
+    overflow: hidden !important;
+  }
+
+  .site-modal.hidden {
+    display: none !important;
+  }
+
+  .site-modal .modal-backdrop,
+  .site-modal .site-modal-backdrop {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(15, 23, 42, .58) !important;
+    backdrop-filter: blur(9px) saturate(90%) !important;
+    -webkit-backdrop-filter: blur(9px) saturate(90%) !important;
+  }
+
+  .site-modal .modal-card {
+    position: relative !important;
+    z-index: 2 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: calc(100dvh - max(18px, env(safe-area-inset-top)) - max(18px, env(safe-area-inset-bottom))) !important;
+    margin: 0 !important;
+    padding: 20px 14px max(14px, env(safe-area-inset-bottom)) !important;
+    border-radius: 22px 22px 16px 16px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+  }
+
+  /* The X must stay visible even when the dialog content scrolls. */
+  .site-modal .modal-close {
+    position: sticky !important;
+    top: 0 !important;
+    left: auto !important;
+    float: left !important;
+    z-index: 20 !important;
+    width: 38px !important;
+    height: 38px !important;
+    margin: -8px 0 4px -2px !important;
+    display: grid !important;
+    place-items: center !important;
+    background: rgba(248,250,252,.96) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    box-shadow: 0 3px 12px rgba(15,23,42,.08) !important;
+  }
+
+  html[data-theme="dark"] .site-modal .modal-close {
+    background: rgba(30,38,50,.96) !important;
+  }
+
+  .site-modal .modal-card h2 {
+    clear: both !important;
+    padding-inline-start: 0 !important;
+    padding-left: 42px !important;
+    margin-top: 0 !important;
+  }
+
+  /* Quick brief: fit five cards comfortably but allow a small scroll on
+     unusually short screens. The close action remains sticky and visible. */
+  .quick-brief-card {
+    max-height: calc(100dvh - max(14px, env(safe-area-inset-top)) - max(14px, env(safe-area-inset-bottom))) !important;
+    padding: 16px 12px max(10px, env(safe-area-inset-bottom)) !important;
+    overflow-y: auto !important;
+  }
+
+  .quick-brief-card > p {
+    margin: 2px 0 8px !important;
+    padding-left: 38px !important;
+    font-size: 9.7px !important;
+    line-height: 1.35 !important;
+  }
+
+  .quick-brief-list {
+    gap: 5px !important;
+    margin-top: 8px !important;
+  }
+
+  .brief-story-card {
+    grid-template-columns: 27px minmax(0,1fr) auto !important;
+    gap: 7px !important;
+    padding: 8px !important;
+    border-radius: 12px !important;
+  }
+
+  .brief-rank {
+    width: 27px !important;
+    height: 27px !important;
+    border-radius: 8px !important;
+    font-size: 10px !important;
+  }
+
+  .brief-copy h3 {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+    -webkit-line-clamp: 2 !important;
+  }
+
+  .brief-meta {
+    gap: 3px !important;
+    margin-top: 4px !important;
+  }
+
+  .brief-meta span {
+    font-size: 7.3px !important;
+    padding: 2px 4px !important;
+  }
+
+  .brief-copy p {
+    font-size: 8px !important;
+    margin-top: 2px !important;
+  }
+
+  .brief-source-btn {
+    grid-column: auto !important;
+    align-self: center !important;
+    min-width: 52px !important;
+    padding: 5px 6px !important;
+    font-size: 8px !important;
+  }
+
+  .quick-brief-footer {
+    position: sticky !important;
+    bottom: calc(-1 * max(10px, env(safe-area-inset-bottom))) !important;
+    z-index: 15 !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    margin: 7px -12px calc(-1 * max(10px, env(safe-area-inset-bottom))) !important;
+    padding: 9px 12px max(10px, env(safe-area-inset-bottom)) !important;
+    background: rgba(255,255,255,.97) !important;
+    border-top: 1px solid #e8ecf1 !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+  }
+
+  html[data-theme="dark"] .quick-brief-footer {
+    background: rgba(17,23,32,.97) !important;
+    border-color: #303947 !important;
+  }
+
+  .quick-brief-close-btn {
+    width: auto !important;
+    min-width: 82px !important;
+    margin: 0 2px 0 0 !important;
+    padding: 9px 15px !important;
+    font-size: 10px !important;
+  }
+
+  /* Rich dialogs: normal scrolling, no clipped grids. */
+  .about-modal-card,
+  .near-you-card,
+  .smart-explain-card,
+  .alert-settings-card,
+  .notification-offer-card,
+  .install-offer-card,
+  .modal-card-contact {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: calc(100dvh - max(18px, env(safe-area-inset-top)) - max(18px, env(safe-area-inset-bottom))) !important;
+    overflow-y: auto !important;
+  }
+
+  .about-process,
+  .about-feature-grid,
+  .near-you-grid,
+  .why-metrics {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .notification-offer-actions,
+  .install-offer-actions {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 10 !important;
+    background: inherit !important;
+    padding-top: 8px !important;
+  }
+}
+
+@media (max-width: 390px), (max-height: 690px) {
+  .site-modal .modal-card {
+    border-radius: 18px 18px 12px 12px !important;
+    padding-top: 13px !important;
+  }
+
+  .quick-brief-card h2 {
+    font-size: 20px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .quick-brief-card > p {
+    display: none !important;
+  }
+
+  .brief-story-card {
+    padding: 7px !important;
+  }
+
+  .brief-copy h3 {
+    font-size: 10.4px !important;
+  }
+
+  .brief-meta span:nth-child(n+4) {
+    display: none !important;
+  }
+
+  .about-process,
+  .about-feature-grid,
+  .near-you-grid,
+  .why-metrics {
+    grid-template-columns: 1fr !important;
+  }
+}
