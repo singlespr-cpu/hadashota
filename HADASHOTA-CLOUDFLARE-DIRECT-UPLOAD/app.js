@@ -210,7 +210,7 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v66.";
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v67.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 28_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -253,7 +253,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V66 cold-open strategy:
+  // V67 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -848,7 +848,7 @@ async function loadNews(force = false, fromRetry = false) {
   }
 
   try {
-    // V66 iPhone/WebKit first-paint fix: do not wait for both shards before
+    // V67 iPhone/WebKit first-paint fix: do not wait for both shards before
     // showing anything. A cold Cloudflare edge can make one shard noticeably
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
@@ -2133,7 +2133,7 @@ function renderLeadStory() {
     Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
     String(a.item?.id || a.item?.url || a.item?.title || "").localeCompare(String(b.item?.id || b.item?.url || b.item?.title || ""), "he");
 
-  // V66 lead policy — hard editorial lock.
+  // V67 lead policy — hard editorial lock.
   // A single-source item can NEVER be the main story.
   // For the first 60 minutes we keep/choose only a 3+ source story.
   // Only after there has been no qualifying 3+ source story for a full hour

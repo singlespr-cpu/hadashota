@@ -220,7 +220,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v66/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v67/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -475,7 +475,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/66 (+strict semantic media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/67 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -526,7 +526,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/66 (+news aggregator; strict semantic media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/67 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -573,7 +573,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v66?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v67?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -995,13 +995,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "66.0.0",
+      "X-Hadashota-Version": "67.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "66.0.0",
+      "X-Hadashota-Version": "67.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1033,7 +1033,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "66.0.0"
+        "X-Hadashota-Version": "67.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1059,7 +1059,7 @@ async function claimForceRefreshSlot(request, cache, shard, ctx) {
   if (!sameOriginHeader) return false;
 
   const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "anonymous";
-  const key = new Request(`https://hadashota.internal/v66/force-gate/${shard}/${stableId(ip)}`, { method: "GET" });
+  const key = new Request(`https://hadashota.internal/v67/force-gate/${shard}/${stableId(ip)}`, { method: "GET" });
   const existing = await cache.match(key);
   if (existing) return false;
   const gate = new Response("1", { headers: { "Cache-Control": "public, max-age=0, s-maxage=8" } });
@@ -1161,7 +1161,7 @@ async function fetchWithTimeout(url, timeoutMs, forceFresh = false) {
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   try {
     const headers = {
-      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/66.0; +news-aggregator)",
+      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/67.0; +news-aggregator)",
       "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
       "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
     };

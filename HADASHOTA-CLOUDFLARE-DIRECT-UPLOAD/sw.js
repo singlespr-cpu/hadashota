@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "66.0.0";
+const HADASHOTA_SW_VERSION = "67.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
