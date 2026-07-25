@@ -48,7 +48,10 @@ const state = {
   visitCount: Number(localStorage.getItem("hadashota.visitCount") || 0),
   importantOnly: localStorage.getItem("hadashota.importantOnly") === "1",
   hotOnly: false,
-  summaryOpen: false
+  summaryOpen: false,
+  currentAlerts: [],
+  currentMatchingAlerts: [],
+  currentLeadEntry: null
 };
 
 const el = {
@@ -132,6 +135,29 @@ const el = {
   quickBriefBtn: document.querySelector("#quickBriefBtn"),
   quickBriefModal: document.querySelector("#quickBriefModal"),
   quickBriefList: document.querySelector("#quickBriefList"),
+  leadWhyBtn: document.querySelector("#leadWhyBtn"),
+  leadWhyModal: document.querySelector("#leadWhyModal"),
+  leadWhyMetrics: document.querySelector("#leadWhyMetrics"),
+  leadWhyExplanation: document.querySelector("#leadWhyExplanation"),
+  leadChanges: document.querySelector("#leadChanges"),
+  leadChangesMeta: document.querySelector("#leadChangesMeta"),
+  leadChangesList: document.querySelector("#leadChangesList"),
+  nearYouBtn: document.querySelector("#nearYouBtn"),
+  nearYouModal: document.querySelector("#nearYouModal"),
+  nearYouTitle: document.querySelector("#nearYouTitle"),
+  nearYouSubtitle: document.querySelector("#nearYouSubtitle"),
+  nearYouAlerts: document.querySelector("#nearYouAlerts"),
+  nearYouWeather: document.querySelector("#nearYouWeather"),
+  nearYouTransport: document.querySelector("#nearYouTransport"),
+  nearYouNewsCount: document.querySelector("#nearYouNewsCount"),
+  nearYouNewsList: document.querySelector("#nearYouNewsList"),
+  smartConnectedCount: document.querySelector("#smartConnectedCount"),
+  smartHotCount: document.querySelector("#smartHotCount"),
+  smartVerifiedCount: document.querySelector("#smartVerifiedCount"),
+  emergencyModeBar: document.querySelector("#emergencyModeBar"),
+  emergencyModeTitle: document.querySelector("#emergencyModeTitle"),
+  emergencyModeAreas: document.querySelector("#emergencyModeAreas"),
+  emergencySecurityBtn: document.querySelector("#emergencySecurityBtn"),
   leadIntelligence: document.querySelector("#leadIntelligence"),
   leadVerification: document.querySelector("#leadVerification"),
   leadHotScore: document.querySelector("#leadHotScore"),
@@ -356,6 +382,15 @@ function bindEvents() {
     render();
   });
   el.quickBriefBtn?.addEventListener("click", openQuickBrief);
+  el.leadWhyBtn?.addEventListener("click", openLeadWhy);
+  el.nearYouBtn?.addEventListener("click", openNearYou);
+  el.emergencySecurityBtn?.addEventListener("click", () => {
+    state.category = "security";
+    localStorage.setItem("hadashota.category", "security");
+    syncControlsFromState();
+    render();
+    document.querySelector("#feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   el.hotNowFilterBtn?.addEventListener("click", () => {
     state.hotOnly = !state.hotOnly;
     if (state.hotOnly) state.importantOnly = false;
@@ -382,6 +417,7 @@ function bindEvents() {
     state.city = el.citySelect.value;
     localStorage.setItem("hadashota.city", state.city);
     loadUtilities();
+    if (el.nearYouModal && !el.nearYouModal.classList.contains("hidden")) renderNearYou();
   });
 
   document.querySelector(".news-nav")?.addEventListener("click", (event) => {
@@ -1957,6 +1993,7 @@ function renderLeadStory() {
   }
 
   if (!winner) {
+    state.currentLeadEntry = null;
     el.leadStoryTitle.textContent = "מתחבר לעדכונים האחרונים…";
     el.leadStoryPreview.textContent = "המערכת אוספת כעת דיווחים ממקורות החדשות.";
     el.leadStorySource.textContent = "חדשותא";
@@ -1970,6 +2007,7 @@ function renderLeadStory() {
   }
 
   if (!winner.leadMode) winner.leadMode = Number(winner.uniqueSources) >= 3 ? "verified" : "developing";
+  state.currentLeadEntry = winner;
 
   const winnerFingerprint = leadFingerprint(winner);
   if (winnerFingerprint !== state.displayedLeadFingerprint) {
@@ -2019,6 +2057,7 @@ function renderLeadStory() {
       `<a href="${safeUrl(report.url)}" target="_blank" rel="noopener noreferrer"><time>${formatClock(report.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(report.sourceName))}</span><b>עדכון מהמקור</b></a>`
     ).join("");
     el.leadTimeline.closest("details")?.classList.toggle("hidden", timeline.length < 2);
+    renderLeadChanges(item, timeline);
   }
 
   if (el.leadStoryLabelText) {
@@ -2823,8 +2862,15 @@ function recordLeadHistory(entry, fingerprint) {
 }
 
 function renderSmartDashboard() {
-  const hotStories = state.items.filter(i => storyHotScore(i) >= 60 && Date.now() - Date.parse(clusterLatestAt(i)||0) <= 3*60*60*1000);
+  const serverNow = Date.parse(state.lastDataGeneratedAt || "");
+  const now = Number.isFinite(serverNow) ? serverNow : Date.now();
+  const hotStories = state.items.filter(i => storyHotScore(i) >= 60 && now - Date.parse(clusterLatestAt(i)||0) <= 3*60*60*1000);
   if (el.hotNowCount) el.hotNowCount.textContent = String(hotStories.length);
+  const connected = state.sources.filter((source) => source.healthStatus !== "offline").length;
+  const verifiedNow = state.items.filter((item) => now - Date.parse(clusterLatestAt(item)||0) <= 60*60*1000 && normalizeClusterReports(item).length >= 3).length;
+  if (el.smartConnectedCount) el.smartConnectedCount.textContent = String(connected);
+  if (el.smartHotCount) el.smartHotCount.textContent = String(hotStories.length);
+  if (el.smartVerifiedCount) el.smartVerifiedCount.textContent = String(verifiedNow);
   if (el.importantOnlyBtn) {
     el.importantOnlyBtn.classList.toggle("active", state.importantOnly);
     el.importantOnlyBtn.setAttribute("aria-pressed", state.importantOnly ? "true" : "false");
@@ -2840,6 +2886,171 @@ function renderSmartDashboard() {
       } else el.sinceVisit.classList.add("hidden");
     } else el.sinceVisit.classList.add("hidden");
   }
+}
+
+
+const CITY_PROFILES = {
+  telaviv: { name: "תל אביב", aliases: ["תל אביב","תל-אביב","ת״א","גוש דן"], transport: ["רכבת קלה","רכבת","אוטובוס","אוטובוסים","תחבורה","נתיבי איילון","איילון","כביש","פקקים"] },
+  jerusalem: { name: "ירושלים", aliases: ["ירושלים","ירושלמי","ירושלמית"], transport: ["רכבת קלה","רכבת","אוטובוס","אוטובוסים","תחבורה","כביש","פקקים"] },
+  haifa: { name: "חיפה", aliases: ["חיפה","חיפאי","חיפאית"], transport: ["רכבת","מטרונית","כרמלית","אוטובוס","אוטובוסים","תחבורה","כביש","פקקים"] },
+  beersheva: { name: "באר שבע", aliases: ["באר שבע","באר-שבע","ב״ש"], transport: ["רכבת","אוטובוס","אוטובוסים","תחבורה","כביש","פקקים"] },
+  eilat: { name: "אילת", aliases: ["אילת","אילתי","אילתית"], transport: ["אוטובוס","אוטובוסים","תחבורה","כביש","שדה התעופה רמון","רמון"] }
+};
+
+function textForLocalMatch(item) {
+  return [item?.title, item?.preview, item?.sourceName,
+    ...normalizeClusterReports(item || {}).map((report) => `${report.title || ""} ${report.sourceName || ""}`)
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function localItemsForCity(cityKey = state.city) {
+  const profile = CITY_PROFILES[cityKey] || CITY_PROFILES.telaviv;
+  const serverNow = Date.parse(state.lastDataGeneratedAt || "");
+  const now = Number.isFinite(serverNow) ? serverNow : Date.now();
+  return state.items
+    .filter((item) => now - Date.parse(clusterLatestAt(item) || 0) <= 12 * 60 * 60 * 1000)
+    .filter((item) => {
+      const haystack = textForLocalMatch(item);
+      return profile.aliases.some((alias) => haystack.includes(alias.toLowerCase()));
+    })
+    .sort((a,b) => Date.parse(clusterLatestAt(b)||0) - Date.parse(clusterLatestAt(a)||0));
+}
+
+function renderLeadChanges(item, timeline = []) {
+  if (!el.leadChanges || !el.leadChangesList) return;
+  const ordered = [...timeline]
+    .filter((report) => report?.publishedAt && report?.title)
+    .sort((a,b) => Date.parse(b.publishedAt)-Date.parse(a.publishedAt));
+
+  const seen = new Set();
+  const distinct = [];
+  for (const report of ordered) {
+    const title = cleanDisplayTitle(report.title || "");
+    const key = title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().slice(0,120);
+    if (!title || seen.has(key)) continue;
+    seen.add(key);
+    distinct.push({ ...report, cleanTitle: title });
+    if (distinct.length >= 3) break;
+  }
+
+  if (distinct.length < 2) {
+    el.leadChanges.classList.add("hidden");
+    el.leadChangesList.innerHTML = "";
+    return;
+  }
+
+  const latestMs = Date.parse(distinct[0].publishedAt || 0);
+  const oldestMs = Date.parse(distinct[distinct.length-1].publishedAt || 0);
+  const spanMinutes = Number.isFinite(latestMs) && Number.isFinite(oldestMs) ? Math.max(1, Math.round((latestMs-oldestMs)/60000)) : 0;
+  if (el.leadChangesMeta) el.leadChangesMeta.textContent = spanMinutes ? `${distinct.length} עדכונים · ${spanMinutes} דק׳` : `${distinct.length} עדכונים`;
+
+  el.leadChangesList.innerHTML = distinct.map((report) => {
+    const href = safeHttpHref(report.url);
+    const row = `<time>${formatClock(report.publishedAt)}</time><span>${escapeHtml(report.cleanTitle)}</span><small>${escapeHtml(cleanDisplayText(report.sourceName || ""))}</small>`;
+    return href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${row}</a>` : `<div>${row}</div>`;
+  }).join("");
+  el.leadChanges.classList.remove("hidden");
+}
+
+function openLeadWhy() {
+  const entry = state.currentLeadEntry;
+  if (!entry || !el.leadWhyModal) {
+    showToast("הסיפור המרכזי עדיין מתעדכן");
+    return;
+  }
+  const count = Number(entry.uniqueSources) || normalizeClusterReports(entry.item).length;
+  const age = formatAge(entry.latestAt || clusterLatestAt(entry.item));
+  const official = !!entry.hasOfficial || normalizeClusterReports(entry.item).some((report) => report.official);
+  const spread = Number(entry.spreadMinutes) || 0;
+  const heat = storyHotScore(entry.item);
+  const verify = storyVerification(entry.item);
+
+  if (el.leadWhyMetrics) {
+    el.leadWhyMetrics.innerHTML = [
+      ["מקורות שונים", count],
+      ["עודכן", age],
+      ["Hot Score", `${heat}/100`],
+      ["רמת אימות", verify.label]
+    ].map(([label,value]) => `<div><span>${escapeHtml(String(label))}</span><strong>${escapeHtml(String(value))}</strong></div>`).join("");
+  }
+
+  const reasons = [];
+  if (count >= 3) reasons.push(`${count} מפרסמים שונים מדווחים על אותו אירוע`);
+  else if (count === 2) reasons.push("שני מקורות שונים כבר מדווחים על האירוע");
+  if (spread && spread <= 20) reasons.push(`הדיווחים הצטברו במהירות — בתוך כ־${spread} דקות`);
+  if (official) reasons.push("באשכול קיים גם מקור רשמי");
+  if (heat >= 70) reasons.push("קצב הדיווחים והטריות מציבים את האירוע ברמת חום גבוהה");
+  else if (heat >= 52) reasons.push("האירוע מתחזק ביחס לסיפורים אחרים בפיד");
+  if (!reasons.length) reasons.push("הסיפור מדורג גבוה לפי הטריות והצלבת המקורות הזמינה כרגע");
+
+  if (el.leadWhyExplanation) {
+    el.leadWhyExplanation.innerHTML = `<strong>מה השפיע על הבחירה</strong><ul>${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>`;
+  }
+  openSiteModal(el.leadWhyModal, el.leadWhyBtn);
+}
+
+function renderNearYou() {
+  const profile = CITY_PROFILES[state.city] || CITY_PROFILES.telaviv;
+  const localItems = localItemsForCity(state.city).slice(0, 5);
+  const matchingAlerts = state.currentAlerts.filter((alert) => {
+    const areas = Array.isArray(alert.areas) ? alert.areas : [];
+    return areas.some((area) => profile.aliases.some((alias) => normalizeCityToken(area).includes(normalizeCityToken(alias))));
+  });
+
+  if (el.nearYouTitle) el.nearYouTitle.textContent = `מה קורה ב${profile.name}`;
+  if (el.nearYouSubtitle) el.nearYouSubtitle.textContent = `חדשות, התרעות, מזג אוויר ותחבורה באזור ${profile.name} — ממידע אונליין בלבד.`;
+
+  if (el.nearYouAlerts) {
+    el.nearYouAlerts.textContent = matchingAlerts.length
+      ? `${matchingAlerts[0].title || "התרעה פעילה"} · ${matchingAlerts.flatMap((a) => a.areas || []).slice(0,4).join(", ")}`
+      : "אין כרגע התרעה פעילה שנמצאה באזור שנבחר.";
+  }
+
+  if (el.nearYouWeather) {
+    const temp = el.weatherTemp?.textContent?.trim() || "—";
+    const condition = el.weatherText?.textContent?.trim() || "מזג האוויר מתעדכן";
+    const range = el.weatherRange?.textContent?.trim() || "";
+    el.nearYouWeather.textContent = `${temp} · ${condition}${range ? ` · ${range}` : ""}`;
+  }
+
+  const transportItems = localItems.filter((item) => {
+    const haystack = textForLocalMatch(item);
+    return profile.transport.some((term) => haystack.includes(term.toLowerCase()));
+  });
+  if (el.nearYouTransport) {
+    el.nearYouTransport.textContent = transportItems.length
+      ? `${editorialTitle(transportItems[0])} · ${formatAge(clusterLatestAt(transportItems[0]))}`
+      : "לא נמצא כרגע בדיווחים שנאספו עדכון תחבורה חריג לאזור.";
+  }
+
+  if (el.nearYouNewsCount) el.nearYouNewsCount.textContent = localItems.length ? `${localItems.length} עדכונים` : "אין עדכונים";
+  if (el.nearYouNewsList) {
+    el.nearYouNewsList.innerHTML = localItems.length
+      ? localItems.map((item) => {
+          const href = safeHttpHref(item.url);
+          const row = `<time>${formatAge(clusterLatestAt(item))}</time><span>${escapeHtml(editorialTitle(item))}</span><small>${escapeHtml(cleanDisplayText(item.sourceName || ""))}</small>`;
+          return href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${row}</a>` : `<div>${row}</div>`;
+        }).join("")
+      : `<div class="near-you-empty">לא נמצאו כרגע ידיעות טריות שמזכירות את ${escapeHtml(profile.name)}.</div>`;
+  }
+}
+
+function openNearYou() {
+  renderNearYou();
+  openSiteModal(el.nearYouModal, el.nearYouBtn);
+}
+
+function renderEmergencyMode(matching = []) {
+  const active = Array.isArray(matching) && matching.length > 0;
+  document.body.classList.toggle("emergency-mode", active);
+  el.emergencyModeBar?.classList.toggle("hidden", !active);
+  if (!active) return;
+  const areas = [...new Set(matching.flatMap((alert) => Array.isArray(alert.areas) ? alert.areas : []))];
+  const title = matching[0]?.title || matching[0]?.category || "התרעה פעילה";
+  if (el.emergencyModeTitle) el.emergencyModeTitle.textContent = title;
+  if (el.emergencyModeAreas) el.emergencyModeAreas.textContent = areas.length
+    ? `${areas.slice(0,6).join(" · ")}${areas.length > 6 ? ` · ועוד ${areas.length-6}` : ""}`
+    : "יש לפעול לפי הנחיות פיקוד העורף";
 }
 
 function openQuickBrief() {
@@ -3028,7 +3239,10 @@ function alertMatchesPreferences(alert) {
 }
 
 function renderEmergencyAlerts(alerts, payload = {}) {
-  const matching = alerts.filter(alertMatchesPreferences);
+  state.currentAlerts = Array.isArray(alerts) ? alerts : [];
+  const matching = state.currentAlerts.filter(alertMatchesPreferences);
+  state.currentMatchingAlerts = matching;
+  renderEmergencyMode(matching);
   const nowLabel = new Intl.DateTimeFormat("he-IL", { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date());
   if (el.alertLastCheck) el.alertLastCheck.textContent = `נבדק ${nowLabel}`;
   if (!matching.length) {

@@ -152,3 +152,11 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Added feature overview: Red Alert, weather, Shabbat times, FX rates, news notifications, 30-second brief and Home Screen installation.
 - Rewrote and redesigned About, How It Works, Privacy, Copyright/Takedown and Contact pages into one consistent premium information system.
 - Updated old v34 asset references on informational pages to the current release.
+
+## V58 — Smart Newsroom
+- “מה חדש בסיפור?” shows the newest distinct developments inside the lead story.
+- “למה זה הסיפור?” explains source count, freshness, Hot Score, verification and ranking reasons.
+- Automatic Emergency Mode appears while matching Home Front Command alerts are active.
+- “מה קורה לידך” uses the selected city to combine live alert state, current weather, local online news mentions and transport-related online reports; it also links to the official Ministry of Transport real-time planner.
+- “חדשותא עכשיו” shows connected sources, hot stories and corroborated stories.
+- Local transport information is never invented: it is displayed only from currently collected online reports.

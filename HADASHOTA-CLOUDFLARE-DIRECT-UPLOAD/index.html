@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#f7f8fb" />
   <meta name="color-scheme" content="light dark" />
   <meta name="application-name" content="חדשותא" />
-  <meta name="generator" content="Hadashota 57.0.0" />
+  <meta name="generator" content="Hadashota 58.0.0" />
   <meta name="apple-mobile-web-app-title" content="חדשותא" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="canonical" href="__SITE_URL__/" />
-  <link rel="icon" href="/favicon.svg?v=57.0.0" type="image/svg+xml" />
-  <link rel="icon" href="/favicon-32.png?v=57.0.0" sizes="32x32" type="image/png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=57.0.0" sizes="180x180" />
-  <link rel="manifest" href="/site.webmanifest?v=57.0.0" />
+  <link rel="icon" href="/favicon.svg?v=58.0.0" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png?v=58.0.0" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=58.0.0" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest?v=58.0.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -82,7 +82,7 @@
     ]
   }
   </script>
-  <link rel="stylesheet" href="/styles.css?v=57.0.0" />
+  <link rel="stylesheet" href="/styles.css?v=58.0.0" />
 </head>
 <body>
   <a class="skip-link" href="#mainContent">דלג לתוכן הראשי</a>
@@ -145,6 +145,21 @@
       <button class="nav-item" type="button" data-quick-kind="official">רשמי</button>
     </div>
   </nav>
+
+  <section class="emergency-mode-bar hidden" id="emergencyModeBar" aria-live="assertive" aria-atomic="true">
+    <div class="shell emergency-mode-inner">
+      <div class="emergency-mode-icon" aria-hidden="true">!</div>
+      <div class="emergency-mode-copy">
+        <span>מצב חירום פעיל</span>
+        <strong id="emergencyModeTitle">התרעה פעילה</strong>
+        <small id="emergencyModeAreas"></small>
+      </div>
+      <div class="emergency-mode-actions">
+        <a href="https://www.oref.org.il/" target="_blank" rel="noopener noreferrer">הנחיות פיקוד העורף ↗</a>
+        <button type="button" id="emergencySecurityBtn">עדכונים ביטחוניים</button>
+      </div>
+    </div>
+  </section>
 
   <section class="alert-center shell" id="alertCenter">
     <div class="alert-center-card alert-idle" id="alertCenterCard">
@@ -270,6 +285,11 @@
             <div class="lead-story-sources" id="leadStorySources"></div>
             <div class="lead-intelligence" id="leadIntelligence">
               <span id="leadHotScore">🔥 חום —</span><span id="leadVerification">✓ רמת אימות —</span>
+              <button class="lead-why-button" id="leadWhyBtn" type="button" aria-haspopup="dialog" aria-controls="leadWhyModal">למה זה הסיפור? ?</button>
+            </div>
+            <div class="lead-changes hidden" id="leadChanges" aria-label="מה חדש בסיפור">
+              <div class="lead-changes-head"><strong>מה חדש בסיפור?</strong><span id="leadChangesMeta"></span></div>
+              <div class="lead-changes-list" id="leadChangesList"></div>
             </div>
             <details class="lead-timeline-details hidden">
               <summary>התפתחות הסיפור <span>↓</span></summary>
@@ -315,7 +335,12 @@
 
     <section class="intelligence-bar" aria-label="כלי חדשותא חכמים">
       <button class="hot-now-pill" id="hotNowFilterBtn" type="button" aria-label="הצגת האירועים החמים עכשיו"><i></i><strong><span id="hotNowCount">0</span> אירועים חמים עכשיו</strong><small>לפי קצב דיווחים, מקורות ורשמיות</small></button>
+      <div class="smart-now-status" id="smartNowStatus" aria-label="מצב חדשותא עכשיו">
+        <span>חדשותא עכשיו</span>
+        <strong><b id="smartConnectedCount">—</b> מקורות · <b id="smartHotCount">—</b> חמים · <b id="smartVerifiedCount">—</b> מאומתים</strong>
+      </div>
       <div class="intelligence-actions">
+        <button type="button" id="nearYouBtn">⌖ מה קורה לידך</button>
         <button type="button" id="importantOnlyBtn" aria-pressed="false">רק חשוב</button>
         <button type="button" id="quickBriefBtn">⚡ 30 שניות להבין מה קורה</button>
       </div>
@@ -454,6 +479,39 @@
     </div>
   </footer>
 
+  <div class="site-modal hidden" id="leadWhyModal" role="dialog" aria-modal="true" aria-labelledby="leadWhyTitle" aria-hidden="true">
+    <button class="modal-backdrop" type="button" data-modal-close aria-label="סגירת החלון"></button>
+    <section class="modal-card smart-explain-card" tabindex="-1">
+      <button class="modal-close" type="button" data-modal-close aria-label="סגירה">×</button>
+      <span class="modal-eyebrow">שקיפות מערכתית</span>
+      <h2 id="leadWhyTitle">למה זה הסיפור המרכזי?</h2>
+      <p>חדשותא מדרגת אירועים אוטומטית לפי שילוב של טריות, מקורות שונים, קצב דיווחים ומקורות רשמיים.</p>
+      <div class="why-metrics" id="leadWhyMetrics"></div>
+      <div class="why-explanation" id="leadWhyExplanation"></div>
+      <small class="why-note">הדירוג הוא כלי אוטומטי ולא קביעה עיתונאית מוחלטת. תמיד אפשר לפתוח את המקורות המקוריים.</small>
+    </section>
+  </div>
+
+  <div class="site-modal hidden" id="nearYouModal" role="dialog" aria-modal="true" aria-labelledby="nearYouTitle" aria-hidden="true">
+    <button class="modal-backdrop" type="button" data-modal-close aria-label="סגירת החלון"></button>
+    <section class="modal-card near-you-card" tabindex="-1">
+      <button class="modal-close" type="button" data-modal-close aria-label="סגירה">×</button>
+      <span class="modal-eyebrow">לפי העיר שבחרתם</span>
+      <h2 id="nearYouTitle">מה קורה לידך</h2>
+      <p id="nearYouSubtitle">חדשות, התרעות, מזג אוויר ותחבורה — ממידע אונליין בלבד.</p>
+      <div class="near-you-grid">
+        <article class="near-you-panel emergency"><span>🚨</span><div><b>התרעות באזור</b><p id="nearYouAlerts">בודק התרעות…</p></div></article>
+        <article class="near-you-panel weather"><span>🌤️</span><div><b>מזג אוויר</b><p id="nearYouWeather">טוען…</p></div></article>
+        <article class="near-you-panel transport"><span>🚌</span><div><b>תחבורה</b><p id="nearYouTransport">בודק דיווחים…</p><a href="https://route.bus.gov.il/" target="_blank" rel="noopener noreferrer">תכנון נסיעה ומידע בזמן אמת — משרד התחבורה ↗</a></div></article>
+      </div>
+      <div class="near-you-news">
+        <div class="near-you-news-head"><strong>עדכונים שמזכירים את האזור</strong><span id="nearYouNewsCount"></span></div>
+        <div id="nearYouNewsList"></div>
+      </div>
+      <small class="near-you-note">תחבורה מוצגת רק כאשר נמצא דיווח אונליין רלוונטי במקורות שנאספו. למידע תפעולי מלא יש להשתמש בשירות הרשמי של משרד התחבורה.</small>
+    </section>
+  </div>
+
   <div class="site-modal hidden" id="quickBriefModal" role="dialog" aria-modal="true" aria-labelledby="quickBriefTitle" aria-hidden="true">
     <div class="site-modal-backdrop" data-modal-close></div>
     <section class="modal-card quick-brief-card" tabindex="-1">
@@ -538,6 +596,9 @@
         <div><span>💱</span><b>שערי מטבע</b><small>דולר ואירו מול השקל, עם מקור חלופי במקרה של תקלה.</small></div>
         <div><span>🔔</span><b>התראות חדשות</b><small>אפשר לקבל התראה כשהסיפור המרכזי מתחלף לאחר אימות במספר מקורות.</small></div>
         <div><span>📲</span><b>כמו אפליקציה</b><small>אפשר להוסיף את חדשותא למסך הבית ולפתוח אותה בחלון עצמאי.</small></div>
+        <div><span>🧠</span><b>מה באמת השתנה</b><small>העדכונים החדשים שנוספו בתוך הסיפור המרכזי, לפי זמן ומקור.</small></div>
+        <div><span>📍</span><b>מה קורה לידך</b><small>חדשות, התרעות, מזג אוויר ותחבורה לפי העיר שנבחרה — ממידע אונליין.</small></div>
+        <div><span>🧭</span><b>למה זה הסיפור?</b><small>מסביר אילו נתונים גרמו לסיפור להגיע למקום המרכזי.</small></div>
       </div>
 
       <div class="modal-note about-note"><strong>שקיפות</strong><span>חדשותא אינה גוף חדשות שמדווח מהשטח ואינה מחליפה את המקורות. המערכת אוספת, מקבצת, מדרגת ומפנה לדיווחים המקוריים. חדשות בזמן אמת עשויות להשתנות ולכן תמיד מומלץ לפתוח את מקור הידיעה לעדכון המלא.</span></div>
@@ -598,6 +659,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=57.0.0" defer></script>
+  <script src="/app.js?v=58.0.0" defer></script>
 </body>
 </html>
