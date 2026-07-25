@@ -3184,3 +3184,86 @@ html[data-theme="dark"] .lead-story {
   .lead-story-media img { aspect-ratio: 16 / 10 !important; }
   .lead-story h2, .lead-story h2 a { font-size: 32px !important; max-width: none !important; }
 }
+
+
+/* V46 — symmetric hero / square lead image */
+@media (min-width: 901px) {
+  .hero-news-grid {
+    align-items: stretch !important;
+    grid-auto-rows: 1fr !important;
+  }
+  .hero-news-grid .flash-deck,
+  .hero-news-grid .lead-story {
+    height: 100% !important;
+    min-height: 100% !important;
+  }
+  .hero-news-grid .flash-deck {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .hero-news-grid .flash-deck-items {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: auto !important;
+  }
+  .hero-news-grid .lead-story {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .hero-news-grid .lead-story.has-media .lead-story-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    grid-template-columns: 280px minmax(0, 1fr) !important;
+    grid-template-areas:
+      "media copy"
+      "media cta" !important;
+    align-items: stretch !important;
+    gap: 20px !important;
+  }
+  .hero-news-grid .lead-story-copy {
+    grid-area: copy !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+  }
+  .hero-news-grid .lead-story-media {
+    grid-area: media !important;
+    width: 280px !important;
+    height: 280px !important;
+    min-height: 280px !important;
+    max-height: 280px !important;
+    aspect-ratio: 1 / 1 !important;
+    align-self: start !important;
+    margin: 0 !important;
+  }
+  .hero-news-grid .lead-story-media img {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 280px !important;
+    max-height: 280px !important;
+    aspect-ratio: 1 / 1 !important;
+    object-fit: cover !important;
+  }
+  .hero-news-grid .lead-story h2,
+  .hero-news-grid .lead-story h2 a {
+    max-width: none !important;
+    font-size: clamp(30px, 2.45vw, 40px) !important;
+    line-height: 1.1 !important;
+  }
+  .hero-news-grid .lead-story-copy > p {
+    margin: 10px 0 12px !important;
+    -webkit-line-clamp: 2 !important;
+    overflow: hidden !important;
+    display: -webkit-box !important;
+    -webkit-box-orient: vertical !important;
+  }
+  .hero-news-grid .lead-story-sources {
+    max-height: 62px !important;
+    overflow: hidden !important;
+  }
+  .hero-news-grid .lead-story-cta {
+    grid-area: cta !important;
+    align-self: end !important;
+    justify-self: start !important;
+    margin-top: auto !important;
+  }
+}

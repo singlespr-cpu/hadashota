@@ -849,7 +849,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "45.0.0",
+      "X-Hadashota-Version": "46.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -877,7 +877,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "45.0.0"
+        "X-Hadashota-Version": "46.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
