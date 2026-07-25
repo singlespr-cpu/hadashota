@@ -134,7 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "70.0.0",
+          version: "71.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -147,7 +147,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "70.0.0",
+        version: "71.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -160,12 +160,18 @@ export default {
     if (url.pathname === "/sw.js") return serveNoCacheAsset(request, env, "/sw.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
-    if (url.pathname === "/" || url.pathname === "/index.html") return serveHtmlAsset(request, env, url.origin, "/index.html");
-    if (url.pathname === "/about" || url.pathname === "/about/") return serveHtmlAsset(request, env, url.origin, "/about.html");
-    if (url.pathname === "/how-it-works" || url.pathname === "/how-it-works/") return serveHtmlAsset(request, env, url.origin, "/how-it-works.html");
-    if (url.pathname === "/contact" || url.pathname === "/contact/") return serveHtmlAsset(request, env, url.origin, "/contact.html");
-    if (url.pathname === "/copyright" || url.pathname === "/copyright/") return serveHtmlAsset(request, env, url.origin, "/copyright.html");
-    if (url.pathname === "/privacy" || url.pathname === "/privacy/") return serveHtmlAsset(request, env, url.origin, "/privacy.html");
+
+    // V71: never translate a canonical browser URL into /index.html (or another
+    // non-canonical HTML filename) before asking the Static Assets binding.
+    // Cloudflare applies html_handling to env.ASSETS.fetch(), so requesting
+    // /index.html can legitimately redirect to /. Passing that redirect back to
+    // a request for / creates a / -> /index.html -> / loop. Always fetch the
+    // incoming canonical path instead.
+    if (url.pathname === "/index.html") return Response.redirect(`${url.origin}/`, 308);
+    if (url.pathname === "/") return serveHtmlAsset(request, env, url.origin);
+    if (["/about", "/how-it-works", "/contact", "/copyright", "/privacy"].includes(url.pathname)) {
+      return serveHtmlAsset(request, env, url.origin);
+    }
 
     return env.ASSETS.fetch(request);
   }
@@ -182,9 +188,10 @@ async function serveNoCacheAsset(request, env, assetPath, contentType = "applica
   return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
 }
 
-async function serveHtmlAsset(request, env, origin, assetPath) {
-  const assetRequest = new Request(new URL(assetPath, request.url), request);
-  const asset = await env.ASSETS.fetch(assetRequest);
+async function serveHtmlAsset(request, env, origin) {
+  // Preserve the canonical incoming pathname. Static Assets performs its own
+  // HTML routing; rewriting / to /index.html here can create a redirect loop.
+  const asset = await env.ASSETS.fetch(request);
   if (!asset.ok) return asset;
   const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
   const headers = new Headers(asset.headers);
@@ -1000,13 +1007,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "70.0.0",
+      "X-Hadashota-Version": "71.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "70.0.0",
+      "X-Hadashota-Version": "71.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1038,7 +1045,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "70.0.0"
+        "X-Hadashota-Version": "71.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
