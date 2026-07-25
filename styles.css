@@ -4105,7 +4105,7 @@ body.emergency-mode .alert-center-card{box-shadow:0 0 0 2px rgba(239,35,60,.16),
 }
 
 /* ==========================================================
-   HADASHOTA V69 — mobile readability safety
+   HADASHOTA V70 — mobile readability safety
    Keep every modal scroll-safe while avoiding sub-10px UI text.
    ========================================================== */
 @media (max-width: 700px) {
@@ -4123,7 +4123,7 @@ body.emergency-mode .alert-center-card{box-shadow:0 0 0 2px rgba(239,35,60,.16),
 }
 
 
-/* V69 — visible deployment marker */
+/* V70 — visible deployment marker */
 .site-version {
   display: inline-block;
   margin-top: 6px !important;

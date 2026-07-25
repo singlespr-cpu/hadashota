@@ -134,7 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "69.0.0",
+          version: "71.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -147,7 +147,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "69.0.0",
+        version: "71.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -160,12 +160,18 @@ export default {
     if (url.pathname === "/sw.js") return serveNoCacheAsset(request, env, "/sw.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
-    if (url.pathname === "/" || url.pathname === "/index.html") return serveHtmlAsset(request, env, url.origin, "/index.html");
-    if (url.pathname === "/about" || url.pathname === "/about/") return serveHtmlAsset(request, env, url.origin, "/about.html");
-    if (url.pathname === "/how-it-works" || url.pathname === "/how-it-works/") return serveHtmlAsset(request, env, url.origin, "/how-it-works.html");
-    if (url.pathname === "/contact" || url.pathname === "/contact/") return serveHtmlAsset(request, env, url.origin, "/contact.html");
-    if (url.pathname === "/copyright" || url.pathname === "/copyright/") return serveHtmlAsset(request, env, url.origin, "/copyright.html");
-    if (url.pathname === "/privacy" || url.pathname === "/privacy/") return serveHtmlAsset(request, env, url.origin, "/privacy.html");
+
+    // V71: never translate a canonical browser URL into /index.html (or another
+    // non-canonical HTML filename) before asking the Static Assets binding.
+    // Cloudflare applies html_handling to env.ASSETS.fetch(), so requesting
+    // /index.html can legitimately redirect to /. Passing that redirect back to
+    // a request for / creates a / -> /index.html -> / loop. Always fetch the
+    // incoming canonical path instead.
+    if (url.pathname === "/index.html") return Response.redirect(`${url.origin}/`, 308);
+    if (url.pathname === "/") return serveHtmlAsset(request, env, url.origin);
+    if (["/about", "/how-it-works", "/contact", "/copyright", "/privacy"].includes(url.pathname)) {
+      return serveHtmlAsset(request, env, url.origin);
+    }
 
     return env.ASSETS.fetch(request);
   }
@@ -182,9 +188,10 @@ async function serveNoCacheAsset(request, env, assetPath, contentType = "applica
   return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
 }
 
-async function serveHtmlAsset(request, env, origin, assetPath) {
-  const assetRequest = new Request(new URL(assetPath, request.url), request);
-  const asset = await env.ASSETS.fetch(assetRequest);
+async function serveHtmlAsset(request, env, origin) {
+  // Preserve the canonical incoming pathname. Static Assets performs its own
+  // HTML routing; rewriting / to /index.html here can create a redirect loop.
+  const asset = await env.ASSETS.fetch(request);
   if (!asset.ok) return asset;
   const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
   const headers = new Headers(asset.headers);
@@ -225,7 +232,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v69/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v70/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -578,7 +585,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v69?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v70?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -868,7 +875,7 @@ async function handleNews(request, env, ctx) {
   const forceRequested = requestUrl.searchParams.get("force") === "1";
   const shardSources = getShardSources(shard);
   const cache = caches.default;
-  // V69: an explicit refresh must always reach the configured publishers.
+  // V70: an explicit refresh must always reach the configured publishers.
   // Browser-specific Sec-Fetch/Origin header differences must never silently demote it.
   const force = forceRequested;
 
@@ -892,7 +899,7 @@ async function handleNews(request, env, ctx) {
     // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
     // even when an origin redirects or several sources fail at the same time.
     const retryBudget = { remaining: 6 };
-    // V69: every configured source gets one real attempt on every collection.
+    // V70: every configured source gets one real attempt on every collection.
     // Retries happen only after that first complete pass, so late-list sources
     // (especially Telegram channels) can never be starved by an early timeout.
     const settled = await fetchSourcesWithLimit(shardSources, 6, retryBudget, force);
@@ -966,7 +973,7 @@ async function handleNews(request, env, ctx) {
       };
     }).sort((a,b) => Number(b.official)-Number(a.official) || b.healthScore-a.healthScore || Date.parse(b.lastItemAt||0)-Date.parse(a.lastItemAt||0));
 
-    // V69: if even one source produced current items, return the fresh partial
+    // V70: if even one source produced current items, return the fresh partial
     // result instead of hiding it behind an older snapshot. The UI already marks
     // degraded sources and the lead-story policy still requires corroboration.
 
@@ -1000,13 +1007,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "69.0.0",
+      "X-Hadashota-Version": "71.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "69.0.0",
+      "X-Hadashota-Version": "71.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1038,7 +1045,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "69.0.0"
+        "X-Hadashota-Version": "71.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.

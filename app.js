@@ -1,3 +1,7 @@
+const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
+const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
+const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+
 const state = {
   items: [],
   sources: [],
@@ -210,7 +214,7 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v69.";
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v70.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 40_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -254,7 +258,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V69 cold-open strategy:
+  // V70 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -300,13 +304,13 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("68.")) {
-      marker.textContent = apiVersion ? `גרסה V69 · API ${apiVersion}` : "גרסה V69 · API לא מזוהה";
+    if (!apiVersion.startsWith("71.")) {
+      marker.textContent = apiVersion ? `גרסה V71 · API ${apiVersion}` : "גרסה V71 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V69 · API V69";
+    marker.textContent = "גרסה V71 · API V71";
   } catch (error) {
-    marker.textContent = "גרסה V69 · API לא מחובר";
+    marker.textContent = "גרסה V71 · API לא מחובר";
     console.warn("Hadashota API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -878,7 +882,7 @@ async function loadNews(force = false, fromRetry = false) {
   }
 
   try {
-    // V69 iPhone/WebKit full-source refresh: do not wait for both shards before
+    // V70 iPhone/WebKit full-source refresh: do not wait for both shards before
     // showing anything. A cold Cloudflare edge can make one shard noticeably
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
@@ -2038,10 +2042,6 @@ function renderSources() {
       : `הצג את כל ${sources.length} המקורות`;
 }
 
-const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
-const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
-const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
-
 function leadSnapshotIsFresh(parsed, hardMaxMs = STORED_LEAD_HARD_MAX_AGE_MS) {
   if (!parsed?.entry?.item || !Number(parsed.savedAt)) return false;
   const latest = Date.parse(parsed.entry.latestAt || parsed.entry.item?.latestReportAt || parsed.entry.item?.publishedAt || 0);
@@ -2165,7 +2165,7 @@ function renderLeadStory() {
     Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
     String(a.item?.id || a.item?.url || a.item?.title || "").localeCompare(String(b.item?.id || b.item?.url || b.item?.title || ""), "he");
 
-  // V69 lead policy — hard editorial lock.
+  // V70 lead policy — hard editorial lock.
   // A single-source item can NEVER be the main story.
   // For the first 60 minutes we keep/choose only a 3+ source story.
   // Only after there has been no qualifying 3+ source story for a full hour
