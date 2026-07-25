@@ -27,6 +27,7 @@ const state = {
   leadNotificationPrimed: localStorage.getItem("hadashota.lastLeadFingerprint") ? true : false,
   serviceWorkerRegistration: null,
   lastForegroundRefreshAt: 0,
+  lastHiddenAt: 0,
   alertTimer: null,
   alertCities: readStoredAlertCities(),
   alertAllIsrael: localStorage.getItem("hadashota.alertAllIsrael") !== "0",
@@ -226,6 +227,14 @@ function init() {
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
   // Render the saved snapshot immediately, then bypass every news cache for a fresh entry snapshot.
   loadNews(true);
+  window.setTimeout(() => {
+    const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
+    const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 90_000;
+    if (!state.loading && (state.dataDelayed || tooOld)) {
+      state.lastForegroundRefreshAt = 0;
+      loadNews(true, true);
+    }
+  }, 20_000);
   restartAutoRefresh();
   window.setTimeout(maybeShowNotificationOffer, 1400);
   // Do not stack prompts. First visit gets a gentle delayed install suggestion; returning visitors see it sooner.
@@ -456,16 +465,44 @@ function bindEvents() {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) {
+    if (document.hidden) {
+      state.lastHiddenAt = Date.now();
+    } else {
+      const hiddenFor = state.lastHiddenAt ? Date.now() - state.lastHiddenAt : 0;
+      // iOS Home Screen web apps can resume the exact suspended page process.
+      // In standalone mode a real page reload is the most reliable way to guarantee
+      // a fresh app shell + forced news fetch instead of a frozen in-memory snapshot.
+      if (hiddenFor >= 3000 && hardRefreshStandalone("visibility")) return;
       loadUtilities();
+      if (hiddenFor >= 3000) state.lastForegroundRefreshAt = 0;
       refreshNewsOnForeground("visibility");
     }
     scheduleAlertPoll(250);
     if (state.autoRefresh) restartAutoRefresh();
   });
 
-  window.addEventListener("focus", () => refreshNewsOnForeground("focus"));
-  window.addEventListener("pageshow", () => refreshNewsOnForeground("pageshow"));
+  window.addEventListener("pagehide", () => {
+    state.lastHiddenAt = Date.now();
+  });
+
+  window.addEventListener("focus", () => {
+    if (isStandaloneMode() && state.lastHiddenAt && Date.now() - state.lastHiddenAt >= 3000) {
+      if (hardRefreshStandalone("focus")) return;
+    }
+    refreshNewsOnForeground("focus");
+  });
+
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted && hardRefreshStandalone("pageshow-bfcache")) return;
+    if (event.persisted) state.lastForegroundRefreshAt = 0;
+    refreshNewsOnForeground(event.persisted ? "pageshow-bfcache" : "pageshow");
+  });
+
+  window.addEventListener("online", () => {
+    state.lastForegroundRefreshAt = 0;
+    loadUtilities();
+    refreshNewsOnForeground("online");
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -508,6 +545,24 @@ function maybeShowNotificationOffer() {
 
 function isStandaloneMode() {
   return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+}
+
+function hardRefreshStandalone(reason = "resume") {
+  if (!isStandaloneMode()) return false;
+  try {
+    const now = Date.now();
+    const last = Number(sessionStorage.getItem("hadashota.pwaHardRefreshAt") || 0);
+    // Prevent a reload loop if iOS emits more than one resume lifecycle event.
+    if (now - last < 8000) return false;
+    sessionStorage.setItem("hadashota.pwaHardRefreshAt", String(now));
+    const url = new URL(location.href);
+    url.searchParams.set("_pwa", String(now));
+    location.replace(url.pathname + url.search + url.hash);
+    return true;
+  } catch {
+    location.reload();
+    return true;
+  }
 }
 
 function isIOSDevice() {
@@ -1581,10 +1636,8 @@ function mainstreamFirst(items) {
 }
 
 function newsPreviewText(item, reportCount) {
-  const basePreview = cleanDisplayText(item?.preview || "").replace(/^(?:הכותרת נוסחה במערכת חדשותא|לפרטים המלאים עברו למקור)\.?/g, "").trim();
-  if (basePreview && basePreview.length >= 32) return basePreview.slice(0, 190);
-  if (reportCount > 1) return `${reportCount} מקורות שונים מדווחים על אותו אירוע. לחצו למעבר לידיעה המלאה במקור.`;
-  return "לחצו למעבר לידיעה המלאה במקור.";
+  if (reportCount > 1) return `${reportCount} מקורות שונים מדווחים על אותו אירוע. לחצו למעבר לדיווחים המקוריים.`;
+  return "עדכון חדשותי בזמן אמת. לחצו למעבר לידיעה במקור.";
 }
 
 function newsCardHtml(item) {
@@ -1648,9 +1701,18 @@ function renderSources() {
     if (ah !== bh) return bh - ah;
     return Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0);
   });
+  const healthySources = sources.filter((source) => (source.healthStatus || 'healthy') === 'healthy');
+  const degradedSources = sources.filter((source) => source.healthStatus === 'degraded');
+  const offlineSources = sources.filter((source) => source.healthStatus === 'offline');
   el.activeSourceCount.textContent = String(sources.filter((source) => source.healthStatus !== "offline").length);
-  const limit = state.allSourcesVisible ? sources.length : 8;
-  const visible = sources.slice(0, limit);
+
+  let visible;
+  if (state.allSourcesVisible) {
+    visible = sources;
+  } else {
+    visible = healthySources.slice(0, 8);
+    if (!visible.length) visible = sources.slice(0, 8);
+  }
 
   el.sourceList.innerHTML = visible.map((source) => {
     const type = source.official ? "מקור רשמי" : source.independent ? "Telegram עצמאי" : source.kind === "telegram" ? "Telegram / כתב" : "אתר חדשות";
@@ -1665,8 +1727,13 @@ function renderSources() {
       : `<div class="source-row source-row-static">${inner}</div>`;
   }).join("");
 
-  el.showAllSources.classList.toggle("hidden", sources.length <= 8);
-  el.showAllSources.textContent = state.allSourcesVisible ? "הצג פחות" : `הצג את כל ${sources.length} המקורות`;
+  const extraCount = degradedSources.length + offlineSources.length;
+  el.showAllSources.classList.toggle("hidden", sources.length <= 8 && extraCount === 0);
+  el.showAllSources.textContent = state.allSourcesVisible
+    ? "הצג פחות"
+    : extraCount > 0
+      ? `הצג גם מקורות חלקיים/לא זמינים (${extraCount})`
+      : `הצג את כל ${sources.length} המקורות`;
 }
 
 const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
@@ -1910,7 +1977,7 @@ function renderBreaking() {
     return;
   }
 
-  el.breakingTitle.textContent = cleanDisplayTitle(latest.title);
+  el.breakingTitle.textContent = editorialTitle(latest);
   el.breakingMeta.textContent = `${cleanDisplayText(latest.sourceName)} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
   setOptionalLink(el.breakingLink, latest.url);
   el.breakingBanner.classList.remove("hidden");

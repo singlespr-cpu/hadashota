@@ -154,6 +154,7 @@ export default {
     if (url.pathname === "/how-it-works" || url.pathname === "/how-it-works/") return serveHtmlAsset(request, env, url.origin, "/how-it-works.html");
     if (url.pathname === "/contact" || url.pathname === "/contact/") return serveHtmlAsset(request, env, url.origin, "/contact.html");
     if (url.pathname === "/copyright" || url.pathname === "/copyright/") return serveHtmlAsset(request, env, url.origin, "/copyright.html");
+    if (url.pathname === "/privacy" || url.pathname === "/privacy/") return serveHtmlAsset(request, env, url.origin, "/privacy.html");
 
     return env.ASSETS.fetch(request);
   }
@@ -166,7 +167,7 @@ async function serveHtmlAsset(request, env, origin, assetPath) {
   const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
   const headers = new Headers(asset.headers);
   headers.set("Content-Type", "text/html; charset=utf-8");
-  headers.set("Cache-Control", "public, max-age=0, s-maxage=60");
+  headers.set("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -446,7 +447,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v45?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v50?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -848,8 +849,8 @@ async function handleNews(request, ctx) {
     };
 
     const response = json(payload, 200, {
-      "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "46.0.0",
+      "Cache-Control": force ? "no-store, max-age=0" : "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
+      "X-Hadashota-Version": "50.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -877,7 +878,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "46.0.0"
+        "X-Hadashota-Version": "50.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1166,7 +1167,7 @@ function makeItem({ source, title, url, publishedAt, preview, imageUrl = null })
     language: source.language || "he",
     title: normalizeSpace(title),
     preview: normalizeSpace(preview || ""),
-    imageUrl: (source.imageReuse === "allowed" || source.official || source.verified) ? sanitizeImageUrl(imageUrl) : null,
+    imageUrl: source.imageReuse === "allowed" ? sanitizeImageUrl(imageUrl) : null,
     url,
     publishedAt,
     defaultCategory: source.defaultCategory || null

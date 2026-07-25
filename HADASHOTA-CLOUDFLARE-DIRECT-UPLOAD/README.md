@@ -85,3 +85,27 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - חלון איחוד הדיווחים הורחב בזהירות כדי לזהות ניסוחים שונים של אותו אירוע בין אתרים ו-Telegram.
 - מנוע הכותרות בוחר ניסוח "מדואיד" שמקבל את מירב התמיכה משאר כותרות האשכול ומלטש אותו, במקום תבניות דרמטיות קבועות.
 - מנוע התמונות דורש התאמה חזקה יותר לאדם/אירוע; תמונות מקום/ארכיון מסומנות במפורש כאילוסטרציה.
+
+
+## V48 FINAL STABLE
+- Forced fresh news request on every cold open.
+- Fresh refresh on iOS/PWA BFCache restore, return from background, and network reconnect.
+- HTML shell is no-store/revalidated so an old installed PWA page is not retained after deploy.
+- Local last-good is visual fallback only while the system retries a fresh network load.
+- Third-party source images are disabled unless explicitly whitelisted for reuse; open-license media remains enabled.
+- Copyright/takedown and privacy pages updated.
+
+## V49 — iPhone Home Screen refresh fix
+- iOS standalone/Home Screen mode is explicitly detected with display-mode/navigator.standalone.
+- Returning to a suspended Home Screen web app after 3+ seconds performs a full same-origin reload.
+- BFCache page restores also force a full reload in standalone mode.
+- Reload-loop guard is stored in sessionStorage.
+- Normal Safari/desktop behavior remains network-refresh based without forced page reload.
+
+## V50 — Main story corroboration lock
+- A one-source story can never become the main story.
+- Primary rule: 3+ distinct publishers within the last 60 minutes.
+- Only when no such 3-source story exists may the system use a 2-source story.
+- Two-source fallback is limited to recent/corroborated stories; older fallback is capped at 3 hours.
+- Official status alone no longer bypasses the 2-source minimum.
+- Push headline-change notifications remain restricted to 3+ sources.
