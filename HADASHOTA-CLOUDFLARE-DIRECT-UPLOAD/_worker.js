@@ -267,7 +267,11 @@ function mediaQueryVariants(raw, category = "other") {
     [/בחירות/g, "election Israel"], [/ממשלה|קואליציה/g, "Israel government"],
     [/נתב.?ג|נמל התעופה/g, "Ben Gurion Airport"], [/בורסה|מניות|שוק ההון/g, "stock market Israel"],
     [/טלפון|טלפונים|סלולרי|נייד/g, "smartphone mobile phone"], [/הודעת אזהרה|הודעת חירום|התראת חירום|אזעקת חירום/g, "emergency alert notification"],
-    [/התרעה|אזהרה/g, "alert warning"], [/אזרחים/g, "civilians people"]
+    [/התרעה|אזהרה/g, "alert warning"], [/אזרחים/g, "civilians people"],
+    [/אופנוע|אופנוען|רוכב אופנוע/g, "motorcycle rider"], [/קטנוע/g, "motor scooter rider"],
+    [/תאונה|התנגשות|נפצע|נפגע/g, "traffic accident"], [/מכונית|רכב/g, "car vehicle"],
+    [/צאט.?גיפיטי|צ.?אט.?ג.?יפיטי|ChatGPT/gi, "OpenAI ChatGPT"], [/OpenAI/gi, "OpenAI"],
+    [/תקלה|שיבוש|לא עובד|נפל/g, "service outage"]
   ];
   const translate = (value) => {
     let q = cleanText(value);
@@ -278,7 +282,7 @@ function mediaQueryVariants(raw, category = "other") {
     security: "Israel military security",
     politics: "Knesset Israel politics",
     diplomatic: "Israel diplomacy",
-    other: "Israel news"
+    other: ""
   };
   const out = [];
   const push = (q, specificity = 1) => {
@@ -304,7 +308,8 @@ function mediaQueryVariants(raw, category = "other") {
   // Generic category imagery is a true last resort. It is explicitly marked as
   // illustrative in the response so users never mistake an archive/location photo
   // for a photograph of the exact event.
-  push(fallbackMap[category] || fallbackMap.other, 0);
+  const genericFallback = fallbackMap[category] || fallbackMap.other;
+  if (genericFallback) push(genericFallback, 0);
   return out.slice(0, 10);
 }
 
@@ -314,7 +319,64 @@ function mediaTokens(value) {
     .split(/\s+/).filter((t) => t.length >= 3 && !["the","and","with","from","news","israel","photo","image","file","חדשות","דיווח","דיווחים"].includes(t)));
 }
 
+function mediaConcepts(value) {
+  const text = cleanText(value || "").toLowerCase();
+  const concepts = new Set();
+  const has = (re) => re.test(text);
+
+  if (has(/\bmotorcycle\b|\bmotorbike\b|אופנוע/)) concepts.add("motorcycle");
+  if (has(/\bscooter\b|קטנוע/)) concepts.add("scooter");
+  if (has(/\bcar\b|\bautomobile\b|\bvehicle\b|מכונית|רכב/)) concepts.add("car");
+  if (has(/\broad\b|\bstreet\b|\bhighway\b|\broute\b|כביש|דרך/)) concepts.add("road");
+
+  if (has(/\bopenai\b|\bchatgpt\b|\bgpt[- ]?[0-9a-z]*\b|צאט.?גיפיטי/)) concepts.add("openai");
+  if (has(/\banthropic\b|\bclaude\b/)) concepts.add("anthropic");
+  if (has(/\bgemini\b/)) concepts.add("gemini");
+  if (has(/\bmicrosoft\b|\bwindows\b|\bazure\b/)) concepts.add("microsoft");
+  if (has(/\bapple\b|אפל/)) concepts.add("apple");
+
+  if (has(/\boutage\b|\bincident\b|\bdown\b|תקלה|שיבוש/)) concepts.add("outage");
+  if (has(/\baccident\b|\bcrash\b|\bcollision\b|תאונ|התנגש/)) concepts.add("accident");
+  if (has(/\bmissile\b|\brocket\b|טיל|רקט/)) concepts.add("missile");
+  if (has(/\bair strike\b|\battack\b|תקיפ|הפצצ/)) concepts.add("attack");
+  if (has(/\bphone\b|\bsmartphone\b|\bmobile\b|טלפונ|סלולרי/)) concepts.add("phone");
+  return concepts;
+}
+
+function mediaHardMismatch(query, candidateText, specificity = 1) {
+  if (specificity < 2) return false;
+  const q = mediaConcepts(query);
+  const c = mediaConcepts(candidateText);
+
+  // Named technology brands are hard requirements. A road, building or generic
+  // "technology" image is not a picture for an OpenAI/ChatGPT story.
+  for (const brand of ["openai","anthropic","gemini","microsoft","apple"]) {
+    if (q.has(brand) && !c.has(brand)) return true;
+  }
+
+  // Vehicle type is also a hard requirement. Do not substitute a car for a
+  // motorcycle or a generic road for a motorcycle rider.
+  if (q.has("motorcycle") && !c.has("motorcycle")) return true;
+  if (q.has("scooter") && !c.has("scooter")) return true;
+
+  // For an event query, a pure road/place image is too weak when it contains
+  // none of the event/subject concepts.
+  const eventConcepts = ["outage","accident","missile","attack","phone"];
+  const requiredEvents = eventConcepts.filter((x) => q.has(x));
+  if (requiredEvents.length && !requiredEvents.some((x) => c.has(x))) {
+    // A matching named subject (for example OpenAI logo) may still be a good
+    // illustrative image for an outage, so allow it when the subject matches.
+    const subjectMatch =
+      (q.has("openai") && c.has("openai")) ||
+      (q.has("motorcycle") && c.has("motorcycle")) ||
+      (q.has("scooter") && c.has("scooter"));
+    if (!subjectMatch) return true;
+  }
+  return false;
+}
+
 function mediaCandidateScore(query, candidateText, specificity = 1) {
+  if (mediaHardMismatch(query, candidateText, specificity)) return -999;
   const q = mediaTokens(query);
   const c = mediaTokens(candidateText);
   if (!q.size || !c.size) return specificity === 0 ? 0 : -10;
@@ -357,7 +419,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/45 (+relevance tuned media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/59 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -377,7 +439,7 @@ async function findCommonsMedia(query, specificity = 1) {
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
     // Specific queries must actually match. A wrong photo is worse than a branded fallback.
-    const threshold = specificity >= 3 ? 34 : specificity >= 2 ? 28 : specificity >= 1 ? 24 : 64;
+    const threshold = specificity >= 3 ? 42 : specificity >= 2 ? 36 : specificity >= 1 ? 30 : 70;
     if (!best || best.score < threshold) return null;
     const attributionRequired = !String(best.license).toUpperCase().includes("PUBLIC DOMAIN") && String(best.license).toUpperCase() !== "CC0";
     return {
@@ -404,7 +466,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/45 (+news aggregator; relevance tuned media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/59 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -421,7 +483,7 @@ async function findOpenverseMedia(query, specificity = 1) {
     }
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
-    const threshold = specificity >= 3 ? 36 : specificity >= 2 ? 30 : specificity >= 1 ? 26 : 66;
+    const threshold = specificity >= 3 ? 44 : specificity >= 2 ? 38 : specificity >= 1 ? 32 : 72;
     if (!best || best.score < threshold) return null;
     const img = best.img;
     const creator = cleanText(img?.creator || "");
@@ -447,7 +509,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v58?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v59?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -850,7 +912,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": force ? "no-store, max-age=0" : "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
-      "X-Hadashota-Version": "58.0.0",
+      "X-Hadashota-Version": "59.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -878,7 +940,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "58.0.0"
+        "X-Hadashota-Version": "59.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.

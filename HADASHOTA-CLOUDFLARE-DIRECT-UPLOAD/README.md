@@ -160,3 +160,11 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - “מה קורה לידך” uses the selected city to combine live alert state, current weather, local online news mentions and transport-related online reports; it also links to the official Ministry of Transport real-time planner.
 - “חדשותא עכשיו” shows connected sources, hot stories and corroborated stories.
 - Local transport information is never invented: it is displayed only from currently collected online reports.
+
+## V59 — strict semantic image matching
+- Fixed false-positive imagery such as a car for a motorcycle story and a road for an OpenAI/ChatGPT outage.
+- Added hard subject constraints for motorcycle/scooter and major technology brands.
+- Added explicit OpenAI/ChatGPT, outage, motorcycle, scooter and traffic-accident query concepts.
+- Removed the generic “Israel news” image fallback for uncategorized stories.
+- Raised media relevance thresholds and changed the media cache namespace so previously cached bad matches are not reused.
+- When no semantically credible licensed image exists, the site now prefers its contextual fallback over a misleading photograph.

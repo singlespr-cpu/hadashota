@@ -1403,7 +1403,9 @@ function mediaQueryForItem(item, editorial = "") {
   const reports = normalizeClusterReports(item);
   const rawTitles = [item?.title, editorial, ...reports.map((r) => r.title)].filter(Boolean);
   const cleanTitles = rawTitles.map(cleanDisplayTitle);
-  const corpus = cleanTitles.join(' | ');
+  const corpus = cleanTitles.join(" | ");
+  const lower = corpus.toLowerCase();
+
   const person = extractLikelyPersonName(cleanTitles);
   const entities = new Set();
   const actions = new Set();
@@ -1411,17 +1413,44 @@ function mediaQueryForItem(item, editorial = "") {
     for (const e of clientEventEntities(title)) entities.add(e);
     for (const a of clientEventActions(title)) actions.add(a);
   }
-  const lower = corpus.toLowerCase();
-  const extras = [];
-  if (/טלפונ|סלולרי|נייד|sms|הודע|התראה|אזהר/.test(lower)) extras.push('mobile phone emergency alert');
-  if (/סעודיה|saudi/.test(lower)) extras.push('Saudi Arabia');
-  if (/איראן|iran/.test(lower) && /(כווית|kuwait|בחריין|bahrain|קטאר|qatar)/.test(lower)) extras.push('middle east missile alert');
-  if (/ילד|נעדר|נעדרת|אותר|נמצא/.test(lower)) extras.push('person search rescue');
-  const entityPhrase = [...entities].slice(0, 3).join(' ');
-  const actionPhrase = [...actions].slice(0, 2).join(' ');
+
+  // Strong subject concepts. These are deliberately written in English because
+  // Commons/Openverse metadata is substantially better in English.
+  const subjects = [];
+  const add = (value) => { if (value && !subjects.includes(value)) subjects.push(value); };
+
+  if (/אופנוע|אופנוען|רוכב אופנוע|motorcycle|motorbike/.test(lower)) add("motorcycle rider");
+  if (/קטנוע|scooter/.test(lower)) add("motor scooter rider");
+  if (/רכב|מכונית|car\b|vehicle/.test(lower) && !/אופנוע|motorcycle|motorbike/.test(lower)) add("car");
+  if (/תאונ|התנגש|נפצע|נפגע|crash|accident|collision/.test(lower)) add("traffic accident");
+
+  if (/openai|chatgpt|gpt[- ]?[0-9a-z]*|צ.?אט.?ג.?יפיטי|צאטגיפיטי/.test(lower)) {
+    add("OpenAI ChatGPT");
+    if (/תקלה|נפל|לא עובד|שיבוש|outage|down|incident/.test(lower)) add("service outage");
+  }
+  if (/anthropic|claude/.test(lower)) add("Anthropic Claude");
+  if (/google.*gemini|gemini/.test(lower)) add("Google Gemini");
+  if (/microsoft|windows|azure/.test(lower)) add("Microsoft");
+  if (/apple|אפל/.test(lower)) add("Apple");
+
+  if (/טלפונ|סלולרי|נייד|sms|הודע|התראה|אזהר/.test(lower)) add("mobile phone emergency alert");
+  if (/סעודיה|saudi/.test(lower)) add("Saudi Arabia");
+  if (/איראן|iran/.test(lower) && /(כווית|kuwait|בחריין|bahrain|קטאר|qatar)/.test(lower)) add("middle east missile alert");
+  if (/ילד|נעדר|נעדרת|אותר|נמצא/.test(lower)) add("person search rescue");
+
+  const entityPhrase = [...entities].slice(0, 3).join(" ");
+  const actionPhrase = [...actions].slice(0, 2).join(" ");
   const strongest = strongestFactFromTitles(cleanTitles);
-  return [person, [entityPhrase, actionPhrase].filter(Boolean).join(' '), ...extras, strongest, editorial]
-    .filter(Boolean).join(' | ').slice(0, 360);
+
+  // Put the concrete subject first so the resolver can enforce it as a hard
+  // relevance requirement rather than falling back to a vaguely related place.
+  return [
+    person,
+    ...subjects,
+    [entityPhrase, actionPhrase].filter(Boolean).join(" "),
+    strongest,
+    editorial
+  ].filter(Boolean).join(" | ").slice(0, 380);
 }
 
 const SAFE_MEDIA_CACHE = new Map();
