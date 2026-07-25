@@ -1151,15 +1151,31 @@ function editorialHeadlineForItem(item) {
   // When several independent sources corroborate the story, the prefix makes the headline
   // clearly Hadashota editorial copy rather than a verbatim publisher headline.
   if (reportCount >= 3) {
-    const prefix = category === "security" ? newsroomSecurityPrefix(fact)
-      : category === "politics" ? newsroomPoliticsPrefix(fact)
-      : category === "diplomatic" ? "בזירה המדינית"
-      : "במוקד החדשות";
-    return `${prefix}: ${fact}`;
+    return polishConsensusHeadline(fact, category, titles);
   }
 
   // Single-source feed cards stay factual and restrained.
   return fact;
+}
+
+function polishConsensusHeadline(fact, category, titles = []) {
+  let t = cleanNewsroomCandidate(fact);
+  // Keep the concrete names, numbers and event details that make a real news headline strong.
+  // Only add an editorial opening when it actually adds information/tone, not as a canned label.
+  if (category === "security") {
+    if (/(הרוג|הרוגים|פצוע|פצועים|נפגע|נפגעים)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `האירוע גובה מחיר: ${t}`;
+    if (/(אותר|נמצא|חולץ|שוחרר)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `אחרי שעות של מתח: ${t}`;
+    if (/(מטח|טילים|כטב|תקיפה|פיצוץ|יירוט)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `הסלמה בשטח: ${t}`;
+  }
+  if (category === "politics") {
+    if (/(התפטר|פרש|פוטר|בחירות|פיזור|קואליציה)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `טלטלה פוליטית: ${t}`;
+  }
+  if (category === "diplomatic") {
+    if (/(הסכם|שיחות|פסגה|שליח|אולטימטום|סנקציות)/.test(t) && !/^[^:]{2,32}:/.test(t)) return `התפתחות מדינית: ${t}`;
+  }
+  // For all other consensus stories, the strongest corroborated formulation is usually
+  // better journalism than a generic "במוקד החדשות" prefix.
+  return t;
 }
 
 function newsroomSecurityPrefix(fact) {
@@ -1231,13 +1247,22 @@ function editorialTitle(item) {
 function mediaQueryForItem(item, editorial = "") {
   const reports = normalizeClusterReports(item);
   const rawTitles = [item?.title, ...reports.map((r) => r.title)].filter(Boolean);
-  const person = extractLikelyPersonName(rawTitles.map(cleanDisplayTitle));
-  const corpus = rawTitles.join(" ");
+  const cleanTitles = rawTitles.map(cleanDisplayTitle);
+  const person = extractLikelyPersonName(cleanTitles);
   const entities = new Set();
-  for (const title of rawTitles) for (const e of clientEventEntities(title)) entities.add(e);
-  const entity = [...entities][0] || "";
-  // Person name or named location first; the worker also translates common Hebrew entities.
-  return [person, entity, cleanNewsroomCandidate(item?.title || ""), editorial].filter(Boolean).join(" | ").slice(0, 260);
+  const actions = new Set();
+  for (const title of rawTitles) {
+    for (const e of clientEventEntities(title)) entities.add(e);
+    for (const a of clientEventActions(title)) actions.add(a);
+  }
+  // The resolver receives structured alternatives rather than one long sentence.
+  // This lets it search exact people/places first and prevents generic category photos
+  // from winning over the actual subject of the story.
+  const entityPhrase = [...entities].slice(0, 3).join(" ");
+  const actionPhrase = [...actions].slice(0, 2).join(" ");
+  const strongest = strongestFactFromTitles(cleanTitles);
+  return [person, [entityPhrase, actionPhrase].filter(Boolean).join(" "), strongest, editorial]
+    .filter(Boolean).join(" | ").slice(0, 320);
 }
 
 const SAFE_MEDIA_CACHE = new Map();
@@ -1266,28 +1291,57 @@ async function hydrateLeadSafeMedia(winner, leadTitle) {
   if (!media?.url) {
     el.leadStoryImage.removeAttribute("src");
     el.leadStoryImage.alt = "";
-    el.leadStoryMedia.classList.add("image-unavailable");
+    el.leadStoryMedia.classList.add("image-unavailable", "contextual-fallback");
+    el.leadStoryMedia.dataset.fallbackLabel = leadMediaFallbackLabel(winner?.item, leadTitle);
+    el.leadStoryMedia.removeAttribute("data-media-credit");
     return;
   }
   el.leadStoryImage.src = media.url;
   el.leadStoryImage.alt = leadTitle;
   el.leadStoryImage.referrerPolicy = "no-referrer";
-  el.leadStoryMedia.classList.remove("image-unavailable");
+  el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
+  delete el.leadStoryMedia.dataset.fallbackLabel;
   el.leadStoryMedia.dataset.mediaCredit = media.attribution || "Openverse";
   el.leadStoryMedia.title = media.attribution ? `תמונה ברישיון פתוח · ${media.attribution}` : "תמונה ברישיון פתוח";
 }
 
+function mediaFallbackLabelFromSlot(slot) {
+  const q = String(slot?.dataset?.mediaQuery || "");
+  const category = String(slot?.dataset?.category || "other");
+  const first = q.split("|").map((x) => x.trim()).find(Boolean) || "";
+  if (first && first.length <= 42) return first;
+  return category === "security" ? "ביטחון" : category === "politics" ? "פוליטיקה" : category === "diplomatic" ? "מדיני" : "חדשותא";
+}
+
+function leadMediaFallbackLabel(item, title = "") {
+  const entities = [...clientEventEntities(`${item?.title || ""} ${title}`)];
+  if (entities.length) return entities.slice(0, 2).join(" · ");
+  const person = extractLikelyPersonName([cleanDisplayTitle(item?.title || ""), cleanDisplayTitle(title || "")].filter(Boolean));
+  if (person) return person;
+  return item?.category === "security" ? "אירוע ביטחוני" : item?.category === "politics" ? "פוליטיקה" : item?.category === "diplomatic" ? "הזירה המדינית" : "חדשותא";
+}
+
 async function hydrateSafeMediaSlots() {
   if (!state.showImages) return;
-  const slots = [...document.querySelectorAll('.safe-media-slot[data-media-query]:not([data-hydrated="1"])')].slice(0, 28);
+  const slots = [...document.querySelectorAll('.safe-media-slot[data-media-query]:not([data-hydrated="1"])')].slice(0, 30);
   await Promise.all(slots.map(async (slot) => {
     slot.dataset.hydrated = "1";
     const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
-    if (!media?.url || !slot.isConnected) return;
+    if (!slot.isConnected) return;
     const a = slot.closest('a.news-image');
+    if (!media?.url) {
+      slot.classList.add("contextual-media-fallback");
+      slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
+      return;
+    }
     const img = document.createElement('img');
     img.src = media.url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
-    img.addEventListener('error', () => a?.remove(), { once:true });
+    img.addEventListener('error', () => {
+      const replacement = document.createElement("span");
+      replacement.className = "safe-media-slot contextual-media-fallback";
+      replacement.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
+      img.replaceWith(replacement);
+    }, { once:true });
     slot.replaceWith(img);
     if (a && media.attribution) {
       a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
@@ -2526,7 +2580,22 @@ function openQuickBrief() {
   el.quickBriefList.innerHTML = items.map((item,index) => {
     const reports = normalizeClusterReports(item);
     const verification = storyVerification(item);
-    return `<a class="brief-story" href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer"><em>${index+1}</em><div><b>${escapeHtml(editorialTitle(item))}</b><small>${formatAge(clusterLatestAt(item))} · ${reports.length} מקורות · אימות ${verification.label} · חום ${storyHotScore(item)}/100</small></div></a>`;
+    const sourceNames = [...new Set(reports.map(r => r.sourceName || r.publisher).filter(Boolean))].slice(0,3);
+    const url = safeUrl(item.url);
+    return `<article class="brief-story-card">
+      <div class="brief-rank">${index+1}</div>
+      <div class="brief-copy">
+        <h3>${escapeHtml(editorialTitle(item))}</h3>
+        <div class="brief-meta">
+          <span>${formatAge(clusterLatestAt(item))}</span>
+          <span>${reports.length} מקורות</span>
+          <span class="brief-verify">אימות ${verification.label}</span>
+          <span class="brief-heat">חום ${storyHotScore(item)}/100</span>
+        </div>
+        ${sourceNames.length ? `<p>${escapeHtml(sourceNames.join(" · "))}</p>` : ""}
+      </div>
+      ${url !== "#" ? `<a class="brief-source-btn" href="${url}" target="_blank" rel="noopener noreferrer">למקור ↗</a>` : ""}
+    </article>`;
   }).join("") || '<p class="brief-empty">עדיין אין מספיק עדכונים לבניית תקציר.</p>';
   openSiteModal(el.quickBriefModal, el.quickBriefBtn);
 }

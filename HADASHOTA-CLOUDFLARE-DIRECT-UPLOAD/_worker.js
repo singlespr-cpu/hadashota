@@ -253,35 +253,71 @@ function normalizeOrefCurrentAlerts(payload) {
 
 function mediaQueryVariants(raw, category = "other") {
   const text = cleanText(raw || "");
+  const pieces = text.split("|").map((x) => cleanText(x)).filter(Boolean);
   const map = [
     [/איראן|איראני/g, "Iran"], [/כווית/g, "Kuwait"], [/בחריין/g, "Bahrain"], [/קטאר/g, "Qatar"],
     [/ירדן/g, "Jordan"], [/עיראק/g, "Iraq"], [/סעודיה/g, "Saudi Arabia"], [/תימן/g, "Yemen"],
     [/טהרן/g, "Tehran"], [/לבנון|ביירות/g, "Lebanon Beirut"], [/סוריה|דמשק/g, "Syria Damascus"],
     [/ישראל/g, "Israel"], [/נתניהו/g, "Benjamin Netanyahu"], [/טראמפ/g, "Donald Trump"],
     [/כנסת/g, "Knesset Israel"], [/צה.?ל/g, "Israel Defense Forces"], [/משטרה/g, "Israel Police"],
-    [/טיל|טילים|ירי|שיגור/g, "missile attack"], [/תקיפה|מתקפה|הפצצה/g, "air strike"],
-    [/יירוט|יירוטים/g, "missile interception"], [/מטוס|חיל האוויר/g, "military aircraft"],
-    [/נעדר|נעדרת|חיפושים/g, "missing person search"], [/אותר|נמצא|נמצאה/g, "rescue search"],
+    [/טיל|טילים|ירי|שיגור/g, "missile"], [/תקיפה|מתקפה|הפצצה/g, "air strike"],
+    [/יירוט|יירוטים/g, "interception"], [/מטוס|חיל האוויר/g, "military aircraft"],
+    [/נעדר|נעדרת|חיפושים/g, "missing person"], [/אותר|נמצא|נמצאה/g, "rescue"],
     [/בחירות/g, "election Israel"], [/ממשלה|קואליציה/g, "Israel government"],
     [/נתב.?ג|נמל התעופה/g, "Ben Gurion Airport"], [/בורסה|מניות|שוק ההון/g, "stock market Israel"]
   ];
-  let englishish = text;
-  for (const [re, replacement] of map) englishish = englishish.replace(re, ` ${replacement} `);
-  englishish = englishish.replace(/[א-ת]{2,}/g, " ").replace(/[|•:;–—-]+/g, " ").replace(/\s+/g, " ").trim();
-
-  const parts = text.split("|").map((x) => cleanText(x)).filter(Boolean);
+  const translate = (value) => {
+    let q = cleanText(value);
+    for (const [re, replacement] of map) q = q.replace(re, ` ${replacement} `);
+    return q.replace(/[א-ת]{2,}/g, " ").replace(/[|•:;–—-]+/g, " ").replace(/\s+/g, " ").trim();
+  };
   const fallbackMap = {
-    security: "Israel security military middle east",
-    politics: "Knesset Israel government politics",
-    diplomatic: "Israel diplomacy middle east flags",
-    other: "Israel news city"
+    security: "Israel military security",
+    politics: "Knesset Israel politics",
+    diplomatic: "Israel diplomacy",
+    other: "Israel news"
   };
   const out = [];
-  const push = (q) => { q = cleanText(q).slice(0, 110); if (q && !out.includes(q)) out.push(q); };
-  push(englishish);
-  for (const part of parts.slice(0, 3)) push(part);
-  push(fallbackMap[category] || fallbackMap.other);
-  return out.slice(0, 5);
+  const push = (q, specificity = 1) => {
+    q = cleanText(q).slice(0, 100);
+    if (q && !out.some((row) => row.q === q)) out.push({ q, specificity });
+  };
+  // Exact structured pieces first: person -> entity/action pair -> strongest headline.
+  pieces.slice(0, 4).forEach((part, idx) => {
+    const translated = translate(part);
+    if (translated) push(translated, idx === 0 ? 4 : idx === 1 ? 3 : 2);
+    if (/^[\p{L}\p{N}\s.'’-]{3,70}$/u.test(part)) push(part, idx === 0 ? 4 : 2);
+  });
+  // Then useful combinations of English entities/actions.
+  const translatedAll = translate(text);
+  if (translatedAll) {
+    const words = translatedAll.split(/\s+/).filter(Boolean);
+    if (words.length > 2) push(words.slice(0, 7).join(" "), 2);
+  }
+  // Generic category query is last-resort only and receives a low specificity score.
+  push(fallbackMap[category] || fallbackMap.other, 0);
+  return out.slice(0, 8);
+}
+
+function mediaTokens(value) {
+  return new Set(cleanText(value || "").toLowerCase()
+    .replace(/[^a-z0-9\u0590-\u05ff ]+/g, " ")
+    .split(/\s+/).filter((t) => t.length >= 3 && !["the","and","with","from","news","israel","photo","image","file","חדשות","דיווח","דיווחים"].includes(t)));
+}
+
+function mediaCandidateScore(query, candidateText, specificity = 1) {
+  const q = mediaTokens(query);
+  const c = mediaTokens(candidateText);
+  if (!q.size || !c.size) return specificity === 0 ? 0 : -10;
+  let hits = 0;
+  for (const token of q) if (c.has(token)) hits += 1;
+  const ratio = hits / Math.max(1, q.size);
+  let score = hits * 18 + ratio * 34 + specificity * 7;
+  // Exact named-entity phrase overlap is especially valuable for people/places.
+  const qText = cleanText(query).toLowerCase();
+  const cText = cleanText(candidateText).toLowerCase();
+  if (qText.length >= 5 && cText.includes(qText)) score += 34;
+  return score;
 }
 
 function commonsLicenseAllowed(name) {
@@ -293,23 +329,24 @@ function stripHtmlText(value) {
   return cleanText(String(value || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&"));
 }
 
-async function findCommonsMedia(query) {
+async function findCommonsMedia(query, specificity = 1) {
   const api = new URL("https://commons.wikimedia.org/w/api.php");
   api.searchParams.set("action", "query");
   api.searchParams.set("format", "json");
   api.searchParams.set("origin", "*");
   api.searchParams.set("generator", "search");
   api.searchParams.set("gsrnamespace", "6");
-  api.searchParams.set("gsrlimit", "8");
+  api.searchParams.set("gsrlimit", "14");
   api.searchParams.set("gsrsearch", `${query} filetype:bitmap`);
   api.searchParams.set("prop", "imageinfo");
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/40 (+licensed media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/41 (+licensed relevance media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
+    const candidates = [];
     for (const page of pages) {
       const info = page?.imageinfo?.[0];
       const meta = info?.extmetadata || {};
@@ -317,52 +354,73 @@ async function findCommonsMedia(query) {
       const url = info?.thumburl || info?.url || "";
       if (!url || !commonsLicenseAllowed(license)) continue;
       const creator = stripHtmlText(meta?.Artist?.value || meta?.Credit?.value || "");
-      const attributionRequired = !String(license).toUpperCase().includes("PUBLIC DOMAIN") && String(license).toUpperCase() !== "CC0";
-      return {
-        url,
-        thumbnail: info?.thumburl || url,
-        creator,
-        license,
-        licenseUrl: meta?.LicenseUrl?.value || "",
-        landingUrl: info?.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title || "")}`,
-        attribution: [creator, license, "Wikimedia Commons"].filter(Boolean).join(" · "),
-        shortAttribution: attributionRequired ? [creator || "Wikimedia Commons", license].filter(Boolean).join(" · ") : "Wikimedia Commons · נחלת הכלל",
-        provider: "Wikimedia Commons"
-      };
+      const description = stripHtmlText(meta?.ImageDescription?.value || meta?.ObjectName?.value || meta?.Categories?.value || "");
+      const candidateText = `${page?.title || ""} ${description}`;
+      const score = mediaCandidateScore(query, candidateText, specificity);
+      candidates.push({ score, page, info, meta, license, url, creator });
     }
+    candidates.sort((a,b) => b.score-a.score);
+    const best = candidates[0];
+    // Specific queries must actually match. A wrong photo is worse than a branded fallback.
+    const threshold = specificity >= 3 ? 28 : specificity >= 1 ? 20 : 42;
+    if (!best || best.score < threshold) return null;
+    const attributionRequired = !String(best.license).toUpperCase().includes("PUBLIC DOMAIN") && String(best.license).toUpperCase() !== "CC0";
+    return {
+      url: best.url,
+      thumbnail: best.info?.thumburl || best.url,
+      creator: best.creator,
+      license: best.license,
+      licenseUrl: best.meta?.LicenseUrl?.value || "",
+      landingUrl: best.info?.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(best.page?.title || "")}`,
+      attribution: [best.creator, best.license, "Wikimedia Commons"].filter(Boolean).join(" · "),
+      shortAttribution: attributionRequired ? [best.creator || "Wikimedia Commons", best.license].filter(Boolean).join(" · ") : "Wikimedia Commons · נחלת הכלל",
+      provider: "Wikimedia Commons",
+      relevanceScore: Math.round(best.score)
+    };
   } catch {}
   return null;
 }
 
-async function findOpenverseMedia(query) {
+async function findOpenverseMedia(query, specificity = 1) {
   const searchUrl = new URL("https://api.openverse.org/v1/images/");
   searchUrl.searchParams.set("q", query);
-  searchUrl.searchParams.set("page_size", "16");
+  searchUrl.searchParams.set("page_size", "24");
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/40 (+news aggregator; licensed media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/41 (+news aggregator; relevance licensed media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
     const results = Array.isArray(data?.results) ? data.results : [];
+    const candidates = [];
     for (const img of results) {
       const license = String(img?.license || "").toLowerCase();
       const mediaUrl = img?.url || img?.thumbnail || "";
       if (!allowed.has(license) || !/^https?:\/\//.test(mediaUrl)) continue;
-      const creator = cleanText(img?.creator || "");
-      return {
-        url: mediaUrl,
-        thumbnail: img?.thumbnail || mediaUrl,
-        creator,
-        license: img?.license || "",
-        licenseUrl: img?.license_url || "",
-        landingUrl: img?.foreign_landing_url || img?.detail_url || "",
-        attribution: img?.attribution || [creator, String(img?.license || "").toUpperCase(), "Openverse"].filter(Boolean).join(" · "),
-        shortAttribution: [creator || "Openverse", String(img?.license || "").toUpperCase()].filter(Boolean).join(" · "),
-        provider: img?.provider || "Openverse"
-      };
+      const tagText = Array.isArray(img?.tags) ? img.tags.map((t) => t?.name || t).join(" ") : "";
+      const candidateText = `${img?.title || ""} ${img?.creator || ""} ${tagText}`;
+      const score = mediaCandidateScore(query, candidateText, specificity);
+      candidates.push({ img, license, mediaUrl, score });
     }
+    candidates.sort((a,b) => b.score-a.score);
+    const best = candidates[0];
+    const threshold = specificity >= 3 ? 30 : specificity >= 1 ? 22 : 46;
+    if (!best || best.score < threshold) return null;
+    const img = best.img;
+    const creator = cleanText(img?.creator || "");
+    return {
+      url: best.mediaUrl,
+      thumbnail: img?.thumbnail || best.mediaUrl,
+      creator,
+      license: img?.license || "",
+      licenseUrl: img?.license_url || "",
+      landingUrl: img?.foreign_landing_url || img?.detail_url || "",
+      attribution: img?.attribution || [creator, String(img?.license || "").toUpperCase(), "Openverse"].filter(Boolean).join(" · "),
+      shortAttribution: [creator || "Openverse", String(img?.license || "").toUpperCase()].filter(Boolean).join(" · "),
+      provider: img?.provider || "Openverse",
+      relevanceScore: Math.round(best.score)
+    };
   } catch {}
   return null;
 }
@@ -372,22 +430,29 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v40?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v41?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
   let chosen = null;
   let matchedQuery = "";
   // Commons tends to be strongest for named people, places and public institutions.
-  for (const query of queries.slice(0, 3)) {
-    chosen = await findCommonsMedia(query);
-    if (chosen) { matchedQuery = query; break; }
+  for (const row of queries.filter((x) => x.specificity > 0).slice(0, 5)) {
+    chosen = await findCommonsMedia(row.q, row.specificity);
+    if (chosen) { matchedQuery = row.q; break; }
   }
-  // Openverse expands coverage for generic event photography.
+  // Openverse expands coverage, but still has to pass a relevance threshold.
   if (!chosen) {
-    for (const query of queries) {
-      chosen = await findOpenverseMedia(query);
-      if (chosen) { matchedQuery = query; break; }
+    for (const row of queries) {
+      chosen = await findOpenverseMedia(row.q, row.specificity);
+      if (chosen) { matchedQuery = row.q; break; }
+    }
+  }
+  // Last-resort Commons category imagery is accepted only with a very strong match.
+  if (!chosen) {
+    for (const row of queries.filter((x) => x.specificity === 0)) {
+      chosen = await findCommonsMedia(row.q, row.specificity);
+      if (chosen) { matchedQuery = row.q; break; }
     }
   }
 
