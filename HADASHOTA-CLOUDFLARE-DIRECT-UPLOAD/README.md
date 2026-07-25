@@ -119,12 +119,11 @@ V39: Smart PWA install/home-screen recommendation with Chromium install prompt, 
 - Mobile remains natural auto-height with the existing responsive layout.
 - Reviewed global card sizing, touch target sizing and radius consistency.
 
-
-## V52 — canonical cross-device newsroom snapshot
-- Automatic cold-open, foreground and retry loads join the same Worker cache snapshot; manual refresh remains forced.
-- Shared snapshot TTL is 15 seconds.
-- Main headline ranking uses server generatedAt instead of the device clock.
-- Client-local cached shards never choose a new main headline.
-- Device-local saved lead history no longer participates in current lead selection.
-- Lead policy: 3+ distinct publishers in the last hour; only if none exists, 2+; never a single source.
-- iPhone Home Screen full-resume reload remains active and now rejoins the same canonical snapshot as Safari and desktop.
+## V53 — canonical lead hotfix
+- Fixed the hero being stuck on “מזהה את הסיפור המרכזי”.
+- Automatic desktop/Safari/Home-Screen loads now join the same shared Worker snapshot.
+- Only the explicit manual Refresh button bypasses the shared snapshot.
+- Lead ranking uses the server snapshot timestamp for deterministic cross-device selection.
+- 3+ distinct publishers is the primary main-story rule; if none exists in the last hour, 2+ is allowed.
+- A one-source item can never masquerade as a corroborated main story; it is shown only as “עדכון מתפתח עכשיו” so the hero is never blank.
+- Push notifications remain 3+ sources only.
