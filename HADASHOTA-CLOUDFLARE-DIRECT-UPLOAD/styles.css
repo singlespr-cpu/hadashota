@@ -3125,3 +3125,62 @@ html[data-theme="dark"] .news-preview { color: #a1acba !important; }
   .lead-story-media img { min-height: 210px !important; }
   .lead-story-cta { width: 100% !important; justify-content: center !important; }
 }
+
+
+/* V45 — newsroom polish for main story symmetry */
+.lead-story {
+  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.96)) !important;
+}
+html[data-theme="dark"] .lead-story {
+  background: linear-gradient(180deg, rgba(20,25,34,.94), rgba(17,23,32,.97)) !important;
+}
+.lead-story.has-media .lead-story-body {
+  grid-template-columns: minmax(270px, 33.5%) minmax(0, 66.5%) !important;
+  grid-template-areas: "media copy" "media cta" !important;
+  gap: 24px !important;
+}
+.lead-story-media {
+  min-height: 245px !important;
+  max-height: 450px !important;
+  aspect-ratio: 4 / 4.6 !important;
+  align-self: start !important;
+}
+.lead-story-media img {
+  min-height: 245px !important;
+  aspect-ratio: 4 / 4.6 !important;
+}
+.lead-story h2, .lead-story h2 a {
+  font-size: clamp(28px, 2.55vw, 42px) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.02em !important;
+  max-width: 13.5ch !important;
+}
+.lead-story-copy {
+  justify-content: center !important;
+}
+.lead-story-copy > p {
+  font-size: 16px !important;
+  line-height: 1.55 !important;
+  margin: 10px 0 14px !important;
+  max-width: 68ch !important;
+}
+.lead-story .source-name,
+.lead-story .cluster-badge,
+.lead-story .hot-badge,
+.lead-story .verification-badge { font-size: 12px !important; }
+.lead-story-sources { gap: 8px !important; }
+.lead-story-cta .button-primary { padding: 12px 18px !important; font-size: 15px !important; }
+.lead-story-media::after { font-size: 11px !important; padding: 6px 10px !important; }
+@media (max-width: 1180px) {
+  .lead-story.has-media .lead-story-body { grid-template-columns: 300px minmax(0,1fr) !important; }
+  .lead-story h2, .lead-story h2 a { font-size: 34px !important; max-width: none !important; }
+}
+@media (max-width: 860px) {
+  .lead-story.has-media .lead-story-body {
+    grid-template-columns: 1fr !important;
+    grid-template-areas: "media" "copy" "cta" !important;
+  }
+  .lead-story-media { max-height: 290px !important; aspect-ratio: 16 / 10 !important; }
+  .lead-story-media img { aspect-ratio: 16 / 10 !important; }
+  .lead-story h2, .lead-story h2 a { font-size: 32px !important; max-width: none !important; }
+}

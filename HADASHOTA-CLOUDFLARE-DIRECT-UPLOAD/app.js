@@ -1148,6 +1148,52 @@ function consensusMedoidTitle(titles) {
   return scored[0]?.title || rows[0];
 }
 
+function stripTitleLeadIns(title) {
+  return cleanNewsroomCandidate(title || "")
+    .replace(/^דיווחים?\s*[:\-–—]?\s*/i, "")
+    .replace(/^על פי דיווחים?\s*[:\-–—]?\s*/i, "")
+    .replace(/^מבזק\s*[:\-–—]?\s*/i, "")
+    .trim();
+}
+
+function conciseLeadHeadline(base, category = "other", titles = [], reportCount = 1) {
+  let t = stripTitleLeadIns(base);
+  if (!t) return "חדשות עכשיו";
+  // Turn long quote-like source headlines into a concise newsroom lead.
+  t = t.replace(/^([^:]{8,42}):\s*(.+)$/, (_, a, b) => {
+    if (b.length > 70 || /אמר|לדבריו|לדבריהם|הודיע|הודיעה|ציין|ציינה/.test(b)) return `${a}: ${b}`;
+    return `${a}: ${b}`;
+  });
+  const firstChunk = t.split(/(?<=[.!?])\s+/)[0];
+  if (firstChunk.length >= 26 && firstChunk.length <= 96) t = firstChunk;
+  if (t.includes(':') && t.length > 92) {
+    const [pre, post] = t.split(/:\s*/, 2);
+    if (post && post.length > 40) {
+      // keep the dramatic preface but condense the explanatory tail
+      t = `${pre}: ${post.slice(0, 64).replace(/\s+\S*$/, '')}…`;
+    }
+  }
+  t = t.replace(/\s*—\s*/g, ' – ').replace(/\s+/g, ' ').trim();
+  const lower = t.toLowerCase();
+  if (category === 'security' || category === 'diplomatic') {
+    if (/סעודיה|saudi/.test(lower) && /הודע|אזהר|טלפונ|סלולרי|נייד|פלטפורמה/.test(lower)) {
+      return reportCount >= 2
+        ? 'הכוננות עולה בסעודיה: הודעות אזהרה נשלחו לטלפונים של אזרחים'
+        : 'בסעודיה מזהירים את האזרחים: הודעות אזהרה נשלחו לטלפונים';
+    }
+    if (/איראן|iran/.test(lower) && /(כווית|kuwait|בחריין|bahrain|קטאר|qatar|סעודיה|saudi)/.test(lower) && /(טיל|טילים|ירי|יירוט|מתקפ|תקיפ|כטב|missile|strike|attack)/.test(lower)) {
+      const place = /כווית|kuwait/.test(lower) ? 'כווית' : /בחריין|bahrain/.test(lower) ? 'בחריין' : /קטאר|qatar/.test(lower) ? 'קטאר' : 'המדינה';
+      return `דיווחים על הסלמה: ירי איראני לעבר ${place}`;
+    }
+  }
+  if (t.length > 94) {
+    const shorter = t.replace(/,\s*[^,]+$/, '').replace(/\s+\S+\s+\S+\s+\S+$/, '').trim();
+    if (shorter.length >= 34) t = shorter;
+  }
+  if (t.length > 84) t = t.slice(0, 81).replace(/\s+\S*$/, '').trim() + '…';
+  return t;
+}
+
 function editorialHeadlineForItem(item) {
   const reports = normalizeClusterReports(item);
   const titles = [...new Set(reports.map((r) => cleanDisplayTitle(r.title || "")).filter(Boolean))];
@@ -1161,21 +1207,13 @@ function editorialHeadlineForItem(item) {
     const name = extractLikelyPersonName(titles) || repeatedPhraseCandidate(titles);
     return name ? `סוף טוב לחיפושים: ${name} אותר בשלום` : "סוף טוב לחיפושים: הנעדר אותר בשלום";
   }
-
   let base = consensusMedoidTitle(titles) || strongestFactFromTitles(titles) || cleanDisplayTitle(item?.title || "חדשות עכשיו");
-  base = cleanNewsroomCandidate(base)
-    .replace(/^דיווחים?\s*[:\-–—]?\s*/i, "")
-    .replace(/^על פי דיווחים?\s*[:\-–—]?\s*/i, "")
-    .replace(/^מבזק\s*[:\-–—]?\s*/i, "")
-    .trim();
-
+  base = stripTitleLeadIns(base);
   if (!base) return cleanDisplayTitle(item?.title || "חדשות עכשיו");
-  // Keep the authentic source-led wording. Only add a gentle newsroom touch when
-  // the story is strongly corroborated and the wording is still too bare.
-  if (reportCount >= 3 && !/^[^:]{3,34}:/.test(base) && base.length < 72) {
-    return polishConsensusHeadline(base, item?.category || "other", titles);
-  }
-  return base;
+  const polished = reportCount >= 3 && !/^[^:]{3,34}:/.test(base) && base.length < 72
+    ? polishConsensusHeadline(base, item?.category || "other", titles)
+    : base;
+  return conciseLeadHeadline(polished, item?.category || 'other', titles, reportCount);
 }
 
 function polishConsensusHeadline(fact, category, titles = []) {
@@ -1250,8 +1288,9 @@ function editorialDeckForItem(item, sourceCount = 1) {
 
 function mediaQueryForItem(item, editorial = "") {
   const reports = normalizeClusterReports(item);
-  const rawTitles = [item?.title, ...reports.map((r) => r.title)].filter(Boolean);
+  const rawTitles = [item?.title, editorial, ...reports.map((r) => r.title)].filter(Boolean);
   const cleanTitles = rawTitles.map(cleanDisplayTitle);
+  const corpus = cleanTitles.join(' | ');
   const person = extractLikelyPersonName(cleanTitles);
   const entities = new Set();
   const actions = new Set();
@@ -1259,14 +1298,17 @@ function mediaQueryForItem(item, editorial = "") {
     for (const e of clientEventEntities(title)) entities.add(e);
     for (const a of clientEventActions(title)) actions.add(a);
   }
-  // The resolver receives structured alternatives rather than one long sentence.
-  // This lets it search exact people/places first and prevents generic category photos
-  // from winning over the actual subject of the story.
-  const entityPhrase = [...entities].slice(0, 3).join(" ");
-  const actionPhrase = [...actions].slice(0, 2).join(" ");
+  const lower = corpus.toLowerCase();
+  const extras = [];
+  if (/טלפונ|סלולרי|נייד|sms|הודע|התראה|אזהר/.test(lower)) extras.push('mobile phone emergency alert');
+  if (/סעודיה|saudi/.test(lower)) extras.push('Saudi Arabia');
+  if (/איראן|iran/.test(lower) && /(כווית|kuwait|בחריין|bahrain|קטאר|qatar)/.test(lower)) extras.push('middle east missile alert');
+  if (/ילד|נעדר|נעדרת|אותר|נמצא/.test(lower)) extras.push('person search rescue');
+  const entityPhrase = [...entities].slice(0, 3).join(' ');
+  const actionPhrase = [...actions].slice(0, 2).join(' ');
   const strongest = strongestFactFromTitles(cleanTitles);
-  return [person, [entityPhrase, actionPhrase].filter(Boolean).join(" "), strongest, editorial]
-    .filter(Boolean).join(" | ").slice(0, 320);
+  return [person, [entityPhrase, actionPhrase].filter(Boolean).join(' '), ...extras, strongest, editorial]
+    .filter(Boolean).join(' | ').slice(0, 360);
 }
 
 const SAFE_MEDIA_CACHE = new Map();

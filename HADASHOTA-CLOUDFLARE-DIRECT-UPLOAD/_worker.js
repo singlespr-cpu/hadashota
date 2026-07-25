@@ -264,7 +264,9 @@ function mediaQueryVariants(raw, category = "other") {
     [/יירוט|יירוטים/g, "interception"], [/מטוס|חיל האוויר/g, "military aircraft"],
     [/נעדר|נעדרת|חיפושים/g, "missing person"], [/אותר|נמצא|נמצאה/g, "rescue"],
     [/בחירות/g, "election Israel"], [/ממשלה|קואליציה/g, "Israel government"],
-    [/נתב.?ג|נמל התעופה/g, "Ben Gurion Airport"], [/בורסה|מניות|שוק ההון/g, "stock market Israel"]
+    [/נתב.?ג|נמל התעופה/g, "Ben Gurion Airport"], [/בורסה|מניות|שוק ההון/g, "stock market Israel"],
+    [/טלפון|טלפונים|סלולרי|נייד/g, "smartphone mobile phone"], [/הודעת אזהרה|הודעת חירום|התראת חירום|אזעקת חירום/g, "emergency alert notification"],
+    [/התרעה|אזהרה/g, "alert warning"], [/אזרחים/g, "civilians people"]
   ];
   const translate = (value) => {
     let q = cleanText(value);
@@ -354,7 +356,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/43 (+licensed relevance media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/45 (+relevance tuned media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -374,7 +376,7 @@ async function findCommonsMedia(query, specificity = 1) {
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
     // Specific queries must actually match. A wrong photo is worse than a branded fallback.
-    const threshold = specificity >= 3 ? 36 : specificity >= 2 ? 30 : specificity >= 1 ? 26 : 52;
+    const threshold = specificity >= 3 ? 34 : specificity >= 2 ? 28 : specificity >= 1 ? 24 : 64;
     if (!best || best.score < threshold) return null;
     const attributionRequired = !String(best.license).toUpperCase().includes("PUBLIC DOMAIN") && String(best.license).toUpperCase() !== "CC0";
     return {
@@ -401,7 +403,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/43 (+news aggregator; relevance licensed media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/45 (+news aggregator; relevance tuned media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -418,7 +420,7 @@ async function findOpenverseMedia(query, specificity = 1) {
     }
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
-    const threshold = specificity >= 3 ? 38 : specificity >= 2 ? 32 : specificity >= 1 ? 28 : 54;
+    const threshold = specificity >= 3 ? 36 : specificity >= 2 ? 30 : specificity >= 1 ? 26 : 66;
     if (!best || best.score < threshold) return null;
     const img = best.img;
     const creator = cleanText(img?.creator || "");
@@ -444,7 +446,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v43?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v45?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -847,7 +849,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "44.0.0",
+      "X-Hadashota-Version": "45.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -875,7 +877,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "44.0.0"
+        "X-Hadashota-Version": "45.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
