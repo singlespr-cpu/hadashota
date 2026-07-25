@@ -1154,12 +1154,6 @@ function editorialHeadlineForItem(item) {
   if (!titles.length) return cleanDisplayTitle(item?.title || "חדשות עכשיו");
   const corpus = titles.join(" | ");
   const lower = corpus.toLowerCase();
-  const entities = new Set();
-  const actions = new Set();
-  for (const title of titles) {
-    for (const e of clientEventEntities(title)) entities.add(e);
-    for (const a of clientEventActions(title)) actions.add(a);
-  }
   const reportCount = Math.max(1, Number(item?.reportCount) || reports.length || 1);
   const found = /(נמצא|נמצאה|אותר|אותרה|אותרו|נמצאו)/.test(lower);
   const missing = /(נעדר|נעדרת|החיפושים|אבדו עקבות|נעלם|נעלמה|חיפושים)/.test(lower);
@@ -1168,16 +1162,19 @@ function editorialHeadlineForItem(item) {
     return name ? `סוף טוב לחיפושים: ${name} אותר בשלום` : "סוף טוב לחיפושים: הנעדר אותר בשלום";
   }
 
-  let base = consensusMedoidTitle(titles) || strongestFactFromTitles(titles);
+  let base = consensusMedoidTitle(titles) || strongestFactFromTitles(titles) || cleanDisplayTitle(item?.title || "חדשות עכשיו");
   base = cleanNewsroomCandidate(base)
     .replace(/^דיווחים?\s*[:\-–—]?\s*/i, "")
     .replace(/^על פי דיווחים?\s*[:\-–—]?\s*/i, "")
+    .replace(/^מבזק\s*[:\-–—]?\s*/i, "")
     .trim();
-  if (!base) return item?.category === "security" ? "אירוע מתפתח" : "חדשות עכשיו";
 
-  // Do not manufacture drama that the reports themselves do not support.
-  // Add a front-page opener only when the underlying wording clearly warrants it.
-  if (reportCount >= 3) return polishConsensusHeadline(base, item?.category || "other", titles);
+  if (!base) return cleanDisplayTitle(item?.title || "חדשות עכשיו");
+  // Keep the authentic source-led wording. Only add a gentle newsroom touch when
+  // the story is strongly corroborated and the wording is still too bare.
+  if (reportCount >= 3 && !/^[^:]{3,34}:/.test(base) && base.length < 72) {
+    return polishConsensusHeadline(base, item?.category || "other", titles);
+  }
   return base;
 }
 
@@ -1289,11 +1286,25 @@ async function fetchSafeMedia(query, category = "other") {
   return promise;
 }
 
-async function hydrateLeadSafeMedia(winner, leadTitle) {
+function preferredSourceImage(item) {
+  const reports = normalizeClusterReports(item || {});
+  const candidates = [item, ...reports].filter(Boolean);
+  for (const report of candidates) {
+    const raw = report?.imageUrl;
+    if (!raw || !/^https?:\/\//i.test(String(raw))) continue;
+    return {
+      url: String(raw),
+      credit: `תמונה: ${report?.sourceName || report?.publisher || item?.sourceName || "המקור"}`,
+      sourceName: report?.sourceName || report?.publisher || item?.sourceName || "המקור"
+    };
+  }
+  return null;
+}
+
+async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
   if (!el.leadStoryImage || !el.leadStoryMedia) return;
   const query = mediaQueryForItem(winner?.item, leadTitle);
   const media = await fetchSafeMedia(query, winner?.item?.category || "other");
-  // Abort if the lead changed while the media lookup was running.
   if (winner && leadFingerprint(winner) !== state.displayedLeadFingerprint) return;
   if (!media?.url) {
     el.leadStoryImage.removeAttribute("src");
@@ -1310,6 +1321,28 @@ async function hydrateLeadSafeMedia(winner, leadTitle) {
   delete el.leadStoryMedia.dataset.fallbackLabel;
   el.leadStoryMedia.dataset.mediaCredit = `${media.illustrative ? "צילום אילוסטרציה · " : ""}${media.shortAttribution || media.attribution || "מדיה ברישיון פתוח"}`;
   el.leadStoryMedia.title = `${media.illustrative ? "צילום אילוסטרציה — " : ""}${media.attribution ? `תמונה ברישיון פתוח · ${media.attribution}` : "תמונה ברישיון פתוח"}`;
+}
+
+async function hydrateLeadSafeMedia(winner, leadTitle) {
+  if (!el.leadStoryImage || !el.leadStoryMedia) return;
+  const direct = preferredSourceImage(winner?.item);
+  if (direct?.url) {
+    const currentFingerprint = leadFingerprint(winner);
+    el.leadStoryImage.onerror = async () => {
+      if (currentFingerprint !== state.displayedLeadFingerprint) return;
+      el.leadStoryImage.removeAttribute("src");
+      await hydrateLeadOpenMediaFallback(winner, leadTitle);
+    };
+    el.leadStoryImage.src = direct.url;
+    el.leadStoryImage.alt = leadTitle;
+    el.leadStoryImage.referrerPolicy = "no-referrer";
+    el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
+    delete el.leadStoryMedia.dataset.fallbackLabel;
+    el.leadStoryMedia.dataset.mediaCredit = direct.credit;
+    el.leadStoryMedia.title = direct.credit;
+    return;
+  }
+  await hydrateLeadOpenMediaFallback(winner, leadTitle);
 }
 
 function mediaFallbackLabelFromSlot(slot) {
@@ -1333,9 +1366,37 @@ async function hydrateSafeMediaSlots() {
   const slots = [...document.querySelectorAll('.safe-media-slot[data-media-query]:not([data-hydrated="1"])')].slice(0, 30);
   await Promise.all(slots.map(async (slot) => {
     slot.dataset.hydrated = "1";
+    const a = slot.closest('a.news-image');
+    const directUrl = a?.dataset?.sourceImage || "";
+    const directCredit = a?.dataset?.sourceCredit || "";
+    const showDirect = (url) => {
+      const img = document.createElement('img');
+      img.src = url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+      img.addEventListener('error', async () => {
+        if (!slot.isConnected) {
+          const replacement = document.createElement("span");
+          replacement.className = "safe-media-slot";
+          replacement.dataset.mediaQuery = a?.dataset?.mediaQuery || slot.dataset.mediaQuery || "";
+          replacement.dataset.category = a?.dataset?.category || slot.dataset.category || "other";
+          replacement.dataset.hydrated = "1";
+          img.replaceWith(replacement);
+        }
+      }, { once:true });
+      slot.replaceWith(img);
+      if (a && directCredit) {
+        const credit = document.createElement('span');
+        credit.className = 'media-credit';
+        credit.textContent = directCredit;
+        a.appendChild(credit);
+      }
+      return true;
+    };
+    if (directUrl && /^https?:\/\//i.test(directUrl)) {
+      showDirect(directUrl);
+      return;
+    }
     const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
     if (!slot.isConnected) return;
-    const a = slot.closest('a.news-image');
     if (!media?.url) {
       slot.classList.add("contextual-media-fallback");
       slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
@@ -1477,6 +1538,13 @@ function mainstreamFirst(items) {
   return [...selected, ...items.filter((item) => !chosen.has(item.id || item.url))];
 }
 
+function newsPreviewText(item, reportCount) {
+  const basePreview = cleanDisplayText(item?.preview || "").replace(/^(?:הכותרת נוסחה במערכת חדשותא|לפרטים המלאים עברו למקור)\.?/g, "").trim();
+  if (basePreview && basePreview.length >= 32) return basePreview.slice(0, 190);
+  if (reportCount > 1) return `${reportCount} מקורות שונים מדווחים על אותו אירוע. לחצו למעבר לידיעה המלאה במקור.`;
+  return "לחצו למעבר לידיעה המלאה במקור.";
+}
+
 function newsCardHtml(item) {
   const related = state.cluster
     ? (item.related || []).filter((r) => r.url && r.url !== item.url)
@@ -1484,8 +1552,7 @@ function newsCardHtml(item) {
   const reportCount = state.cluster ? Math.max(Number(item.reportCount) || 1, (item.related || []).length || 1) : 1;
   const category = item.category || "other";
   const safeTitle = editorialTitle(item);
-  const reportCountForCopy = state.cluster ? Math.max(Number(item.reportCount) || 1, (item.related || []).length || 1) : 1;
-  const preview = `<p class="news-preview">${reportCountForCopy > 1 ? `${reportCountForCopy} מקורות מדווחים על אותו אירוע. ` : ""}הכותרת נוסחה במערכת חדשותא; לפרטים המלאים עברו למקור.</p>`;
+  const preview = `<p class="news-preview">${escapeHtml(newsPreviewText(item, reportCount))}</p>`;
   const telegramBadge = item.sourceKind === "telegram" ? `<span class="source-type-badge">Telegram</span>` : "";
   const newBadge = state.lastVisitAt > 0 && Date.parse(item.latestReportAt || item.publishedAt) > state.lastVisitAt ? `<span class="new-badge">חדש</span>` : "";
   const officialBadge = (item.official || (item.related || []).some((report) => report.official)) ? `<span class="official-badge">רשמי</span>` : "";
@@ -1498,8 +1565,9 @@ function newsCardHtml(item) {
   const isSite = item.sourceKind === "site";
   const storyUrl = safeUrl(item.url);
   const mediaQuery = escapeHtml(mediaQueryForItem(item, safeTitle));
+  const preferredImage = preferredSourceImage(item);
   const imageHtml = state.showImages
-    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה"><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" aria-hidden="true"></span></a>`
+    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit)}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" aria-hidden="true"></span></a>`
     : "";
   const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeTitle)}</a>`;
   const relatedHtml = related.length ? `

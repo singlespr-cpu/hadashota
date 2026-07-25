@@ -847,7 +847,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "43.0.0",
+      "X-Hadashota-Version": "44.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -875,7 +875,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "43.0.0"
+        "X-Hadashota-Version": "44.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1164,7 +1164,7 @@ function makeItem({ source, title, url, publishedAt, preview, imageUrl = null })
     language: source.language || "he",
     title: normalizeSpace(title),
     preview: normalizeSpace(preview || ""),
-    imageUrl: source.imageReuse === "allowed" ? sanitizeImageUrl(imageUrl) : null,
+    imageUrl: (source.imageReuse === "allowed" || source.official || source.verified) ? sanitizeImageUrl(imageUrl) : null,
     url,
     publishedAt,
     defaultCategory: source.defaultCategory || null

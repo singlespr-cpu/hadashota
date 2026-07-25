@@ -3086,3 +3086,42 @@ html[data-theme="dark"] .quick-brief-card{background:#111720!important;color:#f2
   .brief-story-card{grid-template-columns:30px minmax(0,1fr);gap:9px;padding:11px}.brief-rank{width:30px;height:30px;border-radius:9px}.brief-copy h3{font-size:12.5px}
   .brief-source-btn{grid-column:2;justify-self:start;min-width:0;padding:6px 9px}.quick-brief-footer{position:sticky;bottom:-14px;background:inherit;padding-bottom:2px}.quick-brief-close-btn{width:100%;padding:11px}
 }
+
+
+/* V44 — more authentic imagery + balanced main-story layout */
+.lead-story { padding: 24px 24px 22px !important; border-radius: 24px !important; }
+.lead-story-topline { margin-bottom: 14px !important; }
+.lead-story.has-media .lead-story-body {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.16fr) minmax(300px, 0.84fr) !important;
+  grid-template-areas:
+    "copy media"
+    "cta  media" !important;
+  align-items: stretch !important;
+  gap: 22px !important;
+}
+.lead-story-copy { grid-area: copy !important; display: flex !important; flex-direction: column !important; justify-content: flex-start !important; min-width: 0 !important; }
+.lead-story-media { grid-area: media !important; min-height: 265px !important; height: 100% !important; max-height: none !important; border-radius: 20px !important; overflow: hidden !important; }
+.lead-story-media img { width: 100% !important; height: 100% !important; min-height: 265px !important; object-fit: cover !important; }
+.lead-story h2, .lead-story h2 a { font-size: clamp(31px, 3vw, 48px) !important; line-height: 1.13 !important; }
+.lead-story-copy > p { margin: 12px 0 16px !important; max-width: none !important; }
+.lead-story-sources { margin-top: 14px !important; }
+.lead-story-cta { grid-area: cta !important; justify-self: start !important; align-self: end !important; margin-top: 4px !important; }
+.news-preview { color: #586272 !important; }
+html[data-theme="dark"] .news-preview { color: #a1acba !important; }
+@media (max-width: 1100px) {
+  .lead-story.has-media .lead-story-body {
+    grid-template-columns: minmax(0, 1fr) 290px !important;
+    gap: 18px !important;
+  }
+  .lead-story h2, .lead-story h2 a { font-size: 29px !important; }
+}
+@media (max-width: 860px) {
+  .lead-story.has-media .lead-story-body {
+    grid-template-columns: 1fr !important;
+    grid-template-areas: "media" "copy" "cta" !important;
+  }
+  .lead-story-media { min-height: 210px !important; }
+  .lead-story-media img { min-height: 210px !important; }
+  .lead-story-cta { width: 100% !important; justify-content: center !important; }
+}
