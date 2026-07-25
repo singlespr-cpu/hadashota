@@ -354,7 +354,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/42 (+licensed relevance media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/43 (+licensed relevance media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -401,7 +401,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/42 (+news aggregator; relevance licensed media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/43 (+news aggregator; relevance licensed media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -444,7 +444,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v42?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v43?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -742,7 +742,7 @@ async function handleNews(request, ctx) {
     // Keep retries deliberately small. This protects the Free-plan external-subrequest budget
     // even when an origin redirects or several sources fail at the same time.
     const retryBudget = { remaining: 6 };
-    const settled = await fetchSourcesWithLimit(shardSources, 12, retryBudget);
+    const settled = await fetchSourcesWithLimit(shardSources, 16, retryBudget);
     const rawItems = settled.flatMap((result) => result.items);
     const now = Date.now();
     const cutoff = now - 30 * 60 * 60 * 1000;
@@ -847,7 +847,7 @@ async function handleNews(request, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25, stale-while-revalidate=120",
-      "X-Hadashota-Version": "38.0.0",
+      "X-Hadashota-Version": "43.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -875,7 +875,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "38.0.0"
+        "X-Hadashota-Version": "43.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -914,7 +914,7 @@ async function fetchSource(source, retryBudget = { remaining: 0 }) {
 
   while (attempt < 2) {
     try {
-      const timeoutMs = source.adapter === "telegram" ? 5400 : source.adapter === "jsonld" || source.adapter === "htmlnews" ? 6200 : 5600;
+      const timeoutMs = source.adapter === "telegram" ? 3200 : source.adapter === "jsonld" || source.adapter === "htmlnews" ? 4200 : 3600;
       const response = await fetchWithTimeout(source.url, timeoutMs);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 

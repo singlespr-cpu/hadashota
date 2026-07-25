@@ -183,7 +183,7 @@ const el = {
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
 const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v6.";
-const CLIENT_NEWS_TIMEOUT_MS = 22_000;
+const CLIENT_NEWS_TIMEOUT_MS = 18_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
 const CATEGORY_LABELS = {
@@ -1361,15 +1361,24 @@ async function hydrateSafeMediaSlots() {
 }
 
 function render() {
-  annotateStoryIntelligence();
-  renderLeadStory();
-  renderFlashDeck();
-  renderFeed();
-  renderSources();
-  renderBreaking();
-  renderTrending();
-  renderSmartDashboard();
-  queueMicrotask(hydrateSafeMediaSlots);
+  // A secondary intelligence/visual module must never be able to blank the whole newsroom.
+  // Each block renders independently so the core feed survives even if one enhancement fails.
+  try { annotateStoryIntelligence(); } catch (error) { console.warn("Story intelligence render failed", error); }
+  const renderSteps = [
+    ["lead", renderLeadStory],
+    ["latest", renderFlashDeck],
+    ["feed", renderFeed],
+    ["sources", renderSources],
+    ["breaking", renderBreaking],
+    ["trending", renderTrending],
+    ["smart-dashboard", renderSmartDashboard]
+  ];
+  for (const [name, step] of renderSteps) {
+    try { step(); } catch (error) { console.error(`Render block failed: ${name}`, error); }
+  }
+  queueMicrotask(() => {
+    try { hydrateSafeMediaSlots(); } catch (error) { console.warn("Media hydration failed", error); }
+  });
 }
 
 function renderStats(data = null) {
