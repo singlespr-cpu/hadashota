@@ -1,0 +1,18 @@
+HADASHOTA V73
+
+Upload the CONTENTS of this package to the ROOT of the GitHub repository.
+
+The repository should contain:
+wrangler.jsonc
+HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/
+  _worker.js
+  app.js
+  index.html
+  ...
+
+Cloudflare Build configuration:
+Build command: None
+Deploy command: npx wrangler deploy
+Root directory: /
+
+Do not place wrangler.jsonc inside HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD.
