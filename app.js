@@ -213,8 +213,9 @@ const el = {
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
-const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v76.";
+const NEWS_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
+const NEWS_SHARD_STAGGER_MS = 100;
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v77.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -239,7 +240,7 @@ window.addEventListener("appinstalled", () => {
   state.deferredInstallPrompt = null;
   closeSiteModal(el.installOfferModal, false);
   syncInstallControl();
-  showToast("חדשותא נוספה למכשיר בהצלחה");
+  showToast("כותרת פלוס נוספה למכשיר בהצלחה");
 });
 
 init();
@@ -258,7 +259,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V76 cold-open strategy:
+  // V79 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -303,14 +304,14 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("76.")) {
-      marker.textContent = apiVersion ? `גרסה V76 · API ${apiVersion}` : "גרסה V76 · API לא מזוהה";
+    if (!apiVersion.startsWith("77.")) {
+      marker.textContent = apiVersion ? `גרסה V79 · API ${apiVersion}` : "גרסה V79 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V76 · API V76";
+    marker.textContent = "גרסה V79 · API V79";
   } catch (error) {
-    marker.textContent = "גרסה V76 · API לא מחובר";
-    console.warn("Hadashota API health check failed", error);
+    marker.textContent = "גרסה V79 · API לא מחובר";
+    console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
   }
@@ -673,7 +674,7 @@ function installInstructionsMarkup() {
   if (isIOSDevice()) {
     return `<div class="install-step"><b>1</b><span>לחצו בדפדפן על <strong>שיתוף</strong> <em>↥</em></span></div>
       <div class="install-step"><b>2</b><span>בחרו <strong>הוסף למסך הבית</strong></span></div>
-      <div class="install-step"><b>3</b><span>אשרו <strong>הוספה</strong> — וחדשותא תופיע כאייקון במסך הבית</span></div>`;
+      <div class="install-step"><b>3</b><span>אשרו <strong>הוספה</strong> — וכותרת פלוס תופיע כאייקון במסך הבית</span></div>`;
   }
   if (state.deferredInstallPrompt) {
     return `<div class="install-step install-step-one"><b>✓</b><span>לחיצה על הכפתור למטה תפתח את חלון ההתקנה הרשמי של הדפדפן. נשאר רק לאשר.</span></div>`;
@@ -684,14 +685,14 @@ function installInstructionsMarkup() {
   }
   const shortcut = isMacDesktop() ? "⌘D" : "Ctrl+D";
   return `<div class="install-step"><b>★</b><span>לשמירה מהירה במועדפים לחצו <strong>${shortcut}</strong>.</span></div>
-    <div class="install-step"><b>+</b><span>בדפדפנים תומכים אפשר גם לבחור בתפריט <strong>התקנת חדשותא</strong> / <strong>הוסף כאפליקציה</strong>.</span></div>`;
+    <div class="install-step"><b>+</b><span>בדפדפנים תומכים אפשר גם לבחור בתפריט <strong>התקנת כותרת פלוס</strong> / <strong>הוסף כאפליקציה</strong>.</span></div>`;
 }
 
 function syncInstallControl() {
   if (!el.installAppBtn) return;
   const installed = isStandaloneMode() || localStorage.getItem("hadashota.appInstalled") === "1";
   el.installAppBtn.disabled = installed;
-  el.installAppBtn.textContent = installed ? "חדשותא מותקנת במכשיר ✓" : (isIOSDevice() ? "הוספת חדשותא למסך הבית" : "הוספת חדשותא למכשיר");
+  el.installAppBtn.textContent = installed ? "כותרת פלוס מותקנת במכשיר ✓" : (isIOSDevice() ? "הוספת כותרת פלוס למסך הבית" : "הוספת כותרת פלוס למכשיר");
 }
 
 function maybeShowInstallOffer(reason = "automatic") {
@@ -720,7 +721,7 @@ function maybeShowInstallOffer(reason = "automatic") {
   if (el.installOfferAccept) {
     delete el.installOfferAccept.dataset.stage;
     el.installOfferAccept.textContent = state.deferredInstallPrompt
-      ? "התקינו את חדשותא"
+      ? "התקינו את כותרת פלוס"
       : (isIOSDevice()
           ? "הראו לי איך"
           : (isAndroidDevice() ? "הראו לי איך להתקין" : "הראו אפשרויות התקנה"));
@@ -739,7 +740,7 @@ async function handleInstallAccept() {
       if (result?.outcome === "accepted") {
         localStorage.setItem("hadashota.appInstalled", "1");
         localStorage.removeItem("hadashota.installSnoozeUntil");
-        showToast("ההתקנה אושרה — חדשותא תופיע במכשיר");
+        showToast("ההתקנה אושרה — כותרת פלוס תופיע במכשיר");
       } else {
         localStorage.setItem("hadashota.installSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
       }
@@ -886,8 +887,8 @@ async function loadNews(force = false, fromRetry = false) {
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
     let progressiveRendered = false;
-    const shardRequests = NEWS_SHARDS.map((shard) =>
-      fetchNewsShard(shard, force).then((value) => {
+    const shardRequests = NEWS_SHARDS.map((shard, index) =>
+      fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
         if (!progressiveRendered && Array.isArray(value?.items) && value.items.length) {
           progressiveRendered = renderProgressiveShardPayload(shard, value);
         }
@@ -1021,7 +1022,8 @@ function renderProgressiveShardPayload(shard, payload) {
   }
 }
 
-async function fetchNewsShard(shard, force = false) {
+async function fetchNewsShard(shard, force = false, delayMs = 0) {
+  if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("client_timeout"), CLIENT_NEWS_TIMEOUT_MS);
   try {
@@ -1054,7 +1056,7 @@ function persistShardLastGood(shard, payload) {
     const compact = {
       ...payload,
       _savedAt: Date.now(),
-      items: payload.items.slice(0, shard === "telegram" ? 360 : 320),
+      items: payload.items.slice(0, shard.startsWith("telegram") ? 180 : 160),
       failures: []
     };
     localStorage.setItem(`${LAST_GOOD_PREFIX}${shard}`, JSON.stringify(compact));
@@ -1132,7 +1134,7 @@ function getDataDelaySeverity({ delayed, freshShards, delayedShards, shardFreshn
 }
 
 function formatDelayedShardShort(entries = state.delayedShards) {
-  const names = [...new Set(entries.map((entry) => entry.shard === "telegram" ? "Telegram מתעדכן" : "אתרי חדשות מתעדכנים"))];
+  const names = [...new Set(entries.map((entry) => entry.shard.startsWith("telegram") ? "Telegram מתעדכן" : "אתרי חדשות מתעדכנים"))];
   return names.join(" + ") || "מקור מתעדכן";
 }
 
@@ -1602,7 +1604,7 @@ function editorialDeckForItem(item, sourceCount = 1) {
   if (secondary && secondary.length >= 18) return secondary;
   return sourceCount >= 3
     ? `${sourceCount} מקורות שונים מצליבים את פרטי האירוע. העדכונים החדשים ביותר מתעדכנים כאן בזמן אמת.`
-    : "האירוע עדיין מתפתח. חדשותא ממשיכה לאסוף דיווחים ולאמת אותם מול מקורות נוספים.";
+    : "האירוע עדיין מתפתח. כותרת פלוס ממשיכה לאסוף דיווחים ולאמת אותם מול מקורות נוספים.";
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -1768,7 +1770,7 @@ function mediaFallbackLabelFromSlot(slot) {
   const category = String(slot?.dataset?.category || "other");
   const first = q.split("|").map((x) => x.trim()).find(Boolean) || "";
   if (first && first.length <= 42) return first;
-  return category === "security" ? "ביטחון" : category === "politics" ? "פוליטיקה" : category === "diplomatic" ? "מדיני" : "חדשותא";
+  return category === "security" ? "ביטחון" : category === "politics" ? "פוליטיקה" : category === "diplomatic" ? "מדיני" : "כותרת פלוס";
 }
 
 function leadMediaFallbackLabel(item, title = "") {
@@ -1776,7 +1778,7 @@ function leadMediaFallbackLabel(item, title = "") {
   if (entities.length) return entities.slice(0, 2).join(" · ");
   const person = extractLikelyPersonName([cleanDisplayTitle(item?.title || ""), cleanDisplayTitle(title || "")].filter(Boolean));
   if (person) return person;
-  return item?.category === "security" ? "אירוע ביטחוני" : item?.category === "politics" ? "פוליטיקה" : item?.category === "diplomatic" ? "הזירה המדינית" : "חדשותא";
+  return item?.category === "security" ? "אירוע ביטחוני" : item?.category === "politics" ? "פוליטיקה" : item?.category === "diplomatic" ? "הזירה המדינית" : "כותרת פלוס";
 }
 
 let safeMediaObserver = null;
@@ -2316,7 +2318,7 @@ function renderLeadStory() {
     el.leadStoryPreview.textContent = hasFeed
       ? "העדכונים האחרונים כבר מוצגים. הסיפור המרכזי יופיע לאחר הצלבה בין מקורות שונים."
       : "המערכת אוספת כעת דיווחים ממקורות החדשות.";
-    el.leadStorySource.textContent = "חדשותא";
+    el.leadStorySource.textContent = "כותרת פלוס";
     el.leadStoryAge.textContent = "עכשיו";
     el.leadStoryCount.textContent = "";
     el.leadStorySources.innerHTML = "";
@@ -2351,7 +2353,7 @@ function renderLeadStory() {
   el.leadStoryTitle.textContent = leadTitle;
   el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
   el.leadStoryPreview.textContent = editorialDeckForItem(item, Math.max(1, Number(winner.uniqueSources) || sources.length));
-  el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName || "חדשותא";
+  el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName || "כותרת פלוס";
   el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
 
   const count = Math.max(1, Number(winner.uniqueSources) || unique.length || 1);
@@ -3587,7 +3589,7 @@ function renderEmergencyAlerts(alerts, payload = {}) {
   const nowLabel = new Intl.DateTimeFormat("he-IL", { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date());
   if (el.alertLastCheck) el.alertLastCheck.textContent = `נבדק ${nowLabel}`;
   if (!matching.length) {
-    if (state.alertWasActive && el.alertLiveRegion) el.alertLiveRegion.textContent = "ההתרעה הפעילה הסתיימה באתר חדשותא. יש להמשיך לפעול לפי הנחיות פיקוד העורף.";
+    if (state.alertWasActive && el.alertLiveRegion) el.alertLiveRegion.textContent = "ההתרעה הפעילה הסתיימה באתר כותרת פלוס. יש להמשיך לפעול לפי הנחיות פיקוד העורף.";
     state.alertWasActive = false;
     el.alertCenterCard?.classList.remove("alert-active");
     el.alertCenterCard?.classList.add("alert-idle");
@@ -3651,14 +3653,14 @@ function playAlertTone(isTest = false) {
 function showEmergencyNotification(title, areas) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const body = areas?.length ? areas.slice(0,8).join(", ") : "התקבלה התרעה חדשה";
-  try { new Notification(`חדשותא • ${title}`, { body, icon:"/apple-touch-icon.png", tag:`hadashota-alert-${state.lastAlertFingerprint.slice(0,60)}`, renotify:true }); } catch {}
+  try { new Notification(`כותרת פלוס • ${title}`, { body, icon:"/apple-touch-icon.png", tag:`hadashota-alert-${state.lastAlertFingerprint.slice(0,60)}`, renotify:true }); } catch {}
 }
 
 function runAlertTest() {
   const original = { headline: el.alertHeadline?.textContent || "", state: el.alertStateLabel?.textContent || "" };
   el.alertCenterCard?.classList.add("alert-active");
   if (el.alertStateLabel) el.alertStateLabel.textContent = "בדיקת התרעה";
-  if (el.alertHeadline) el.alertHeadline.textContent = "בדיקה בלבד — התרעת חדשותא פועלת";
+  if (el.alertHeadline) el.alertHeadline.textContent = "בדיקה בלבד — התרעת כותרת פלוס פועלת";
   if (el.alertAreas) { el.alertAreas.innerHTML = '<span>עיר לדוגמה</span>'; el.alertAreas.classList.remove("hidden"); }
   if (state.alertSound) playAlertTone(true);
   showToast("זו בדיקה בלבד — לא התקבלה התרעה אמיתית");

@@ -116,7 +116,8 @@ export default {
         if (!configuredKey || suppliedKey !== configuredKey) {
           return json({ error: "Deep diagnostics are disabled" }, 403, { "Cache-Control": "no-store" });
         }
-        const shard = deep === "telegram" || url.searchParams.get("shard") === "telegram" ? "telegram" : "sites";
+        const requestedShard = String(url.searchParams.get("shard") || deep || "sites");
+        const shard = /^(sites|telegram)(-[123])?$/.test(requestedShard) ? requestedShard : "sites";
         const checkedAt = new Date().toISOString();
         const retryBudget = { remaining: 2 };
         const shardSources = getShardSources(shard);
@@ -134,26 +135,26 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "76.0.0",
+          version: "79.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
           configuredShardSources: shardSources.length,
           respondingSources: sourceStatus.filter((item) => item.ok).length,
-          diagnosticShards: ["sites", "telegram"],
+          diagnosticShards: ["sites-1","sites-2","sites-3","telegram-1","telegram-2","telegram-3"],
           sources: sourceStatus
         });
       }
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "76.0.0",
+        version: "79.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
         configuredTelegramSources: getShardSources("telegram").length,
         collectionPolicy: "full-pass-before-retry",
-        newsShards: ["sites", "telegram"]
+        newsShards: ["sites-1","sites-2","sites-3","telegram-1","telegram-2","telegram-3"]
       });
     }
 
@@ -253,7 +254,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v76/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v79/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -520,7 +521,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/76 (+strict semantic media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Koteret Plus/77 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -585,7 +586,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/76 (+news aggregator; strict semantic media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Koteret Plus/77 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -902,19 +903,44 @@ function numberOrNull(value) {
 }
 
 function getShardSources(shard) {
-  const filtered = SOURCES.filter((source) => shard === "telegram" ? source.kind === "telegram" : source.kind !== "telegram");
   const mainstreamOrder = new Map([
     ["ynet", 120], ["walla", 118], ["n12", 116], ["kan", 114], ["israelhayom", 112],
     ["13tv", 110], ["maariv", 108], ["jpost", 102], ["timesofisrael", 100], ["globes", 96],
     ["calcalist", 92], ["srugim", 88], ["arutz7", 86], ["kikar", 84], ["now14", 82]
   ]);
   const priority = (source) => {
-    if (source.kind === "telegram") return (source.official ? 120 : 0) + (source.verified ? 35 : 0) + (source.independent ? -5 : 0);
+    if (source.kind === "telegram") {
+      return (source.official ? 120 : 0)
+        + (source.verified ? 35 : 0)
+        + (source.independent ? -5 : 0);
+    }
     return (mainstreamOrder.get(source.publisher) || 60)
       + (source.adapter === "rss" ? 8 : source.adapter === "jsonld" ? 4 : 0)
       + (source.official ? 2 : 0);
   };
-  return filtered.sort((a, b) => priority(b) - priority(a));
+
+  const sites = SOURCES
+    .filter((source) => source.kind !== "telegram")
+    .sort((a, b) => priority(b) - priority(a));
+
+  const telegram = SOURCES
+    .filter((source) => source.kind === "telegram")
+    .sort((a, b) => priority(b) - priority(a));
+
+  const shardMap = {
+    "sites-1": sites.slice(0, 8),
+    "sites-2": sites.slice(8, 16),
+    "sites-3": sites.slice(16, 24),
+    "telegram-1": telegram.slice(0, 7),
+    "telegram-2": telegram.slice(7, 14),
+    "telegram-3": telegram.slice(14, 21),
+
+    // Backward-compatible aliases for diagnostics/manual inspection only.
+    "sites": sites,
+    "telegram": telegram
+  };
+
+  return shardMap[shard] || sites;
 }
 
 
@@ -969,12 +995,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=76`;
+  cacheUrl.search = `?shard=${shard}&v=79`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=76`;
+  lastGoodUrl.search = `?shard=${shard}&v=79`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -989,7 +1015,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "76.0.0",
+          "X-Hadashota-Version": "79.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1054,7 +1080,7 @@ async function handleNews(request, env, ctx) {
       });
     }
 
-    const clustered = clusterItems(recent).slice(0, shard === "telegram" ? 420 : 360);
+    const clustered = clusterItems(recent).slice(0, shard.startsWith("telegram") ? 220 : 180);
     const activeSources = settled
       .map((result) => ({ ...result, recentItems: result.items.filter((item) => {
         const t = Date.parse(item.publishedAt);
@@ -1112,13 +1138,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "76.0.0",
+      "X-Hadashota-Version": "79.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "76.0.0",
+      "X-Hadashota-Version": "79.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1152,7 +1178,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "76.0.0"
+        "X-Hadashota-Version": "79.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1174,7 +1200,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "76.0.0"
+    "X-Hadashota-Version": "79.0.0"
   });
 }
 
@@ -1292,7 +1318,7 @@ async function fetchWithTimeout(url, timeoutMs, forceFresh = false) {
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   try {
     const headers = {
-      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/76.0; +news-aggregator)",
+      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/77.0; +news-aggregator)",
       "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
       "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
     };
