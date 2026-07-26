@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "92.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v92-1";
+const KOTERET_CLIENT_BUILD = "93.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v93-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V92 · API ${apiVersion}` : "גרסה V92 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V93 · API ${apiVersion}` : "גרסה V93 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V92 · API V92";
+    marker.textContent = "גרסה V93 · API V93";
   } catch (error) {
-    marker.textContent = "גרסה V92 · API לא מחובר";
+    marker.textContent = "גרסה V93 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1999,16 +1999,44 @@ function openMediaPassesEditorialGate(media, { lead = false } = {}) {
   return score >= 54 && hits >= 2 && !media.illustrative;
 }
 
+function reusableSourceImageLicense(report) {
+  const license = String(report?.imageLicense || report?.mediaLicense || report?.license || "").trim();
+  const normalized = license.toUpperCase().replace(/_/g, " ");
+  const allowed =
+    normalized === "CC0" ||
+    normalized.includes("PUBLIC DOMAIN") ||
+    normalized.startsWith("CC BY ") ||
+    normalized.startsWith("CC BY-") ||
+    normalized.startsWith("CC BY-SA");
+  if (!allowed) return null;
+
+  const creator = String(report?.imageCreator || report?.mediaCreator || report?.imageCredit || "").trim();
+  const licenseUrl = String(report?.imageLicenseUrl || report?.mediaLicenseUrl || "").trim();
+  const landingUrl = String(report?.imageLandingUrl || report?.mediaLandingUrl || report?.url || "").trim();
+
+  // CC BY / BY-SA require attribution. If the source does not give us enough
+  // metadata to comply, do not reuse the source image.
+  const attributionRequired = !normalized.includes("PUBLIC DOMAIN") && normalized !== "CC0";
+  if (attributionRequired && (!creator || !licenseUrl)) return null;
+
+  return { license, normalized, creator, licenseUrl, landingUrl };
+}
+
 function preferredSourceImage(item) {
   const reports = normalizeClusterReports(item || {});
   const candidates = [item, ...reports].filter(Boolean);
   for (const report of candidates) {
     const raw = report?.imageUrl;
     if (!sourceImageLooksEditorial(raw)) continue;
+    const rights = reusableSourceImageLicense(report);
+    if (!rights) continue;
     return {
       url: String(raw),
-      credit: `תמונה: ${report?.sourceName || report?.publisher || item?.sourceName || "המקור"}`,
-      sourceName: report?.sourceName || report?.publisher || item?.sourceName || "המקור"
+      credit: [rights.creator, rights.license].filter(Boolean).join(" · ") || "נחלת הכלל",
+      sourceName: report?.sourceName || report?.publisher || item?.sourceName || "המקור",
+      license: rights.license,
+      licenseUrl: rights.licenseUrl,
+      landingUrl: rights.landingUrl
     };
   }
   return null;
@@ -2052,7 +2080,9 @@ async function hydrateLeadSafeMedia(winner, leadTitle) {
     el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
     delete el.leadStoryMedia.dataset.fallbackLabel;
     el.leadStoryMedia.dataset.mediaCredit = direct.credit;
-    el.leadStoryMedia.title = direct.credit;
+    el.leadStoryMedia.dataset.mediaLanding = direct.landingUrl || "";
+    el.leadStoryMedia.dataset.mediaLicense = direct.licenseUrl || "";
+    el.leadStoryMedia.title = `${direct.credit}${direct.license ? ` · ${direct.license}` : ""}`;
     return;
   }
   await hydrateLeadOpenMediaFallback(winner, leadTitle);
@@ -2124,9 +2154,16 @@ async function hydrateSafeMediaSlot(slot) {
   slot.replaceWith(img);
   if (a && media.attribution) {
     a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
-    const credit = document.createElement("span");
+    const credit = document.createElement(media.landingUrl ? "a" : "span");
     credit.className = "media-credit";
     credit.textContent = `${media.illustrative ? "אילוסטרציה · " : ""}${media.shortAttribution || media.attribution}`;
+    if (media.landingUrl) {
+      credit.href = media.landingUrl;
+      credit.target = "_blank";
+      credit.rel = "noopener noreferrer";
+      credit.title = media.licenseUrl ? `מקור ורישיון: ${media.licenseUrl}` : "מקור התמונה";
+      credit.addEventListener("click", (event) => event.stopPropagation());
+    }
     a.appendChild(credit);
   }
 }
@@ -3135,7 +3172,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=92.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=93.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);

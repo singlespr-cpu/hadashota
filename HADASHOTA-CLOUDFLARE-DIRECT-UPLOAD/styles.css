@@ -4605,3 +4605,12 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
 #sinceVisit {
   display: none !important;
 }
+
+/* V93 — licensed media attribution links */
+a.media-credit {
+  color: inherit;
+  text-decoration: none;
+}
+a.media-credit:hover {
+  text-decoration: underline;
+}

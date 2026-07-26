@@ -163,7 +163,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "92.0.0",
+          version: "93.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -176,7 +176,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "92.0.0",
+        version: "93.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -338,7 +338,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v92/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v93/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -726,7 +726,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v70?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v93-commons-only?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -737,16 +737,13 @@ async function handleOpenMedia(url, ctx) {
     chosen = await findCommonsMedia(row.q, row.specificity);
     if (chosen) { matchedQuery = row.q; break; }
   }
-  // Openverse expands coverage, but still has to pass a relevance threshold.
-  if (!chosen) {
-    for (const row of queries.filter((x) => x.specificity > 0)) {
-      chosen = await findOpenverseMedia(row.q, row.specificity);
-      if (chosen) { matchedQuery = row.q; break; }
-    }
-  }
+  // V93 legal-safe mode: do not fall back to Openverse. Openverse itself
+  // states that it does not independently verify each work's license.
+  // If Commons cannot provide a sufficiently relevant reusable file, the UI
+  // uses the branded contextual fallback instead.
   const payload = chosen ? {
     image: { ...chosen, matchedQuery },
-    note: "Licensed/open-media result. Attribution and license metadata are preserved; source-license accuracy should still be independently verifiable."
+    note: "Wikimedia Commons reusable-media result. File-page attribution and license metadata are preserved."
   } : { image: null };
   const ttl = chosen ? 1800 : 300;
   const response = json(payload, 200, { "Cache-Control": `public, max-age=0, s-maxage=${ttl}` });
@@ -1080,12 +1077,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=92`;
+  cacheUrl.search = `?shard=${shard}&v=93`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=92`;
+  lastGoodUrl.search = `?shard=${shard}&v=93`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1100,7 +1097,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "92.0.0",
+          "X-Hadashota-Version": "93.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1223,13 +1220,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "92.0.0",
+      "X-Hadashota-Version": "93.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "92.0.0",
+      "X-Hadashota-Version": "93.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1263,7 +1260,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "92.0.0"
+        "X-Hadashota-Version": "93.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1285,7 +1282,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "92.0.0"
+    "X-Hadashota-Version": "93.0.0"
   });
 }
 
