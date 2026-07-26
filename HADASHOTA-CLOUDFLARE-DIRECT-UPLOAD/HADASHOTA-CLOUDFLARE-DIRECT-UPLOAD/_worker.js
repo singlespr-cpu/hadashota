@@ -72,6 +72,12 @@ const DIPLOMATIC_WORDS = [
 
 const STOP_WORDS = new Set(["של", "את", "על", "עם", "לא", "גם", "זה", "זו", "כי", "כך", "הוא", "היא", "הם", "הן", "כל", "אל", "לפי", "אחרי", "לפני", "עוד", "היום", "עכשיו", "חדש", "חדשה", "חדשות", "דיווח", "דיווחים", "עדכון", "עדכונים", "ראשוני", "ישראל", "ישראלי", "ישראלית", "the", "a", "an", "of", "to", "in", "on", "for", "and", "is", "are", "with", "after", "before", "breaking", "report", "reports", "update"]);
 
+
+const PROMO_ADMIN_CREDENTIAL_HASH = "7c172ed999cb4ffb53236212897b2dd379020531e6b0136130dea3de49d35672";
+const PROMO_ADMIN_PATH = "/manage-kp-7538";
+const PROMO_CACHE_PATH = "/__koteretplus_promo_v1";
+let promoMemory = null;
+
 const CITIES = {
   telaviv: { name: "תל אביב", latitude: 32.0853, longitude: 34.7818, candleMinutes: 18 },
   jerusalem: { name: "ירושלים", latitude: 31.7683, longitude: 35.2137, candleMinutes: 40 },
@@ -83,6 +89,18 @@ const CITIES = {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/api/promo") {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handlePromoPublic(request);
+    }
+    if (url.pathname === "/api/admin/promo") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return handlePromoAdmin(request);
+    }
+    if (url.pathname === PROMO_ADMIN_PATH) {
+      return serveHtmlAsset(request, env, url.origin, "/admin.html");
+    }
 
     if (url.pathname === "/api/news") {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
@@ -135,7 +153,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "79.0.0",
+          version: "80.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -148,7 +166,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "79.0.0",
+        version: "80.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -188,6 +206,37 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+
+function promoCacheKey(origin){return new Request(`${origin}${PROMO_CACHE_PATH}`,{method:"GET"})}
+async function sha256Hex(value){const bytes=new TextEncoder().encode(String(value));const digest=await crypto.subtle.digest("SHA-256",bytes);return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("")}
+async function verifyPromoAdmin(username,password){return await sha256Hex(`${String(username||"")}:${String(password||"")}`)===PROMO_ADMIN_CREDENTIAL_HASH}
+function sanitizePromoPayload(value={}){
+  const text=cleanText(String(value.text||"")).slice(0,120);let url="";
+  try{const parsed=new URL(String(value.url||""));if(!/^https?:$/.test(parsed.protocol))throw new Error();url=parsed.toString()}catch{}
+  const imageData=String(value.imageData||"");
+  const safeImage=/^data:image\/(?:jpeg|jpg|png|webp);base64,/i.test(imageData)&&imageData.length<=750000?imageData:"";
+  return{active:Boolean(text&&url),text,url,imageData:safeImage,updatedAt:new Date().toISOString()}
+}
+async function readPromo(request){
+  if(promoMemory)return promoMemory;
+  try{const cached=await caches.default.match(promoCacheKey(new URL(request.url).origin));if(cached){promoMemory=await cached.json();return promoMemory}}catch{}
+  return{active:false,text:"",url:"",imageData:"",updatedAt:null}
+}
+async function writePromo(request,promo){
+  promoMemory=promo;
+  try{await caches.default.put(promoCacheKey(new URL(request.url).origin),new Response(JSON.stringify(promo),{headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"public, max-age=31536000"}}))}catch(e){console.warn("Promo cache write failed",e)}
+}
+async function handlePromoPublic(request){return json(await readPromo(request),200,{"Cache-Control":"no-store","X-Koteret-Promo-Store":"edge-cache"})}
+async function handlePromoAdmin(request){
+  let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
+  if(!(await verifyPromoAdmin(body?.username,body?.password)))return json({error:"שם משתמש או סיסמה שגויים"},401,{"Cache-Control":"no-store"});
+  const action=String(body?.action||"get");
+  if(action==="get")return json({ok:true,promo:await readPromo(request)},200,{"Cache-Control":"no-store"});
+  if(action==="remove"){const promo={active:false,text:"",url:"",imageData:"",updatedAt:new Date().toISOString()};await writePromo(request,promo);return json({ok:true,promo},200,{"Cache-Control":"no-store"})}
+  if(action==="save"){const promo=sanitizePromoPayload(body?.promo||{});if(!promo.active)return json({error:"יש להזין מלל וקישור תקין"},400,{"Cache-Control":"no-store"});await writePromo(request,promo);return json({ok:true,promo},200,{"Cache-Control":"no-store"})}
+  return json({error:"Unknown action"},400,{"Cache-Control":"no-store"})
+}
 
 async function serveNoCacheAsset(request, env, assetPath, contentType = "application/octet-stream") {
   const assetRequest = new Request(new URL(assetPath, request.url), request);
@@ -254,7 +303,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v79/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v80/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -995,12 +1044,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=79`;
+  cacheUrl.search = `?shard=${shard}&v=80`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=79`;
+  lastGoodUrl.search = `?shard=${shard}&v=80`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1015,7 +1064,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "79.0.0",
+          "X-Hadashota-Version": "80.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1138,13 +1187,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "79.0.0",
+      "X-Hadashota-Version": "80.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "79.0.0",
+      "X-Hadashota-Version": "80.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1178,7 +1227,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "79.0.0"
+        "X-Hadashota-Version": "80.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1200,7 +1249,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "79.0.0"
+    "X-Hadashota-Version": "80.0.0"
   });
 }
 
