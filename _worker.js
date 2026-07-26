@@ -134,7 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "72.0.0",
+          version: "74.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -147,7 +147,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "72.0.0",
+        version: "74.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -253,7 +253,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v72/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v74/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -508,7 +508,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/67 (+strict semantic media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/74 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -559,7 +559,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/67 (+news aggregator; strict semantic media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/74 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -902,17 +902,34 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=68`;
+  cacheUrl.search = `?shard=${shard}&v=74`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=68`;
+  lastGoodUrl.search = `?shard=${shard}&v=74`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
     const cached = await cache.match(cacheKey);
-    if (cached) return cors(cached);
+    if (cached) {
+      // V74 fast boot: return the shared snapshot immediately, but explicitly
+      // tell the browser that this was a cache hit so it can start exactly one
+      // full-source refresh in the background. This avoids a blank first paint.
+      try {
+        const cachedPayload = await cached.json();
+        cachedPayload.servedFromCache = true;
+        cachedPayload.servedAt = new Date().toISOString();
+        return cors(json(cachedPayload, 200, {
+          "Cache-Control": "no-store, max-age=0",
+          "X-Hadashota-Version": "74.0.0",
+          "X-Hadashota-Shard": shard,
+          "X-Hadashota-Cache": "HIT"
+        }));
+      } catch {
+        // Corrupt cache entry: ignore it and do one real collection below.
+      }
+    }
   }
 
   const started = Date.now();
@@ -1006,6 +1023,7 @@ async function handleNews(request, env, ctx) {
       shard,
       stale: false,
       partial: failedSources.length > 0,
+      servedFromCache: false,
       tookMs: Date.now() - started,
       items: clustered,
       sources: sourceHealth,
@@ -1028,13 +1046,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "72.0.0",
+      "X-Hadashota-Version": "74.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "72.0.0",
+      "X-Hadashota-Version": "74.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1066,7 +1084,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "72.0.0"
+        "X-Hadashota-Version": "74.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1195,7 +1213,7 @@ async function fetchWithTimeout(url, timeoutMs, forceFresh = false) {
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   try {
     const headers = {
-      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/68.0; +news-aggregator)",
+      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/74.0; +news-aggregator)",
       "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
       "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
     };

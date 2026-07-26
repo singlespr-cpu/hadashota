@@ -214,9 +214,9 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v70.";
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v74.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
-const CLIENT_NEWS_TIMEOUT_MS = 40_000;
+const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
 const CATEGORY_LABELS = {
@@ -258,29 +258,28 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V70 cold-open strategy:
+  // V74 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
   // 2) as soon as that fast render completes, force one real source collection
   //    and replace the screen again if newer data exists.
-  loadNews(false).finally(() => {
+  loadNews(false).then((initialData) => {
+    // V74: a warm shared snapshot paints immediately, then gets exactly one
+    // full-source refresh. If the first request itself had to collect every
+    // source (cold cache), do NOT immediately collect all 45 sources a second time.
+    const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
+    const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 20_000;
+    const cameFromCache = Boolean(initialData?.servedFromCache);
+    const needsFreshPass = cameFromCache || state.dataDelayed || tooOld;
+    if (!needsFreshPass) return;
+
     window.setTimeout(() => {
       if (state.loading || document.hidden) return;
       state.lastForegroundRefreshAt = 0;
-      loadNews(true, true).finally(() => {
-        const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
-        const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 45_000;
-        if (!state.loading && (state.dataDelayed || tooOld)) {
-          window.setTimeout(() => {
-            if (state.loading || document.hidden) return;
-            state.lastForegroundRefreshAt = 0;
-            loadNews(true, true);
-          }, 2200);
-        }
-      });
-    }, 120);
-  });
+      loadNews(true, true);
+    }, 180);
+  }).catch((error) => console.warn("Initial news load failed", error));
   restartAutoRefresh();
   window.setTimeout(maybeShowNotificationOffer, 1400);
   // Do not stack prompts. First visit gets a gentle delayed install suggestion; returning visitors see it sooner.
@@ -304,13 +303,13 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("72.")) {
-      marker.textContent = apiVersion ? `גרסה V72 · API ${apiVersion}` : "גרסה V72 · API לא מזוהה";
+    if (!apiVersion.startsWith("74.")) {
+      marker.textContent = apiVersion ? `גרסה V74 · API ${apiVersion}` : "גרסה V74 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V72 · API V72";
+    marker.textContent = "גרסה V74 · API V74";
   } catch (error) {
-    marker.textContent = "גרסה V72 · API לא מחובר";
+    marker.textContent = "גרסה V74 · API לא מחובר";
     console.warn("Hadashota API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -964,6 +963,7 @@ async function loadNews(force = false, fromRetry = false) {
       if (force && state.dataDelaySeverity === "major") showToast("העדכון חלקי — מוצגים הנתונים האחרונים התקינים");
       else if (force) showToast("מקור חדשות אחד מתעדכן ברקע");
     }
+    return data;
   } catch (error) {
     console.error(error);
     state.dataDelayed = true;
@@ -977,6 +977,7 @@ async function loadNews(force = false, fromRetry = false) {
       el.feed.innerHTML = `<div class="connection-state" role="status"><span class="connection-spinner"></span><div><strong>אוסף עדכונים מכל מקורות החדשות…</strong><small>מתבצע ניסיון מכל האתרים וערוצי Telegram, ולאחר מכן ניסיון נוסף אוטומטי אם צריך.</small></div></div>`;
     }
     if (force && !fromRetry) showToast(restored ? "העדכון מתעכב — מוצגים הנתונים האחרונים" : "מתחבר מחדש למקורות…");
+    return null;
   } finally {
     state.loading = false;
     el.refreshBtn.classList.remove("loading");
@@ -1182,6 +1183,7 @@ function mergeNewsPayloads(payloads) {
     oldestGeneratedAt: generatedTimes[generatedTimes.length - 1] || generatedAt,
     shardFreshness,
     refreshAfterSeconds: Math.min(...payloads.map((payload) => Number(payload.refreshAfterSeconds) || 30), 30),
+    servedFromCache: payloads.some((payload) => payload?.servedFromCache === true),
     items: mergedItems,
     sources: [...sourcesById.values()].sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0)),
     stats: {
