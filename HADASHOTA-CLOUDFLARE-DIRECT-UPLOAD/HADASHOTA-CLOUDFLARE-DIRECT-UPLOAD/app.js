@@ -213,10 +213,11 @@ const el = {
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
-const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v70.";
+const NEWS_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
+const NEWS_SHARD_STAGGER_MS = 100;
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v77.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
-const CLIENT_NEWS_TIMEOUT_MS = 40_000;
+const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
 const CATEGORY_LABELS = {
@@ -239,7 +240,7 @@ window.addEventListener("appinstalled", () => {
   state.deferredInstallPrompt = null;
   closeSiteModal(el.installOfferModal, false);
   syncInstallControl();
-  showToast("חדשותא נוספה למכשיר בהצלחה");
+  showToast("כותרת פלוס נוספה למכשיר בהצלחה");
 });
 
 init();
@@ -258,29 +259,28 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V70 cold-open strategy:
+  // V79 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
   // 2) as soon as that fast render completes, force one real source collection
   //    and replace the screen again if newer data exists.
-  loadNews(false).finally(() => {
+  loadNews(false).then((initialData) => {
+    // V74: a warm shared snapshot paints immediately, then gets exactly one
+    // full-source refresh. If the first request itself had to collect every
+    // source (cold cache), do NOT immediately collect all 45 sources a second time.
+    const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
+    const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 20_000;
+    const cameFromCache = Boolean(initialData?.servedFromCache);
+    const needsFreshPass = cameFromCache || state.dataDelayed || tooOld;
+    if (!needsFreshPass) return;
+
     window.setTimeout(() => {
       if (state.loading || document.hidden) return;
       state.lastForegroundRefreshAt = 0;
-      loadNews(true, true).finally(() => {
-        const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
-        const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 45_000;
-        if (!state.loading && (state.dataDelayed || tooOld)) {
-          window.setTimeout(() => {
-            if (state.loading || document.hidden) return;
-            state.lastForegroundRefreshAt = 0;
-            loadNews(true, true);
-          }, 2200);
-        }
-      });
-    }, 120);
-  });
+      loadNews(true, true);
+    }, 180);
+  }).catch((error) => console.warn("Initial news load failed", error));
   restartAutoRefresh();
   window.setTimeout(maybeShowNotificationOffer, 1400);
   // Do not stack prompts. First visit gets a gentle delayed install suggestion; returning visitors see it sooner.
@@ -304,14 +304,14 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("73.")) {
-      marker.textContent = apiVersion ? `גרסה V73 · API ${apiVersion}` : "גרסה V73 · API לא מזוהה";
+    if (!apiVersion.startsWith("77.")) {
+      marker.textContent = apiVersion ? `גרסה V79 · API ${apiVersion}` : "גרסה V79 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V73 · API V73";
+    marker.textContent = "גרסה V79 · API V79";
   } catch (error) {
-    marker.textContent = "גרסה V73 · API לא מחובר";
-    console.warn("Hadashota API health check failed", error);
+    marker.textContent = "גרסה V79 · API לא מחובר";
+    console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
   }
@@ -674,7 +674,7 @@ function installInstructionsMarkup() {
   if (isIOSDevice()) {
     return `<div class="install-step"><b>1</b><span>לחצו בדפדפן על <strong>שיתוף</strong> <em>↥</em></span></div>
       <div class="install-step"><b>2</b><span>בחרו <strong>הוסף למסך הבית</strong></span></div>
-      <div class="install-step"><b>3</b><span>אשרו <strong>הוספה</strong> — וחדשותא תופיע כאייקון במסך הבית</span></div>`;
+      <div class="install-step"><b>3</b><span>אשרו <strong>הוספה</strong> — וכותרת פלוס תופיע כאייקון במסך הבית</span></div>`;
   }
   if (state.deferredInstallPrompt) {
     return `<div class="install-step install-step-one"><b>✓</b><span>לחיצה על הכפתור למטה תפתח את חלון ההתקנה הרשמי של הדפדפן. נשאר רק לאשר.</span></div>`;
@@ -685,14 +685,14 @@ function installInstructionsMarkup() {
   }
   const shortcut = isMacDesktop() ? "⌘D" : "Ctrl+D";
   return `<div class="install-step"><b>★</b><span>לשמירה מהירה במועדפים לחצו <strong>${shortcut}</strong>.</span></div>
-    <div class="install-step"><b>+</b><span>בדפדפנים תומכים אפשר גם לבחור בתפריט <strong>התקנת חדשותא</strong> / <strong>הוסף כאפליקציה</strong>.</span></div>`;
+    <div class="install-step"><b>+</b><span>בדפדפנים תומכים אפשר גם לבחור בתפריט <strong>התקנת כותרת פלוס</strong> / <strong>הוסף כאפליקציה</strong>.</span></div>`;
 }
 
 function syncInstallControl() {
   if (!el.installAppBtn) return;
   const installed = isStandaloneMode() || localStorage.getItem("hadashota.appInstalled") === "1";
   el.installAppBtn.disabled = installed;
-  el.installAppBtn.textContent = installed ? "חדשותא מותקנת במכשיר ✓" : (isIOSDevice() ? "הוספת חדשותא למסך הבית" : "הוספת חדשותא למכשיר");
+  el.installAppBtn.textContent = installed ? "כותרת פלוס מותקנת במכשיר ✓" : (isIOSDevice() ? "הוספת כותרת פלוס למסך הבית" : "הוספת כותרת פלוס למכשיר");
 }
 
 function maybeShowInstallOffer(reason = "automatic") {
@@ -721,7 +721,7 @@ function maybeShowInstallOffer(reason = "automatic") {
   if (el.installOfferAccept) {
     delete el.installOfferAccept.dataset.stage;
     el.installOfferAccept.textContent = state.deferredInstallPrompt
-      ? "התקינו את חדשותא"
+      ? "התקינו את כותרת פלוס"
       : (isIOSDevice()
           ? "הראו לי איך"
           : (isAndroidDevice() ? "הראו לי איך להתקין" : "הראו אפשרויות התקנה"));
@@ -740,7 +740,7 @@ async function handleInstallAccept() {
       if (result?.outcome === "accepted") {
         localStorage.setItem("hadashota.appInstalled", "1");
         localStorage.removeItem("hadashota.installSnoozeUntil");
-        showToast("ההתקנה אושרה — חדשותא תופיע במכשיר");
+        showToast("ההתקנה אושרה — כותרת פלוס תופיע במכשיר");
       } else {
         localStorage.setItem("hadashota.installSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
       }
@@ -887,8 +887,8 @@ async function loadNews(force = false, fromRetry = false) {
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
     let progressiveRendered = false;
-    const shardRequests = NEWS_SHARDS.map((shard) =>
-      fetchNewsShard(shard, force).then((value) => {
+    const shardRequests = NEWS_SHARDS.map((shard, index) =>
+      fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
         if (!progressiveRendered && Array.isArray(value?.items) && value.items.length) {
           progressiveRendered = renderProgressiveShardPayload(shard, value);
         }
@@ -903,12 +903,19 @@ async function loadNews(force = false, fromRetry = false) {
 
     results.forEach((result, index) => {
       const shard = NEWS_SHARDS[index];
-      if (result.status === "fulfilled" && Array.isArray(result.value?.items) && result.value.items.length) {
+      if (result.status === "fulfilled" && result.value && Array.isArray(result.value.items)) {
         payloads.push(result.value);
-        if (!result.value.stale) persistShardLastGood(shard, result.value);
-        if (result.value.stale) {
+        const hasItems = result.value.items.length > 0;
+        if (hasItems && !result.value.stale) persistShardLastGood(shard, result.value);
+
+        if (result.value.stale || !hasItems) {
           delayed = true;
-          delayedShards.push({ shard, reason: result.value.staleReason || "stale", localFallback: !!result.value.localFallback, generatedAt: result.value.generatedAt || null });
+          delayedShards.push({
+            shard,
+            reason: result.value.staleReason || (hasItems ? "stale" : "no_items"),
+            localFallback: !!result.value.localFallback,
+            generatedAt: result.value.generatedAt || null
+          });
         } else {
           freshShards += 1;
         }
@@ -964,6 +971,7 @@ async function loadNews(force = false, fromRetry = false) {
       if (force && state.dataDelaySeverity === "major") showToast("העדכון חלקי — מוצגים הנתונים האחרונים התקינים");
       else if (force) showToast("מקור חדשות אחד מתעדכן ברקע");
     }
+    return data;
   } catch (error) {
     console.error(error);
     state.dataDelayed = true;
@@ -977,6 +985,7 @@ async function loadNews(force = false, fromRetry = false) {
       el.feed.innerHTML = `<div class="connection-state" role="status"><span class="connection-spinner"></span><div><strong>אוסף עדכונים מכל מקורות החדשות…</strong><small>מתבצע ניסיון מכל האתרים וערוצי Telegram, ולאחר מכן ניסיון נוסף אוטומטי אם צריך.</small></div></div>`;
     }
     if (force && !fromRetry) showToast(restored ? "העדכון מתעכב — מוצגים הנתונים האחרונים" : "מתחבר מחדש למקורות…");
+    return null;
   } finally {
     state.loading = false;
     el.refreshBtn.classList.remove("loading");
@@ -1013,7 +1022,8 @@ function renderProgressiveShardPayload(shard, payload) {
   }
 }
 
-async function fetchNewsShard(shard, force = false) {
+async function fetchNewsShard(shard, force = false, delayMs = 0) {
+  if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("client_timeout"), CLIENT_NEWS_TIMEOUT_MS);
   try {
@@ -1046,7 +1056,7 @@ function persistShardLastGood(shard, payload) {
     const compact = {
       ...payload,
       _savedAt: Date.now(),
-      items: payload.items.slice(0, shard === "telegram" ? 360 : 320),
+      items: payload.items.slice(0, shard.startsWith("telegram") ? 180 : 160),
       failures: []
     };
     localStorage.setItem(`${LAST_GOOD_PREFIX}${shard}`, JSON.stringify(compact));
@@ -1124,7 +1134,7 @@ function getDataDelaySeverity({ delayed, freshShards, delayedShards, shardFreshn
 }
 
 function formatDelayedShardShort(entries = state.delayedShards) {
-  const names = [...new Set(entries.map((entry) => entry.shard === "telegram" ? "Telegram מתעדכן" : "אתרי חדשות מתעדכנים"))];
+  const names = [...new Set(entries.map((entry) => entry.shard.startsWith("telegram") ? "Telegram מתעדכן" : "אתרי חדשות מתעדכנים"))];
   return names.join(" + ") || "מקור מתעדכן";
 }
 
@@ -1182,6 +1192,7 @@ function mergeNewsPayloads(payloads) {
     oldestGeneratedAt: generatedTimes[generatedTimes.length - 1] || generatedAt,
     shardFreshness,
     refreshAfterSeconds: Math.min(...payloads.map((payload) => Number(payload.refreshAfterSeconds) || 30), 30),
+    servedFromCache: payloads.some((payload) => payload?.servedFromCache === true),
     items: mergedItems,
     sources: [...sourcesById.values()].sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0)),
     stats: {
@@ -1257,7 +1268,9 @@ function normalizeClusterReports(item) {
     url: item.url,
     publishedAt: item.publishedAt,
     imageUrl: item.imageUrl || null,
-    title: item.title || ""
+    title: item.title || "",
+    preview: item.preview || "",
+    category: item.category || null
   };
   return dedupeReports([base, ...(Array.isArray(item.related) ? item.related : [])]);
 }
@@ -1591,7 +1604,7 @@ function editorialDeckForItem(item, sourceCount = 1) {
   if (secondary && secondary.length >= 18) return secondary;
   return sourceCount >= 3
     ? `${sourceCount} מקורות שונים מצליבים את פרטי האירוע. העדכונים החדשים ביותר מתעדכנים כאן בזמן אמת.`
-    : "האירוע עדיין מתפתח. חדשותא ממשיכה לאסוף דיווחים ולאמת אותם מול מקורות נוספים.";
+    : "האירוע עדיין מתפתח. כותרת פלוס ממשיכה לאסוף דיווחים ולאמת אותם מול מקורות נוספים.";
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -1665,12 +1678,40 @@ async function fetchSafeMedia(query, category = "other") {
   return promise;
 }
 
+function sourceImageLooksEditorial(raw) {
+  if (!raw || !/^https?:\/\//i.test(String(raw))) return false;
+  try {
+    const url = new URL(String(raw));
+    const fp = `${url.hostname}${url.pathname}${url.search}`.toLowerCase();
+    const blocked = [
+      "favicon", "logo", "sprite", "avatar", "profile", "placeholder",
+      "default-image", "default_image", "noimage", "no-image", "tracking",
+      "pixel.", "1x1", "spacer", "icon-"
+    ];
+    return !blocked.some((token) => fp.includes(token));
+  } catch {
+    return false;
+  }
+}
+
+function openMediaPassesEditorialGate(media, { lead = false } = {}) {
+  if (!media?.url) return false;
+  const score = Number(media.relevanceScore) || 0;
+  const hits = Number(media.overlapHits) || 0;
+
+  // Lead imagery is intentionally strict because a wrong hero photo is far
+  // more damaging than no photo. Feed cards are slightly more permissive,
+  // but still require multi-token semantic overlap.
+  if (lead) return score >= 62 && hits >= 2 && !media.illustrative;
+  return score >= 54 && hits >= 2 && !media.illustrative;
+}
+
 function preferredSourceImage(item) {
   const reports = normalizeClusterReports(item || {});
   const candidates = [item, ...reports].filter(Boolean);
   for (const report of candidates) {
     const raw = report?.imageUrl;
-    if (!raw || !/^https?:\/\//i.test(String(raw))) continue;
+    if (!sourceImageLooksEditorial(raw)) continue;
     return {
       url: String(raw),
       credit: `תמונה: ${report?.sourceName || report?.publisher || item?.sourceName || "המקור"}`,
@@ -1685,7 +1726,7 @@ async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
   const query = mediaQueryForItem(winner?.item, leadTitle);
   const media = await fetchSafeMedia(query, winner?.item?.category || "other");
   if (winner && leadFingerprint(winner) !== state.displayedLeadFingerprint) return;
-  if (!media?.url) {
+  if (!openMediaPassesEditorialGate(media, { lead: true })) {
     el.leadStoryImage.removeAttribute("src");
     el.leadStoryImage.alt = "";
     el.leadStoryMedia.classList.add("image-unavailable", "contextual-fallback");
@@ -1729,7 +1770,7 @@ function mediaFallbackLabelFromSlot(slot) {
   const category = String(slot?.dataset?.category || "other");
   const first = q.split("|").map((x) => x.trim()).find(Boolean) || "";
   if (first && first.length <= 42) return first;
-  return category === "security" ? "ביטחון" : category === "politics" ? "פוליטיקה" : category === "diplomatic" ? "מדיני" : "חדשותא";
+  return category === "security" ? "ביטחון" : category === "politics" ? "פוליטיקה" : category === "diplomatic" ? "מדיני" : "כותרת פלוס";
 }
 
 function leadMediaFallbackLabel(item, title = "") {
@@ -1737,7 +1778,7 @@ function leadMediaFallbackLabel(item, title = "") {
   if (entities.length) return entities.slice(0, 2).join(" · ");
   const person = extractLikelyPersonName([cleanDisplayTitle(item?.title || ""), cleanDisplayTitle(title || "")].filter(Boolean));
   if (person) return person;
-  return item?.category === "security" ? "אירוע ביטחוני" : item?.category === "politics" ? "פוליטיקה" : item?.category === "diplomatic" ? "הזירה המדינית" : "חדשותא";
+  return item?.category === "security" ? "אירוע ביטחוני" : item?.category === "politics" ? "פוליטיקה" : item?.category === "diplomatic" ? "הזירה המדינית" : "כותרת פלוס";
 }
 
 let safeMediaObserver = null;
@@ -1774,7 +1815,7 @@ async function hydrateSafeMediaSlot(slot) {
 
   const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
   if (!slot.isConnected) return;
-  if (!media?.url) {
+  if (!openMediaPassesEditorialGate(media, { lead: false })) {
     slot.classList.add("contextual-media-fallback");
     slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
     return;
@@ -1896,24 +1937,81 @@ function scrollToFeedFromNewsroomNav() {
   });
 }
 
+
+function reportMatchesKind(report, kind) {
+  if (!report) return false;
+  if (kind === "telegram") return report.sourceKind === "telegram";
+  if (kind === "site") return report.sourceKind === "site";
+  if (kind === "official") return !!report.official;
+  return true;
+}
+
+function projectItemForKind(item, kind) {
+  if (!item || kind === "all") return item;
+
+  const reports = normalizeClusterReports(item)
+    .filter((report) => reportMatchesKind(report, kind))
+    .sort((a, b) => Date.parse(b.publishedAt || 0) - Date.parse(a.publishedAt || 0));
+
+  if (!reports.length) return null;
+
+  const representative = reports[0];
+  const updates = normalizeClusterUpdates(item)
+    .filter((report) => reportMatchesKind(report, kind))
+    .sort((a, b) => Date.parse(a.publishedAt || 0) - Date.parse(b.publishedAt || 0))
+    .slice(-24);
+
+  const reportTimes = reports.map((report) => report.publishedAt).filter(Boolean);
+  const sameRepresentative = representative.sourceId === item.sourceId && representative.url === item.url;
+
+  return {
+    ...item,
+    sourceId: representative.sourceId,
+    publisher: representative.publisher,
+    sourceName: representative.sourceName,
+    sourceKind: representative.sourceKind,
+    verified: !!representative.verified,
+    official: !!representative.official,
+    independent: !!representative.independent,
+    url: representative.url,
+    publishedAt: representative.publishedAt,
+    imageUrl: representative.imageUrl || item.imageUrl || null,
+    title: representative.title || item.title,
+    preview: representative.preview || (sameRepresentative ? item.preview : ""),
+    category: representative.category || item.category,
+    related: reports,
+    updates,
+    reportCount: reports.length,
+    latestReportAt: newestIso(reportTimes),
+    firstReportAt: oldestIso(reportTimes),
+    _filteredKind: kind
+  };
+}
+
 function filteredItems() {
   const cutoff = Date.now() - state.hours * 60 * 60 * 1000;
-  const filtered = state.items.filter((item) => {
+  const candidates = state.items
+    .map((item) => projectItemForKind(item, state.kind))
+    .filter(Boolean);
+
+  const filtered = candidates.filter((item) => {
+    // The time range must be evaluated against the selected source kind itself.
+    // Example: a fresh Ynet report must not make a 2-day-old Telegram report
+    // appear inside the "Telegram · 24 hours" feed.
     if (Date.parse(item.latestReportAt || item.publishedAt) < cutoff) return false;
     if (state.category !== "all" && item.category !== state.category) return false;
-    if (state.kind === "site" && item.sourceKind !== "site") return false;
-    if (state.kind === "telegram" && item.sourceKind !== "telegram") return false;
-    if (state.kind === "official" && !(item.official || (item.related || []).some((report) => report.official))) return false;
     if (state.importantOnly && !isImportantStory(item)) return false;
     if (state.hotOnly && storyHotScore(item) < 60) return false;
     if (state.query) {
-      const haystack = `${item.title} ${item.preview || ""} ${item.sourceName}`.toLowerCase();
+      const relatedText = (item.related || []).map((report) => `${report.title || ""} ${report.sourceName || ""}`).join(" ");
+      const haystack = `${item.title} ${item.preview || ""} ${item.sourceName} ${relatedText}`.toLowerCase();
       if (!haystack.includes(state.query)) return false;
     }
     return true;
   });
+
   if (state.kind === "all" && state.category === "all" && !state.query) return mainstreamFirst(filtered);
-  return filtered;
+  return filtered.sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
 }
 
 function mainstreamFirst(items) {
@@ -2220,7 +2318,7 @@ function renderLeadStory() {
     el.leadStoryPreview.textContent = hasFeed
       ? "העדכונים האחרונים כבר מוצגים. הסיפור המרכזי יופיע לאחר הצלבה בין מקורות שונים."
       : "המערכת אוספת כעת דיווחים ממקורות החדשות.";
-    el.leadStorySource.textContent = "חדשותא";
+    el.leadStorySource.textContent = "כותרת פלוס";
     el.leadStoryAge.textContent = "עכשיו";
     el.leadStoryCount.textContent = "";
     el.leadStorySources.innerHTML = "";
@@ -2255,7 +2353,7 @@ function renderLeadStory() {
   el.leadStoryTitle.textContent = leadTitle;
   el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
   el.leadStoryPreview.textContent = editorialDeckForItem(item, Math.max(1, Number(winner.uniqueSources) || sources.length));
-  el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName || "חדשותא";
+  el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName || "כותרת פלוס";
   el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
 
   const count = Math.max(1, Number(winner.uniqueSources) || unique.length || 1);
@@ -3491,7 +3589,7 @@ function renderEmergencyAlerts(alerts, payload = {}) {
   const nowLabel = new Intl.DateTimeFormat("he-IL", { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date());
   if (el.alertLastCheck) el.alertLastCheck.textContent = `נבדק ${nowLabel}`;
   if (!matching.length) {
-    if (state.alertWasActive && el.alertLiveRegion) el.alertLiveRegion.textContent = "ההתרעה הפעילה הסתיימה באתר חדשותא. יש להמשיך לפעול לפי הנחיות פיקוד העורף.";
+    if (state.alertWasActive && el.alertLiveRegion) el.alertLiveRegion.textContent = "ההתרעה הפעילה הסתיימה באתר כותרת פלוס. יש להמשיך לפעול לפי הנחיות פיקוד העורף.";
     state.alertWasActive = false;
     el.alertCenterCard?.classList.remove("alert-active");
     el.alertCenterCard?.classList.add("alert-idle");
@@ -3555,14 +3653,14 @@ function playAlertTone(isTest = false) {
 function showEmergencyNotification(title, areas) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const body = areas?.length ? areas.slice(0,8).join(", ") : "התקבלה התרעה חדשה";
-  try { new Notification(`חדשותא • ${title}`, { body, icon:"/apple-touch-icon.png", tag:`hadashota-alert-${state.lastAlertFingerprint.slice(0,60)}`, renotify:true }); } catch {}
+  try { new Notification(`כותרת פלוס • ${title}`, { body, icon:"/apple-touch-icon.png", tag:`hadashota-alert-${state.lastAlertFingerprint.slice(0,60)}`, renotify:true }); } catch {}
 }
 
 function runAlertTest() {
   const original = { headline: el.alertHeadline?.textContent || "", state: el.alertStateLabel?.textContent || "" };
   el.alertCenterCard?.classList.add("alert-active");
   if (el.alertStateLabel) el.alertStateLabel.textContent = "בדיקת התרעה";
-  if (el.alertHeadline) el.alertHeadline.textContent = "בדיקה בלבד — התרעת חדשותא פועלת";
+  if (el.alertHeadline) el.alertHeadline.textContent = "בדיקה בלבד — התרעת כותרת פלוס פועלת";
   if (el.alertAreas) { el.alertAreas.innerHTML = '<span>עיר לדוגמה</span>'; el.alertAreas.classList.remove("hidden"); }
   if (state.alertSound) playAlertTone(true);
   showToast("זו בדיקה בלבד — לא התקבלה התרעה אמיתית");

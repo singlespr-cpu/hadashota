@@ -1,4 +1,4 @@
-# חדשותא V71 — Redirect Recovery
+# כותרת פלוס V71 — Redirect Recovery
 
 גרסת תיקון שמרנית לפריסה הקיימת ב-Cloudflare.
 
