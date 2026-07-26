@@ -215,8 +215,8 @@ const el = {
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
 const NEWS_SHARD_STAGGER_MS = 100;
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.stable.";
-const LEGACY_LAST_GOOD_PREFIXES = ["hadashota.lastGoodShard.v77.", "hadashota.lastGoodShard.v76.", "hadashota.lastGoodShard.v75."];
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.copyrightSafeV82.";
+const LEGACY_LAST_GOOD_PREFIXES = [];
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -310,12 +310,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V81 · API ${apiVersion}` : "גרסה V81 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V82 · API ${apiVersion}` : "גרסה V82 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V81 · API V81";
+    marker.textContent = "גרסה V82 · API V82";
   } catch (error) {
-    marker.textContent = "גרסה V81 · API לא מחובר";
+    marker.textContent = "גרסה V82 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
