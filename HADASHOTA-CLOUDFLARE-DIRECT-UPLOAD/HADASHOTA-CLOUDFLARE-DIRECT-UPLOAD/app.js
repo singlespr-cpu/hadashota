@@ -217,7 +217,7 @@ const NEWS_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2"
 const NEWS_SHARD_STAGGER_MS = 100;
 const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.copyrightSafeV82.";
 const LEGACY_LAST_GOOD_PREFIXES = [];
-const LOCAL_LAST_GOOD_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const LOCAL_LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
@@ -235,6 +235,13 @@ window.addEventListener("beforeinstallprompt", (event) => {
   syncInstallControl();
   window.addEventListener("online", () => {
     if (!state.loading) loadNews(false, true);
+  });
+  window.addEventListener("pageshow", () => {
+    restoreLocalLastGood();
+    if (!state.loading) loadNews(false, true);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !state.loading) loadNews(false, true);
   });
 });
 
@@ -310,12 +317,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V84 · API ${apiVersion}` : "גרסה V84 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V85 · API ${apiVersion}` : "גרסה V85 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V84 · API V84";
+    marker.textContent = "גרסה V85 · API V85";
   } catch (error) {
-    marker.textContent = "גרסה V84 · API לא מחובר";
+    marker.textContent = "גרסה V85 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1124,7 +1131,7 @@ function restoreLocalLastGood() {
 
 function scheduleNewsRetry() {
   clearTimeout(state.retryTimer);
-  const delays = [1.5, 3, 6, 12, 20];
+  const delays = [0.5, 1.5, 3, 6, 12];
   const seconds = delays[Math.min(state.retryAttempt, delays.length - 1)];
   state.retryAttempt += 1;
   state.retryTimer = setTimeout(() => {

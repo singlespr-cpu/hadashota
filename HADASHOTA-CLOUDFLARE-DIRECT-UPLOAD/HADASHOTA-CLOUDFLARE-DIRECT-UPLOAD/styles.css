@@ -4145,3 +4145,18 @@ body.emergency-mode .alert-center-card{box-shadow:0 0 0 2px rgba(239,35,60,.16),
 html[data-theme="dark"] .portal-strip>.portal-status,html[data-theme="dark"] .portal-strip>.utility-card{background-color:#151b24!important;border-color:#2b333e!important}
 @media(max-width:1180px) and (min-width:701px){.portal-strip{grid-template-columns:repeat(3,minmax(0,1fr))!important}.portal-strip>.portal-status,.portal-strip>.utility-card{min-height:110px!important;height:110px!important}}
 @media(max-width:700px){.portal-strip{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;border:0!important;border-radius:0!important;overflow:visible!important;background:transparent!important;box-shadow:none!important}.portal-strip>.portal-status,.portal-strip>.utility-card{display:flex!important;height:92px!important;min-height:92px!important;border:1px solid rgba(17,24,39,.10)!important;border-radius:14px!important;padding:8px 9px!important;background:#fff!important;overflow:hidden!important}.portal-strip>.promo-card{padding:0!important}.portal-strip>.weather-card,.portal-strip>.shabbat-card,.portal-strip>.currency-card{border-radius:14px!important}.promo-card-text{font-size:12px}.promo-card:not(.is-active) .promo-card-text{font-size:14px}}
+
+/* V85 — mobile news-first utility rail */
+@media(max-width:700px){
+  .portal-strip{display:flex!important;flex-wrap:nowrap!important;gap:8px!important;overflow-x:auto!important;overflow-y:hidden!important;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;padding:0 0 5px!important;margin-bottom:8px!important;scrollbar-width:none!important}
+  .portal-strip::-webkit-scrollbar{display:none}
+  .portal-strip>.portal-status,.portal-strip>.utility-card{flex:0 0 142px!important;width:142px!important;min-width:142px!important;height:76px!important;min-height:76px!important;padding:7px 8px!important;border-radius:13px!important;scroll-snap-align:start}
+  .portal-strip>.promo-card{padding:0!important}
+  .portal-strip .eyebrow,.portal-strip .utility-label,.portal-strip .portal-label{font-size:8px!important}
+  .portal-strip .pulse-title strong{font-size:12px!important}
+  .portal-strip .status-metrics{display:none!important}
+  .portal-strip .status-detail{font-size:7px!important;margin-top:3px!important}
+  .promo-card-text{font-size:11px!important;-webkit-line-clamp:2!important}
+  .promo-card:not(.is-active) .promo-card-text{font-size:12px!important}
+  .promo-card-badge{top:6px!important;right:6px!important;font-size:7px!important;padding:3px 5px!important}
+}
