@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "87.0.0";
+const HADASHOTA_SW_VERSION = "89.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -18,4 +18,11 @@ self.addEventListener("notificationclick", (event) => {
       if (self.clients.openWindow) await self.clients.openWindow("/");
     }
   })());
+});
+
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "GET_VERSION") {
+    event.source?.postMessage?.({ type: "KOTERET_SW_VERSION", version: HADASHOTA_SW_VERSION });
+  }
 });
