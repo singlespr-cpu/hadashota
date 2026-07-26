@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "91.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v91-1";
+const KOTERET_CLIENT_BUILD = "92.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v92-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V91 · API ${apiVersion}` : "גרסה V91 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V92 · API ${apiVersion}` : "גרסה V92 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V91 · API V91";
+    marker.textContent = "גרסה V92 · API V92";
   } catch (error) {
-    marker.textContent = "גרסה V91 · API לא מחובר";
+    marker.textContent = "גרסה V92 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1240,28 +1240,9 @@ function formatDelayedShardShort(entries = state.delayedShards) {
 }
 
 function setDataStatus(delayed, hasData = state.items.length > 0, severity = state.dataDelaySeverity) {
-  if (!el.dataStatus || !el.dataStatusText) return;
-
-  // A single fresh-vs-stale shard is retried in the background, but does not deserve
-  // a large warning banner. The compact status remains visible in the header timestamp.
-  const showBanner = delayed && (severity === "major" || !hasData);
-  el.dataStatus.classList.toggle("hidden", !showBanner);
-  el.dataStatus.classList.toggle("is-major", showBanner && severity === "major");
-  if (!showBanner) return;
-
-  if (!hasData) {
-    el.dataStatusText.textContent = "מתחבר למקורות החדשות — מתבצע ניסיון נוסף אוטומטית";
-    return;
-  }
-
-  const clock = state.lastDataGeneratedAt ? formatClock(state.lastDataGeneratedAt) : "";
-  const delayedPart = formatDelayedShardShort();
-  el.dataStatusText.textContent = clock
-    ? `העדכון חלקי — ${delayedPart}. מוצגים הנתונים האחרונים התקינים מ־${clock}, והמערכת מנסה שוב אוטומטית.`
-    : `העדכון חלקי — ${delayedPart}. מוצגים הנתונים האחרונים התקינים והמערכת מנסה שוב אוטומטית.`;
+  // V92: technical refresh state remains internal; readers only see the news.
+  if (el.dataStatus) el.dataStatus.classList.add("hidden");
 }
-
-
 function newsSnapshotFingerprint(data) {
   const parts = (data?.items || []).slice(0, 220).map((item) =>
     [
@@ -3154,7 +3135,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=91.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=92.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3714,37 +3695,103 @@ async function initPromoCard() {
 
 function renderTrending() {
   if (!el.trendingStrip || !el.trendingTopics) return;
+
   const now = Date.now();
-  const recentCutoff = now - 45 * 60 * 1000;
-  const previousCutoff = now - 3 * 60 * 60 * 1000;
-  const recent = new Map();
-  const previous = new Map();
-  const stop = new Set(["ישראל", "ישראלי", "חדשות", "דיווח", "עדכון", "עכשיו", "היום", "אחרי", "לפני", "בעקבות", "במהלך", "ראשוני", "אמר", "אומר", "כוחות", "הודעה", "המשטרה", "צה״ל", "של", "את", "על", "עם", "לא", "גם", "כי", "זה", "זו", "כל"]);
+  const hotWindow = now - 50 * 60 * 1000;
+  const compareWindow = now - 4 * 60 * 60 * 1000;
+
+  const generic = new Set([
+    "ישראל","ישראלי","ישראלית","חדשות","דיווח","דיווחים","עדכון","עדכונים",
+    "עכשיו","היום","אחרי","לפני","בעקבות","במהלך","ראשוני","אמר","אומר",
+    "כוחות","הודעה","הודעות","המשטרה","משטרה","צה״ל","צהל","אירוע","אירועים",
+    "מקור","מקורות","אתר","כתבה","פרסום","של","את","על","עם","לא","גם","כי",
+    "זה","זו","כל","עוד","חדש","חדשה","לפי","שעה","שעות","דקות"
+  ]);
+
+  const topicsByName = new Map();
+
+  const addTopic = (rawTopic, item, when, sourceKey) => {
+    const topic = cleanDisplayText(rawTopic || "").trim();
+    if (!topic || topic.length < 3 || generic.has(topic)) return;
+
+    if (!topicsByName.has(topic)) {
+      topicsByName.set(topic, {
+        topic,
+        hotReports: 0,
+        previousReports: 0,
+        sources: new Set(),
+        latestAt: 0,
+        importance: 0
+      });
+    }
+
+    const entry = topicsByName.get(topic);
+    if (when >= hotWindow) entry.hotReports += 1;
+    else entry.previousReports += 1;
+    if (sourceKey) entry.sources.add(sourceKey);
+    entry.latestAt = Math.max(entry.latestAt, when);
+    entry.importance = Math.max(entry.importance, editorialImportanceScore(item));
+  };
+
   for (const item of state.items) {
-    const when = Date.parse(item.latestReportAt || item.publishedAt);
-    if (!Number.isFinite(when) || when < previousCutoff) continue;
-    const words = String(item.title || "").replace(/https?:\/\/\S+/g, " ").match(/[\u0590-\u05FF]{3,}/g) || [];
-    const unique = new Set(words.map(clientCanonicalToken).filter((word) => !stop.has(word) && word.length >= 3));
-    for (const word of unique) {
-      if (when >= recentCutoff) recent.set(word, (recent.get(word) || 0) + 1);
-      else previous.set(word, (previous.get(word) || 0) + 1);
+    const when = Date.parse(item.latestReportAt || item.publishedAt || 0);
+    if (!Number.isFinite(when) || when < compareWindow) continue;
+
+    const sourceKey = item.publisher || item.sourceId || item.sourceName || "";
+
+    for (const entity of clientEventEntities(item.title || "")) {
+      addTopic(entity, item, when, sourceKey);
+    }
+
+    const words = String(item.title || "")
+      .replace(/https?:\/\/\S+/g, " ")
+      .match(/[\u0590-\u05FF]{3,}/g) || [];
+
+    const unique = new Set(
+      words
+        .map(clientCanonicalToken)
+        .filter((word) => word.length >= 3 && !generic.has(word))
+    );
+
+    for (const word of unique) addTopic(word, item, when, sourceKey);
+
+    for (const report of normalizeClusterReports(item).slice(0, 8)) {
+      const reportWhen = Date.parse(report.publishedAt || 0);
+      if (!Number.isFinite(reportWhen) || reportWhen < compareWindow) continue;
+      const reportSource = report.publisher || report.sourceId || report.sourceName || "";
+      for (const entity of clientEventEntities(report.title || "")) {
+        addTopic(entity, item, reportWhen, reportSource);
+      }
     }
   }
-  const topics = [...new Set([...recent.keys(), ...previous.keys()])]
-    .map((topic) => {
-      const r = recent.get(topic) || 0, p = previous.get(topic) || 0;
-      const momentum = r * 2.2 - p * 0.45;
-      return { topic, count: r + p, r, p, momentum };
+
+  const topics = [...topicsByName.values()]
+    .map((entry) => {
+      const sourceCount = entry.sources.size;
+      const velocity = entry.hotReports * 2.7 - entry.previousReports * 0.42;
+      const recencyMinutes = Math.max(0, (now - entry.latestAt) / 60000);
+      const recencyBoost = recencyMinutes <= 10 ? 8 : recencyMinutes <= 25 ? 4 : 0;
+      const sourceBoost = Math.min(18, Math.max(0, sourceCount - 1) * 5);
+      const importanceBoost = entry.importance * 0.18;
+      const score = velocity + sourceBoost + recencyBoost + importanceBoost;
+      const direction = velocity >= 5 ? "↑" : velocity >= 1.5 ? "→" : "↓";
+      return { ...entry, sourceCount, score, direction };
     })
-    .filter((x) => x.count >= 2 && (x.r >= 1 || x.count >= 4))
-    .sort((a, b) => b.momentum - a.momentum || b.count - a.count)
+    .filter((entry) => entry.sourceCount >= 2 && entry.hotReports >= 2 && entry.score >= 12)
+    .sort((a, b) => b.score - a.score || b.sourceCount - a.sourceCount || b.latestAt - a.latestAt)
     .slice(0, 7);
-  if (!topics.length) { el.trendingStrip.classList.add("hidden"); return; }
-  el.trendingTopics.innerHTML = topics.map(({topic,count,r,p}) => {
-    const direction = r > Math.max(1, p / 3) ? "↑" : r === 0 ? "↓" : "→";
-    return `<button type="button" data-topic="${escapeHtml(topic)}"><span>${escapeHtml(topic)}</span> <small>${direction} ${count}</small></button>`;
-  }).join("");
+
+  if (!topics.length) {
+    el.trendingStrip.classList.add("hidden");
+    return;
+  }
+
+  el.trendingTopics.innerHTML = topics.map(({ topic, sourceCount, direction }) =>
+    `<button type="button" data-topic="${escapeHtml(topic)}" title="${sourceCount} מקורות שונים"><span>${escapeHtml(topic)}</span> <small>${direction} ${sourceCount} מקורות</small></button>`
+  ).join("");
+
   el.trendingStrip.classList.remove("hidden");
+
   el.trendingTopics.querySelectorAll("button[data-topic]").forEach((button) => {
     button.addEventListener("click", () => {
       const topic = button.dataset.topic || "";
@@ -3755,8 +3802,6 @@ function renderTrending() {
     });
   });
 }
-
-
 function storyTimelineReports(item, limit = 6) {
   return normalizeClusterUpdates(item)
     .filter((r) => r?.publishedAt && r?.sourceName)

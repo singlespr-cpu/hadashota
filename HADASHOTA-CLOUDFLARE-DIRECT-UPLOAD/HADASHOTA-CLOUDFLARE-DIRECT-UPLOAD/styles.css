@@ -4596,3 +4596,12 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
   .feed-promo-image { width:100px; height:78px; border-radius:10px; }
   .feed-promo-copy h3 { font-size:15px; }
 }
+
+
+/* V92 — technical refresh/retry information stays internal */
+#dataStatus,
+.data-status,
+.since-visit,
+#sinceVisit {
+  display: none !important;
+}
