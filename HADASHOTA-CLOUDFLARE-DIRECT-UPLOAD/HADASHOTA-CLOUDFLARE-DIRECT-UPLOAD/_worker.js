@@ -153,7 +153,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "87.0.0",
+          version: "89.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -166,7 +166,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "87.0.0",
+        version: "89.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -177,6 +177,9 @@ export default {
     }
 
     if (url.pathname === "/sw.js") return serveNoCacheAsset(request, env, "/sw.js", "application/javascript; charset=utf-8");
+    if (url.pathname === "/app.js") return serveNoCacheAsset(request, env, "/app.js", "application/javascript; charset=utf-8");
+    if (url.pathname === "/styles.css") return serveNoCacheAsset(request, env, "/styles.css", "text/css; charset=utf-8");
+    if (url.pathname === "/site.webmanifest") return serveNoCacheAsset(request, env, "/site.webmanifest", "application/manifest+json; charset=utf-8");
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
 
@@ -303,7 +306,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v87/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v89/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1045,12 +1048,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=87`;
+  cacheUrl.search = `?shard=${shard}&v=89`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=87`;
+  lastGoodUrl.search = `?shard=${shard}&v=89`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1065,7 +1068,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "87.0.0",
+          "X-Hadashota-Version": "89.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1188,13 +1191,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "87.0.0",
+      "X-Hadashota-Version": "89.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "87.0.0",
+      "X-Hadashota-Version": "89.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1228,7 +1231,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "87.0.0"
+        "X-Hadashota-Version": "89.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1250,7 +1253,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "87.0.0"
+    "X-Hadashota-Version": "89.0.0"
   });
 }
 

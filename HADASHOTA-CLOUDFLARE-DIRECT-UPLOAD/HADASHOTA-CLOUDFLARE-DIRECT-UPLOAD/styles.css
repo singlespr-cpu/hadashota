@@ -2960,7 +2960,57 @@ html[data-theme="dark"] .settings-reset-button:hover { background:rgba(255,255,2
 body.hide-feed-images .feed .news-image { display:none !important; }
 body.hide-feed-images .feed .news-card.has-image .news-main { grid-template-columns:minmax(0,1fr) auto !important; }
 @media (max-width:720px) { body.hide-feed-images .feed .news-card.has-image .news-main { grid-template-columns:minmax(0,1fr) !important; } }
-\n\n/* V36 — smart headline notification opt-in */\n.notification-offer-card {\n  width:min(92vw,480px);\n  text-align:center;\n  padding:28px 28px 24px;\n  border-radius:22px;\n  overflow:hidden;\n}\n.notification-offer-card::before {\n  content:""; position:absolute; inset:0 0 auto; height:4px;\n  background:linear-gradient(90deg,#e82937,#ff5b62);\n}\n.notification-offer-bell {\n  width:56px; height:56px; margin:0 auto 12px; border-radius:18px; display:grid; place-items:center;\n  background:rgba(232,41,55,.09); color:#d92735;\n}\n.notification-offer-bell svg { width:27px; height:27px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }\n.notification-offer-card .modal-eyebrow { color:#d92735; }\n.notification-offer-card h2 { margin:5px auto 10px; max-width:390px; font-size:clamp(21px,3vw,28px); line-height:1.15; }\n.notification-offer-card > p { margin:0 auto; max-width:405px; color:#5d6675; font-size:13.5px; line-height:1.72; }\n.notification-offer-highlight {\n  margin:17px 0 18px; padding:11px 13px; border:1px solid rgba(232,41,55,.11); border-radius:13px;\n  background:rgba(232,41,55,.045); display:flex; align-items:flex-start; gap:9px; text-align:right; color:#4b5565; font-size:12px; line-height:1.5;\n}\n.notification-offer-highlight i { width:8px; height:8px; margin-top:5px; border-radius:50%; background:#e82937; box-shadow:0 0 0 4px rgba(232,41,55,.10); flex:0 0 auto; }\n.notification-offer-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }\n.notification-offer-actions button { border:0; border-radius:11px; padding:11px 13px; font:inherit; font-size:12px; font-weight:900; cursor:pointer; transition:transform .15s ease,box-shadow .15s ease,background .15s ease; }\n.notification-offer-actions button:active { transform:translateY(1px); }\n.notification-offer-accept { background:#e82937; color:#fff; box-shadow:0 8px 22px rgba(232,41,55,.18); }\n.notification-offer-accept:hover { background:#d82331; }\n.notification-offer-decline { background:#f1f3f6; color:#5b6573; }\n.notification-offer-decline:hover { background:#e9edf2; }\n.notification-offer-note { display:block; margin-top:11px; color:#98a2b3; font-size:9.5px; font-weight:600; }\nhtml[data-theme="dark"] .notification-offer-bell { background:rgba(255,79,91,.12); color:#ff727c; }\nhtml[data-theme="dark"] .notification-offer-card > p, html[data-theme="dark"] .notification-offer-highlight { color:#b8c0cb; }\nhtml[data-theme="dark"] .notification-offer-highlight { background:rgba(255,79,91,.055); border-color:rgba(255,114,124,.13); }\nhtml[data-theme="dark"] .notification-offer-decline { background:#202731; color:#c6ced8; }\nhtml[data-theme="dark"] .notification-offer-decline:hover { background:#28313d; }\n@media (max-width:520px) {\n  .notification-offer-card { width:calc(100vw - 28px); padding:24px 18px 20px; border-radius:19px; }\n  .notification-offer-bell { width:50px; height:50px; border-radius:16px; margin-bottom:10px; }\n  .notification-offer-card h2 { font-size:21px; max-width:310px; }\n  .notification-offer-card > p { font-size:12.5px; line-height:1.65; }\n  .notification-offer-highlight { font-size:11px; margin:14px 0 15px; }\n  .notification-offer-actions { grid-template-columns:1fr; }\n  .notification-offer-actions button { min-height:44px; font-size:12.5px; }\n  .notification-offer-decline { order:2; }\n}\n
+
+
+/* V36 — smart headline notification opt-in */
+.notification-offer-card {
+  width:min(92vw,480px);
+  text-align:center;
+  padding:28px 28px 24px;
+  border-radius:22px;
+  overflow:hidden;
+}
+.notification-offer-card::before {
+  content:""; position:absolute; inset:0 0 auto; height:4px;
+  background:linear-gradient(90deg,#e82937,#ff5b62);
+}
+.notification-offer-bell {
+  width:56px; height:56px; margin:0 auto 12px; border-radius:18px; display:grid; place-items:center;
+  background:rgba(232,41,55,.09); color:#d92735;
+}
+.notification-offer-bell svg { width:27px; height:27px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+.notification-offer-card .modal-eyebrow { color:#d92735; }
+.notification-offer-card h2 { margin:5px auto 10px; max-width:390px; font-size:clamp(21px,3vw,28px); line-height:1.15; }
+.notification-offer-card > p { margin:0 auto; max-width:405px; color:#5d6675; font-size:13.5px; line-height:1.72; }
+.notification-offer-highlight {
+  margin:17px 0 18px; padding:11px 13px; border:1px solid rgba(232,41,55,.11); border-radius:13px;
+  background:rgba(232,41,55,.045); display:flex; align-items:flex-start; gap:9px; text-align:right; color:#4b5565; font-size:12px; line-height:1.5;
+}
+.notification-offer-highlight i { width:8px; height:8px; margin-top:5px; border-radius:50%; background:#e82937; box-shadow:0 0 0 4px rgba(232,41,55,.10); flex:0 0 auto; }
+.notification-offer-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.notification-offer-actions button { border:0; border-radius:11px; padding:11px 13px; font:inherit; font-size:12px; font-weight:900; cursor:pointer; transition:transform .15s ease,box-shadow .15s ease,background .15s ease; }
+.notification-offer-actions button:active { transform:translateY(1px); }
+.notification-offer-accept { background:#e82937; color:#fff; box-shadow:0 8px 22px rgba(232,41,55,.18); }
+.notification-offer-accept:hover { background:#d82331; }
+.notification-offer-decline { background:#f1f3f6; color:#5b6573; }
+.notification-offer-decline:hover { background:#e9edf2; }
+.notification-offer-note { display:block; margin-top:11px; color:#98a2b3; font-size:9.5px; font-weight:600; }
+html[data-theme="dark"] .notification-offer-bell { background:rgba(255,79,91,.12); color:#ff727c; }
+html[data-theme="dark"] .notification-offer-card > p, html[data-theme="dark"] .notification-offer-highlight { color:#b8c0cb; }
+html[data-theme="dark"] .notification-offer-highlight { background:rgba(255,79,91,.055); border-color:rgba(255,114,124,.13); }
+html[data-theme="dark"] .notification-offer-decline { background:#202731; color:#c6ced8; }
+html[data-theme="dark"] .notification-offer-decline:hover { background:#28313d; }
+@media (max-width:520px) {
+  .notification-offer-card { width:calc(100vw - 28px); padding:24px 18px 20px; border-radius:19px; }
+  .notification-offer-bell { width:50px; height:50px; border-radius:16px; margin-bottom:10px; }
+  .notification-offer-card h2 { font-size:21px; max-width:310px; }
+  .notification-offer-card > p { font-size:12.5px; line-height:1.65; }
+  .notification-offer-highlight { font-size:11px; margin:14px 0 15px; }
+  .notification-offer-actions { grid-template-columns:1fr; }
+  .notification-offer-actions button { min-height:44px; font-size:12.5px; }
+  .notification-offer-decline { order:2; }
+}
+
 /* V38 — smart PWA / home-screen install experience */
 .settings-install-button {
   width:100%; margin-top:10px; border:1px solid rgba(232,41,55,.18); background:rgba(232,41,55,.055);
@@ -4326,5 +4376,173 @@ html[data-theme="dark"] .promo-card.is-active .promo-card-text {
     background:#151b24 !important;
     color:#f8fafc !important;
     border-inline-start-color:#2b333e !important;
+  }
+}
+
+
+/* =========================================================
+   KOTERET PLUS V88 — notification offer hard layout guard
+   ========================================================= */
+.notification-offer-modal .notification-offer-card {
+  width: min(480px, calc(100vw - 32px)) !important;
+  max-height: min(620px, calc(100dvh - 32px)) !important;
+  padding: 24px 24px 20px !important;
+  text-align: center !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.notification-offer-modal .notification-offer-bell {
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px !important;
+  min-height: 52px !important;
+  max-width: 52px !important;
+  max-height: 52px !important;
+  margin: 2px auto 10px !important;
+  border-radius: 16px !important;
+  display: grid !important;
+  place-items: center !important;
+  overflow: hidden !important;
+  flex: 0 0 52px !important;
+}
+
+.notification-offer-modal .notification-offer-bell svg {
+  display: block !important;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  min-height: 26px !important;
+  max-width: 26px !important;
+  max-height: 26px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.9 !important;
+}
+
+.notification-offer-modal .notification-offer-card h2 {
+  font-size: clamp(20px, 4vw, 26px) !important;
+  line-height: 1.18 !important;
+  margin: 5px auto 8px !important;
+}
+
+.notification-offer-modal .notification-offer-card > p {
+  font-size: 12.5px !important;
+  line-height: 1.55 !important;
+  margin: 0 auto !important;
+}
+
+.notification-offer-modal .notification-offer-highlight {
+  margin: 12px 0 !important;
+  padding: 9px 11px !important;
+}
+
+.notification-offer-modal .notification-offer-actions {
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 30 !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  margin-top: 12px !important;
+  padding: 9px 0 2px !important;
+  background: rgba(255,255,255,.98) !important;
+}
+
+html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
+  background: rgba(21,24,33,.98) !important;
+}
+
+.notification-offer-modal .notification-offer-actions button {
+  min-height: 42px !important;
+}
+
+@media (max-width:700px) {
+  .notification-offer-modal {
+    align-items: center !important;
+    padding:
+      max(8px, env(safe-area-inset-top))
+      10px
+      max(8px, env(safe-area-inset-bottom)) !important;
+  }
+
+  .notification-offer-modal .notification-offer-card {
+    width: min(460px, calc(100vw - 20px)) !important;
+    max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom))) !important;
+    padding: 14px 14px max(12px, env(safe-area-inset-bottom)) !important;
+    border-radius: 20px !important;
+  }
+
+  .notification-offer-modal .notification-offer-bell {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
+    max-width: 38px !important;
+    max-height: 38px !important;
+    flex-basis: 38px !important;
+    border-radius: 12px !important;
+    margin: 0 auto 5px !important;
+  }
+
+  .notification-offer-modal .notification-offer-bell svg {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
+  }
+
+  .notification-offer-modal .modal-eyebrow {
+    font-size: 9px !important;
+  }
+
+  .notification-offer-modal .notification-offer-card h2 {
+    font-size: 19px !important;
+    line-height: 1.15 !important;
+    margin: 3px auto 7px !important;
+    padding-left: 36px !important;
+  }
+
+  .notification-offer-modal .notification-offer-card > p {
+    font-size: 11px !important;
+    line-height: 1.45 !important;
+  }
+
+  .notification-offer-modal .notification-offer-highlight {
+    margin: 8px 0 !important;
+    padding: 7px 9px !important;
+    font-size: 9.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  .notification-offer-modal .notification-offer-actions {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 7px !important;
+    margin-top: 8px !important;
+    padding-top: 7px !important;
+  }
+
+  .notification-offer-modal .notification-offer-actions button {
+    min-height: 40px !important;
+    padding: 8px 9px !important;
+    font-size: 11px !important;
+  }
+
+  .notification-offer-modal .notification-offer-note {
+    margin-top: 6px !important;
+    font-size: 8.5px !important;
+  }
+}
+
+@media (max-height:600px) {
+  .notification-offer-modal .notification-offer-bell,
+  .notification-offer-modal .notification-offer-highlight,
+  .notification-offer-modal .notification-offer-note {
+    display: none !important;
+  }
+  .notification-offer-modal .notification-offer-card {
+    max-height: calc(100dvh - 12px) !important;
   }
 }

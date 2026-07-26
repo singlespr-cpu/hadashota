@@ -1,3 +1,50 @@
+const KOTERET_CLIENT_BUILD = "89.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v89-1";
+
+(function healOldClientState() {
+  try {
+    const previousSchema = localStorage.getItem("hadashota.cacheSchema");
+    const previousBuild = localStorage.getItem("hadashota.clientBuild");
+
+    if (previousSchema !== KOTERET_CACHE_SCHEMA) {
+      // Remove only derived/runtime data. User choices (theme, city,
+      // notification preference, etc.) are intentionally preserved.
+      const derivedPrefixes = [
+        "hadashota.lastGoodShard.",
+        "hadashota.lastQualifiedLead.",
+        "hadashota.displayedLead.",
+        "hadashota.lastLeadFingerprint",
+        "hadashota.pwaHardRefreshAt"
+      ];
+      for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+        const key = localStorage.key(i);
+        if (key && derivedPrefixes.some((prefix) => key.startsWith(prefix))) {
+          localStorage.removeItem(key);
+        }
+      }
+
+      localStorage.setItem("hadashota.cacheSchema", KOTERET_CACHE_SCHEMA);
+    }
+
+    localStorage.setItem("hadashota.clientBuild", KOTERET_CLIENT_BUILD);
+
+    // Old historical service-worker versions may have created CacheStorage
+    // entries even though the current SW does not cache pages. Clear only
+    // caches belonging to this application.
+    if ("caches" in window && previousBuild !== KOTERET_CLIENT_BUILD) {
+      caches.keys()
+        .then((names) => Promise.all(
+          names
+            .filter((name) => /hadashota|koteret|news/i.test(name))
+            .map((name) => caches.delete(name))
+        ))
+        .catch(() => {});
+    }
+  } catch (error) {
+    console.warn("Client self-heal skipped", error);
+  }
+})();
+
 const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
 const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
 const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
@@ -319,12 +366,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V87 · API ${apiVersion}` : "גרסה V87 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V89 · API ${apiVersion}` : "גרסה V89 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V87 · API V87";
+    marker.textContent = "גרסה V89 · API V89";
   } catch (error) {
-    marker.textContent = "גרסה V87 · API לא מחובר";
+    marker.textContent = "גרסה V89 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2696,13 +2743,112 @@ function renderBreaking() {
   el.breakingBanner.classList.remove("hidden");
 }
 
+
+/* V89 — "האחרונים החשובים"
+   70% freshness + 30% editorial importance, with newsroom penalties for
+   obvious PR/celebrity/soft items. Those stories remain in the full feed. */
+function latestEditorialPenalty(item) {
+  const reports = normalizeClusterReports(item);
+  const text = [
+    item?.title || "",
+    item?.preview || "",
+    ...reports.slice(0, 6).map((r) => `${r.title || ""} ${r.preview || ""}`)
+  ].join(" ").toLowerCase();
+
+  let penalty = 0;
+
+  const softPr = [
+    /סינגל חדש|שיר חדש|קליפ חדש|אלבום חדש/,
+    /משיק(?:ה|ים)?\s+(?:שיר|סינגל|קליפ|אלבום)|משחרר(?:ת|ים)?\s+(?:שיר|סינגל|קליפ)/,
+    /רכילות|סלב|סלבס|לוק חדש|אירוסין|חתונה|פרידה|זוגיות/,
+    /האח הגדול|הישרדות|ריאליטי|זמר במסכה/,
+    /אינסטגרם|טיקטוק/
+  ];
+
+  const promotional = [
+    /בשיתוף|תוכן שיווקי|פרסומי|ממומן|קמפיין|השקה חגיגית/,
+    /מבצע חדש|הנחה מיוחדת|הכירו את/
+  ];
+
+  if (softPr.some((rx) => rx.test(text))) penalty += 36;
+  if (promotional.some((rx) => rx.test(text))) penalty += 42;
+
+  const reportCount = Math.max(1, Number(item?.reportCount) || reports.length || 1);
+  if (String(item?.category || "") === "culture" && reportCount <= 1) penalty += 12;
+
+  return penalty;
+}
+
+function latestNewsroomScore(item) {
+  const reports = normalizeClusterReports(item);
+  const latestMs = Date.parse(item?.latestReportAt || item?.publishedAt || 0);
+  const ageMinutes = Number.isFinite(latestMs)
+    ? Math.max(0, (Date.now() - latestMs) / 60000)
+    : 9999;
+
+  const freshness =
+    ageMinutes <= 2 ? 100 :
+    ageMinutes <= 5 ? 97 :
+    ageMinutes <= 10 ? 93 :
+    ageMinutes <= 20 ? 86 :
+    ageMinutes <= 30 ? 78 :
+    ageMinutes <= 45 ? 68 :
+    ageMinutes <= 60 ? 58 :
+    ageMinutes <= 90 ? 44 :
+    ageMinutes <= 120 ? 30 :
+    Math.max(0, 30 - (ageMinutes - 120) / 6);
+
+  const importance = editorialImportanceScore(item);
+  const verification = storyVerification(item);
+  const reportCount = Math.max(1, Number(item?.reportCount) || reports.length || 1);
+
+  let score = freshness * 0.70 + importance * 0.30;
+  if (verification.hasOfficial) score += 7;
+  if (reportCount >= 2) score += Math.min(10, (reportCount - 1) * 3);
+  score -= latestEditorialPenalty(item);
+
+  return { score, freshness, importance, ageMinutes, reportCount };
+}
+
+function importantLatestItems(items, limit = 20) {
+  const siteItems = items.filter((item) => item.sourceKind === "site" && item.url);
+
+  const ranked = siteItems
+    .map((item) => ({ item, meta: latestNewsroomScore(item) }))
+    .filter(({ meta }) => meta.ageMinutes <= 120 && meta.score >= 54)
+    .sort((a, b) =>
+      b.meta.score - a.meta.score ||
+      b.meta.importance - a.meta.importance ||
+      Date.parse(b.item.latestReportAt || b.item.publishedAt || 0) -
+        Date.parse(a.item.latestReportAt || a.item.publishedAt || 0)
+    );
+
+  // Quiet-news fallback: keep the module useful, but do not admit obvious PR.
+  if (ranked.length < 5) {
+    const used = new Set(ranked.map(({ item }) => item.id || item.url || item.title));
+    const fallback = siteItems
+      .map((item) => ({ item, meta: latestNewsroomScore(item) }))
+      .filter(({ item, meta }) => {
+        const key = item.id || item.url || item.title;
+        return !used.has(key) &&
+          meta.ageMinutes <= 90 &&
+          meta.score >= 42 &&
+          latestEditorialPenalty(item) < 30;
+      })
+      .sort((a, b) =>
+        b.meta.score - a.meta.score ||
+        Date.parse(b.item.latestReportAt || b.item.publishedAt || 0) -
+          Date.parse(a.item.latestReportAt || a.item.publishedAt || 0)
+      );
+    ranked.push(...fallback.slice(0, 5 - ranked.length));
+  }
+
+  return ranked.slice(0, limit).map(({ item }) => item);
+}
+
 function renderFlashDeck() {
   if (!el.flashDeck || !el.flashDeckItems) return;
-  const cutoff = Date.now() - 6 * 60 * 60 * 1000;
-  const preferred = state.items
-    .filter((item) => item.sourceKind === "site" && item.url && Date.parse(item.latestReportAt || item.publishedAt) >= cutoff)
-    .sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt))
-    .slice(0, 20);
+  const preferred = importantLatestItems(state.items, 20);
 
   clearFlashDeckTimer();
 
@@ -2864,10 +3010,13 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
-    // iOS can keep a Home-Screen web app process alive for a long time. Ask for a
-    // lightweight SW update check on every real page load without caching sw.js.
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=89.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
+
+    const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
+    for (const registration of registrations) {
+      try { await registration.update(); } catch {}
+    }
   } catch (error) {
     console.warn("Service worker registration failed", error);
   }
