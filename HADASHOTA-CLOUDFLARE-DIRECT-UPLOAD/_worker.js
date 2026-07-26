@@ -134,7 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "71.0.0",
+          version: "75.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -147,7 +147,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "71.0.0",
+        version: "75.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -161,17 +161,28 @@ export default {
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
 
-    // V71: never translate a canonical browser URL into /index.html (or another
-    // non-canonical HTML filename) before asking the Static Assets binding.
-    // Cloudflare applies html_handling to env.ASSETS.fetch(), so requesting
-    // /index.html can legitimately redirect to /. Passing that redirect back to
-    // a request for / creates a / -> /index.html -> / loop. Always fetch the
-    // incoming canonical path instead.
-    if (url.pathname === "/index.html") return Response.redirect(`${url.origin}/`, 308);
-    if (url.pathname === "/") return serveHtmlAsset(request, env, url.origin);
-    if (["/about", "/how-it-works", "/contact", "/copyright", "/privacy"].includes(url.pathname)) {
-      return serveHtmlAsset(request, env, url.origin);
+    // V72: Static Assets runs with html_handling:"none".
+    // Resolve clean HTML routes explicitly and internally so the browser always
+    // receives a 200 response. Never redirect "/" to itself and never rely on
+    // automatic HTML canonicalization.
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      return serveHtmlAsset(request, env, url.origin, "/index.html");
     }
+
+    const htmlRoutes = new Map([
+      ["/about", "/about.html"],
+      ["/about.html", "/about.html"],
+      ["/how-it-works", "/how-it-works.html"],
+      ["/how-it-works.html", "/how-it-works.html"],
+      ["/contact", "/contact.html"],
+      ["/contact.html", "/contact.html"],
+      ["/copyright", "/copyright.html"],
+      ["/copyright.html", "/copyright.html"],
+      ["/privacy", "/privacy.html"],
+      ["/privacy.html", "/privacy.html"]
+    ]);
+    const htmlAssetPath = htmlRoutes.get(url.pathname);
+    if (htmlAssetPath) return serveHtmlAsset(request, env, url.origin, htmlAssetPath);
 
     return env.ASSETS.fetch(request);
   }
@@ -188,12 +199,15 @@ async function serveNoCacheAsset(request, env, assetPath, contentType = "applica
   return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
 }
 
-async function serveHtmlAsset(request, env, origin) {
-  // Preserve the canonical incoming pathname. Static Assets performs its own
-  // HTML routing; rewriting / to /index.html here can create a redirect loop.
-  const asset = await env.ASSETS.fetch(request);
+async function serveHtmlAsset(request, env, origin, assetPath) {
+  const assetUrl = new URL(assetPath, request.url);
+  // Preserve query parameters only for cache-busting/debug parameters; the
+  // requested asset path itself is explicit and cannot be normalized into a loop.
+  assetUrl.search = new URL(request.url).search;
+  const assetRequest = new Request(assetUrl, request);
+  const asset = await env.ASSETS.fetch(assetRequest);
   if (!asset.ok) return asset;
-  const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
+
   const headers = new Headers(asset.headers);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate");
@@ -203,6 +217,13 @@ async function serveHtmlAsset(request, env, origin) {
   headers.set("Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=(), usb=()");
   headers.set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests");
   headers.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+
+  // HEAD must remain body-less, while GET receives the rewritten HTML.
+  if (request.method === "HEAD") {
+    return new Response(null, { status: 200, headers });
+  }
+  const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
+  headers.delete("Content-Length");
   return new Response(html, { status: 200, headers });
 }
 
@@ -232,7 +253,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v70/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v75/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -487,7 +508,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/67 (+strict semantic media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/75 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -538,7 +559,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/67 (+news aggregator; strict semantic media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/75 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -869,6 +890,46 @@ function getShardSources(shard) {
   return filtered.sort((a, b) => priority(b) - priority(a));
 }
 
+
+function summarizeSourceHealth(settled, now, cutoff) {
+  return settled.map((result) => {
+    const recentItems = result.items.filter((item) => {
+      const t = Date.parse(item.publishedAt);
+      return Number.isFinite(t) && t >= cutoff && t <= now + 10 * 60 * 1000;
+    });
+    const lastItemAt = recentItems[0]?.publishedAt || result.items[0]?.publishedAt || null;
+    const freshnessMinutes = lastItemAt ? Math.max(0, (now - Date.parse(lastItemAt)) / 60000) : 9999;
+    let healthScore = 100;
+    if (result.error) healthScore -= 70;
+    if (!recentItems.length) healthScore -= 20;
+    if (result.latencyMs > 5000) healthScore -= 18;
+    else if (result.latencyMs > 3000) healthScore -= 9;
+    if (freshnessMinutes > 360) healthScore -= 12;
+    healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
+    const healthStatus = healthScore < 35 ? "offline" : healthScore < 70 ? "degraded" : "healthy";
+    return {
+      id: result.source.id,
+      publisher: result.source.publisher,
+      name: result.source.name,
+      kind: result.source.kind,
+      home: result.source.home,
+      verified: !!result.source.verified,
+      official: !!result.source.official,
+      independent: !!result.source.independent,
+      itemCount: recentItems.length,
+      latencyMs: result.latencyMs,
+      lastItemAt,
+      healthScore,
+      healthStatus,
+      error: result.error || null
+    };
+  }).sort((a,b) =>
+    Number(b.official) - Number(a.official) ||
+    b.healthScore - a.healthScore ||
+    Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0)
+  );
+}
+
 async function handleNews(request, env, ctx) {
   const requestUrl = new URL(request.url);
   const shard = requestUrl.searchParams.get("shard") === "telegram" ? "telegram" : "sites";
@@ -881,17 +942,34 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=68`;
+  cacheUrl.search = `?shard=${shard}&v=75`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=68`;
+  lastGoodUrl.search = `?shard=${shard}&v=75`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
     const cached = await cache.match(cacheKey);
-    if (cached) return cors(cached);
+    if (cached) {
+      // V74 fast boot: return the shared snapshot immediately, but explicitly
+      // tell the browser that this was a cache hit so it can start exactly one
+      // full-source refresh in the background. This avoids a blank first paint.
+      try {
+        const cachedPayload = await cached.json();
+        cachedPayload.servedFromCache = true;
+        cachedPayload.servedAt = new Date().toISOString();
+        return cors(json(cachedPayload, 200, {
+          "Cache-Control": "no-store, max-age=0",
+          "X-Hadashota-Version": "75.0.0",
+          "X-Hadashota-Shard": shard,
+          "X-Hadashota-Cache": "HIT"
+        }));
+      } catch {
+        // Corrupt cache entry: ignore it and do one real collection below.
+      }
+    }
   }
 
   const started = Date.now();
@@ -906,9 +984,24 @@ async function handleNews(request, env, ctx) {
     const rawItems = settled.flatMap((result) => result.items);
     const now = Date.now();
     const cutoff = now - 30 * 60 * 60 * 1000;
+    const sourceHealth = summarizeSourceHealth(settled, now, cutoff);
+    const failedSources = settled
+      .filter((result) => result.error)
+      .map((result) => ({ id: result.source.id, name: result.source.name, error: result.error }));
 
     if (!rawItems.length) {
-      return await lastGoodOrError(cache, lastGoodKey, shard, "all_sources_failed");
+      return await lastGoodOrError(cache, lastGoodKey, shard, "all_sources_failed", sourceHealth, {
+        configuredSources: SOURCES.length,
+        configuredShardSources: shardSources.length,
+        attemptedSources: settled.length,
+        activeSources: 0,
+        items: 0,
+        telegramSources: 0,
+        failedSources: failedSources.length,
+        healthySources: sourceHealth.filter((source) => source.healthStatus === "healthy").length,
+        degradedSources: sourceHealth.filter((source) => source.healthStatus === "degraded").length,
+        offlineSources: sourceHealth.filter((source) => source.healthStatus === "offline").length
+      });
     }
 
     const recent = rawItems
@@ -920,7 +1013,18 @@ async function handleNews(request, env, ctx) {
       .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
 
     if (!recent.length) {
-      return await lastGoodOrError(cache, lastGoodKey, shard, "no_recent_items");
+      return await lastGoodOrError(cache, lastGoodKey, shard, "no_recent_items", sourceHealth, {
+        configuredSources: SOURCES.length,
+        configuredShardSources: shardSources.length,
+        attemptedSources: settled.length,
+        activeSources: 0,
+        items: 0,
+        telegramSources: 0,
+        failedSources: failedSources.length,
+        healthySources: sourceHealth.filter((source) => source.healthStatus === "healthy").length,
+        degradedSources: sourceHealth.filter((source) => source.healthStatus === "degraded").length,
+        offlineSources: sourceHealth.filter((source) => source.healthStatus === "offline").length
+      });
     }
 
     const clustered = clusterItems(recent).slice(0, shard === "telegram" ? 420 : 360);
@@ -945,33 +1049,6 @@ async function handleNews(request, env, ctx) {
       }))
       .sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0));
 
-    const failedSources = settled
-      .filter((result) => result.error)
-      .map((result) => ({ id: result.source.id, name: result.source.name, error: result.error }));
-
-    const sourceHealth = settled.map((result) => {
-      const recentItems = result.items.filter((item) => {
-        const t = Date.parse(item.publishedAt);
-        return Number.isFinite(t) && t >= cutoff && t <= now + 10 * 60 * 1000;
-      });
-      const lastItemAt = recentItems[0]?.publishedAt || result.items[0]?.publishedAt || null;
-      const freshnessMinutes = lastItemAt ? Math.max(0, (now - Date.parse(lastItemAt)) / 60000) : 9999;
-      let healthScore = 100;
-      if (result.error) healthScore -= 70;
-      if (!recentItems.length) healthScore -= 20;
-      if (result.latencyMs > 5000) healthScore -= 18;
-      else if (result.latencyMs > 3000) healthScore -= 9;
-      if (freshnessMinutes > 360) healthScore -= 12;
-      healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
-      const healthStatus = healthScore < 35 ? "offline" : healthScore < 70 ? "degraded" : "healthy";
-      return {
-        id: result.source.id, publisher: result.source.publisher, name: result.source.name,
-        kind: result.source.kind, home: result.source.home, verified: !!result.source.verified,
-        official: !!result.source.official, independent: !!result.source.independent,
-        itemCount: recentItems.length, latencyMs: result.latencyMs, lastItemAt,
-        healthScore, healthStatus, error: result.error || null
-      };
-    }).sort((a,b) => Number(b.official)-Number(a.official) || b.healthScore-a.healthScore || Date.parse(b.lastItemAt||0)-Date.parse(a.lastItemAt||0));
 
     // V70: if even one source produced current items, return the fresh partial
     // result instead of hiding it behind an older snapshot. The UI already marks
@@ -985,6 +1062,7 @@ async function handleNews(request, env, ctx) {
       shard,
       stale: false,
       partial: failedSources.length > 0,
+      servedFromCache: false,
       tookMs: Date.now() - started,
       items: clustered,
       sources: sourceHealth,
@@ -1007,13 +1085,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "71.0.0",
+      "X-Hadashota-Version": "75.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "71.0.0",
+      "X-Hadashota-Version": "75.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1030,7 +1108,7 @@ async function handleNews(request, env, ctx) {
   }
 }
 
-async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
+async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources = [], currentStats = {}) {
   const cached = await cache.match(lastGoodKey);
   if (cached) {
     try {
@@ -1042,22 +1120,35 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       payload.stale = true;
       payload.staleReason = reason;
       payload.servedAt = new Date().toISOString();
+      if (Array.isArray(currentSources) && currentSources.length) payload.sources = currentSources;
+      payload.stats = { ...(payload.stats || {}), ...(currentStats || {}) };
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "71.0.0"
+        "X-Hadashota-Version": "75.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
     }
   }
+  const generatedAt = new Date().toISOString();
   return json({
-    error: "News sources are temporarily unavailable",
+    generatedAt,
+    snapshotId: stableId(`${shard}|empty|${generatedAt}`),
     shard,
     stale: true,
     staleReason: reason,
-    refreshAfterSeconds: 8
-  }, 503, { "Cache-Control": "no-store", "Retry-After": "8" });
+    partial: true,
+    refreshAfterSeconds: 8,
+    items: [],
+    sources: Array.isArray(currentSources) ? currentSources : [],
+    stats: currentStats || {},
+    failures: []
+  }, 200, {
+    "Cache-Control": "no-store",
+    "X-Hadashota-Stale": "1",
+    "X-Hadashota-Version": "75.0.0"
+  });
 }
 
 async function fetchSourcesWithLimit(sources, concurrency = 6, retryBudget = { remaining: 0 }, forceFresh = false) {
@@ -1174,7 +1265,7 @@ async function fetchWithTimeout(url, timeoutMs, forceFresh = false) {
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   try {
     const headers = {
-      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/68.0; +news-aggregator)",
+      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/75.0; +news-aggregator)",
       "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
       "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
     };
@@ -1472,7 +1563,9 @@ function clusterItems(items) {
       url: item.url,
       publishedAt: item.publishedAt,
       imageUrl: item.imageUrl || null,
-      title: item.title || ""
+      title: item.title || "",
+      preview: item.preview || "",
+      category: item.category || null
     };
 
     if (!match) {
