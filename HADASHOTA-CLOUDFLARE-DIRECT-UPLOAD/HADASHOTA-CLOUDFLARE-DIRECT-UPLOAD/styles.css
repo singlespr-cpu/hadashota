@@ -4546,3 +4546,53 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
     max-height: calc(100dvh - 12px) !important;
   }
 }
+
+
+/* V90 — optional sponsored item at the top of "כל העדכונים" */
+.feed-promo-card {
+  border-inline-end: 3px solid #ff3b30 !important;
+}
+.feed-promo-link {
+  display: grid;
+  grid-template-columns: 150px minmax(0,1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 14px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.feed-promo-image {
+  width: 150px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 13px;
+  display: block;
+}
+.feed-promo-copy { min-width: 0; }
+.feed-promo-meta { margin-bottom: 6px; }
+.feed-promo-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #fff0ef;
+  color: #d92d20;
+  font-size: 10px;
+  font-weight: 900;
+}
+.feed-promo-copy h3 {
+  margin: 0;
+  font-size: clamp(17px, 1.55vw, 22px);
+  line-height: 1.3;
+}
+.feed-promo-copy p {
+  margin: 7px 0 0;
+  color: #7b8494;
+  font-size: 11px;
+}
+@media(max-width:700px){
+  .feed-promo-link { grid-template-columns: 100px minmax(0,1fr); gap: 11px; padding: 11px; }
+  .feed-promo-image { width:100px; height:78px; border-radius:10px; }
+  .feed-promo-copy h3 { font-size:15px; }
+}

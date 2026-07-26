@@ -76,7 +76,9 @@ const STOP_WORDS = new Set(["של", "את", "על", "עם", "לא", "גם", "ז�
 const PROMO_ADMIN_CREDENTIAL_HASH = "7c172ed999cb4ffb53236212897b2dd379020531e6b0136130dea3de49d35672";
 const PROMO_ADMIN_PATH = "/manage-kp-7538";
 const PROMO_CACHE_PATH = "/__koteretplus_promo_v1";
+const FEED_PROMO_CACHE_PATH = "/__koteretplus_feed_promo_v1";
 let promoMemory = null;
+let feedPromoMemory = null;
 
 const CITIES = {
   telaviv: { name: "תל אביב", latitude: 32.0853, longitude: 34.7818, candleMinutes: 18 },
@@ -97,6 +99,14 @@ export default {
     if (url.pathname === "/api/admin/promo") {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return handlePromoAdmin(request);
+    }
+    if (url.pathname === "/api/feed-promo") {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handleFeedPromoPublic(request);
+    }
+    if (url.pathname === "/api/admin/feed-promo") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return handleFeedPromoAdmin(request);
     }
     if (url.pathname === PROMO_ADMIN_PATH) {
       return serveHtmlAsset(request, env, url.origin, "/admin.html");
@@ -153,7 +163,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "89.0.0",
+          version: "90.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -166,7 +176,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "89.0.0",
+        version: "90.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -241,6 +251,28 @@ async function handlePromoAdmin(request){
   return json({error:"Unknown action"},400,{"Cache-Control":"no-store"})
 }
 
+
+function feedPromoCacheKey(origin){return new Request(`${origin}${FEED_PROMO_CACHE_PATH}`,{method:"GET"})}
+async function readFeedPromo(request){
+  if(feedPromoMemory)return feedPromoMemory;
+  try{const cached=await caches.default.match(feedPromoCacheKey(new URL(request.url).origin));if(cached){feedPromoMemory=await cached.json();return feedPromoMemory}}catch{}
+  return{active:false,text:"",url:"",imageData:"",updatedAt:null}
+}
+async function writeFeedPromo(request,promo){
+  feedPromoMemory=promo;
+  try{await caches.default.put(feedPromoCacheKey(new URL(request.url).origin),new Response(JSON.stringify(promo),{headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"public, max-age=31536000"}}))}catch(e){console.warn("Feed promo cache write failed",e)}
+}
+async function handleFeedPromoPublic(request){return json(await readFeedPromo(request),200,{"Cache-Control":"no-store","X-Koteret-Promo-Store":"edge-cache"})}
+async function handleFeedPromoAdmin(request){
+  let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
+  if(!(await verifyPromoAdmin(body?.username,body?.password)))return json({error:"שם משתמש או סיסמה שגויים"},401,{"Cache-Control":"no-store"});
+  const action=String(body?.action||"get");
+  if(action==="get")return json({ok:true,promo:await readFeedPromo(request)},200,{"Cache-Control":"no-store"});
+  if(action==="remove"){const promo={active:false,text:"",url:"",imageData:"",updatedAt:new Date().toISOString()};await writeFeedPromo(request,promo);return json({ok:true,promo},200,{"Cache-Control":"no-store"})}
+  if(action==="save"){const promo=sanitizePromoPayload(body?.promo||{});if(!promo.active)return json({error:"יש להזין מלל וקישור תקין"},400,{"Cache-Control":"no-store"});await writeFeedPromo(request,promo);return json({ok:true,promo},200,{"Cache-Control":"no-store"})}
+  return json({error:"Unknown action"},400,{"Cache-Control":"no-store"})
+}
+
 async function serveNoCacheAsset(request, env, assetPath, contentType = "application/octet-stream") {
   const assetRequest = new Request(new URL(assetPath, request.url), request);
   const asset = await env.ASSETS.fetch(assetRequest);
@@ -306,7 +338,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v89/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v90/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1048,12 +1080,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=89`;
+  cacheUrl.search = `?shard=${shard}&v=90`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=89`;
+  lastGoodUrl.search = `?shard=${shard}&v=90`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1068,7 +1100,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "89.0.0",
+          "X-Hadashota-Version": "90.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1191,13 +1223,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "89.0.0",
+      "X-Hadashota-Version": "90.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "89.0.0",
+      "X-Hadashota-Version": "90.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1231,7 +1263,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "89.0.0"
+        "X-Hadashota-Version": "90.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1253,7 +1285,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "89.0.0"
+    "X-Hadashota-Version": "90.0.0"
   });
 }
 

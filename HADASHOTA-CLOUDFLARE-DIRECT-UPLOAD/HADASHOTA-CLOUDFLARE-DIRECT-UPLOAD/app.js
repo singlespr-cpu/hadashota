@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "89.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v89-1";
+const KOTERET_CLIENT_BUILD = "90.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v90-1";
 
 (function healOldClientState() {
   try {
@@ -270,6 +270,8 @@ const LOCAL_LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
+let feedPromoData = null;
+
 const CATEGORY_LABELS = {
   all: "כל העדכונים",
   security: "ביטחוני",
@@ -318,6 +320,7 @@ function init() {
   restoreLocalLastGood();
   loadUtilities();
   initPromoCard();
+  initFeedPromo();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
   // V80 always-ready strategy:
@@ -366,12 +369,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V89 · API ${apiVersion}` : "גרסה V89 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V90 · API ${apiVersion}` : "גרסה V90 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V89 · API V89";
+    marker.textContent = "גרסה V90 · API V90";
   } catch (error) {
-    marker.textContent = "גרסה V89 · API לא מחובר";
+    marker.textContent = "גרסה V90 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2086,7 +2089,8 @@ function renderFeed() {
     return;
   }
 
-  el.feed.innerHTML = items.map(newsCardHtml).join("");
+  const feedPromoHtml = feedPromoData ? feedPromoCardHtml(feedPromoData) : "";
+  el.feed.innerHTML = feedPromoHtml + items.map(newsCardHtml).join("");
 }
 
 function currentFeedLabel() {
@@ -3010,7 +3014,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=89.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=90.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3475,6 +3479,45 @@ function weatherLabel(code) {
   return "מזג אוויר נעים";
 }
 
+
+
+async function initFeedPromo() {
+  const apply = (promo) => {
+    feedPromoData = promo?.active && promo?.text && promo?.url ? promo : null;
+    try { renderFeed(); } catch {}
+  };
+  try {
+    const response = await fetch(`/api/feed-promo?_=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Feed promo HTTP ${response.status}`);
+    apply(await response.json());
+  } catch {
+    apply(null);
+  }
+  window.setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const response = await fetch(`/api/feed-promo?_=${Date.now()}`, { cache: "no-store" });
+      if (response.ok) apply(await response.json());
+    } catch {}
+  }, 60000);
+}
+
+function feedPromoCardHtml(promo) {
+  if (!promo?.active || !promo?.text || !promo?.url) return "";
+  const image = promo.imageData
+    ? `<img class="feed-promo-image" src="${escapeHtml(promo.imageData)}" alt="" loading="eager">`
+    : "";
+  return `<article class="news-card feed-promo-card" aria-label="פרסום">
+    <a class="feed-promo-link" href="${escapeHtml(promo.url)}" target="_blank" rel="noopener noreferrer sponsored">
+      ${image}
+      <div class="feed-promo-copy">
+        <div class="feed-promo-meta"><span class="feed-promo-badge">פרסום</span></div>
+        <h3>${escapeHtml(String(promo.text).slice(0,120))}</h3>
+        <p>תוכן פרסומי · לחצו לפרטים</p>
+      </div>
+    </a>
+  </article>`;
+}
 
 async function initPromoCard() {
   const card = document.querySelector("#promoCard");
