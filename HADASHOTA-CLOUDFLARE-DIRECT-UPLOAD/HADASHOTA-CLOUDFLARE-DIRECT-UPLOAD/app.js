@@ -310,12 +310,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V80 · API ${apiVersion}` : "גרסה V80 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V81 · API ${apiVersion}` : "גרסה V81 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V80 · API V80";
+    marker.textContent = "גרסה V81 · API V81";
   } catch (error) {
-    marker.textContent = "גרסה V80 · API לא מחובר";
+    marker.textContent = "גרסה V81 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2006,6 +2006,111 @@ function projectItemForKind(item, kind) {
   };
 }
 
+
+/* V81 — Smart editorial ordering
+   The feed remains time-sensitive, but consequential public-interest stories
+   receive a controlled ranking boost. Entertainment/lifestyle never disappears;
+   it simply does not outrank a comparably fresh security/public-safety story. */
+function editorialImportanceScore(item) {
+  if (!item) return 0;
+
+  const category = String(item.category || "other");
+  const reports = normalizeClusterReports(item);
+  const text = [
+    item.title || "",
+    item.preview || "",
+    ...reports.slice(0, 8).map((report) => `${report.title || ""} ${report.preview || ""}`)
+  ].join(" ").toLowerCase();
+
+  const latestMs = Date.parse(item.latestReportAt || item.publishedAt || 0);
+  const ageMinutes = Number.isFinite(latestMs) ? Math.max(0, (Date.now() - latestMs) / 60000) : 1440;
+
+  const categoryBase = {
+    security: 38,
+    diplomatic: 28,
+    politics: 22,
+    economy: 17,
+    health: 19,
+    world: 15,
+    technology: 8,
+    culture: 3,
+    sports: 2,
+    other: 7
+  }[category] ?? 7;
+
+  const highImpact = [
+    /מלחמ|ירי|רקט|טיל|כטב|חדיר|פיגוע|טרור|חטופ|חטיפה|חלל|הרוג|נרצח|פצוע|אזעק|פיקוד העורף|צה["״']?ל|שב["״']?כ|מוסד/,
+    /קבינט|ראש הממשלה|ממשלה|כנסת|בחירות|התפטר|פיטור|חקירה|כתב אישום|בג["״']?ץ|בית המשפט העליון/,
+    /רעידת אדמה|שריפה|שיטפון|אסון|קריסה|תאונה קטלנית|מצב חירום|מגפה|התפרצות/,
+    /ריבית|בנק ישראל|תקציב|גירעון|אבטלה|מדד המחירים|העלאת מס|הורדת מס/,
+    /הסכם|הפסקת אש|סנקציות|פסגה|שיחות גרעין|איראן|לבנון|סוריה|עזה/
+  ];
+  const mediumImpact = [
+    /משטרה|מעצר|חשד|פלילי|מחאה|שביתה|עיצומים|חוק|ועדה|מבקר המדינה/,
+    /בית חולים|משרד הבריאות|תרופה|ריקול|זיהום|מזג אוויר קיצוני/,
+    /בורסה|שקל|דולר|חברה ציבורית|פיטורים|עסקה/
+  ];
+  const softNews = [
+    /רכילות|סלב|סלבס|משפיענ|אינסטגרם|טיקטוק|חתונה|אירוסין|זוגיות|פרידה|בגד ים|לוק חדש/,
+    /האח הגדול|הישרדות|ריאליטי|כוכב נולד|זמרת|זמר|דוגמנית|שחקנית|שחקן/
+  ];
+
+  let score = categoryBase;
+  if (highImpact.some((rx) => rx.test(text))) score += 30;
+  if (mediumImpact.some((rx) => rx.test(text))) score += 14;
+  if (softNews.some((rx) => rx.test(text))) score -= 22;
+
+  const verification = storyVerification(item);
+  if (verification.hasOfficial) score += 8;
+  score += Math.min(14, Math.max(0, reports.length - 1) * 3);
+  score += Math.round(storyHotScore(item) * 0.18);
+
+  // Freshness is still important: old "important" news must not permanently
+  // pin itself above genuinely new updates.
+  score += ageMinutes <= 5 ? 18
+    : ageMinutes <= 15 ? 15
+    : ageMinutes <= 30 ? 12
+    : ageMinutes <= 60 ? 8
+    : ageMinutes <= 120 ? 4
+    : ageMinutes <= 240 ? 0
+    : -Math.min(25, Math.round((ageMinutes - 240) / 30));
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function smartEditorialSort(items) {
+  const now = Date.now();
+  return [...items].sort((a, b) => {
+    const aMs = Date.parse(a.latestReportAt || a.publishedAt || 0);
+    const bMs = Date.parse(b.latestReportAt || b.publishedAt || 0);
+    const aAge = Number.isFinite(aMs) ? Math.max(0, (now - aMs) / 60000) : 9999;
+    const bAge = Number.isFinite(bMs) ? Math.max(0, (now - bMs) / 60000) : 9999;
+    const aImportance = editorialImportanceScore(a);
+    const bImportance = editorialImportanceScore(b);
+
+    // Hybrid score: recency dominates inside breaking-news windows, while
+    // importance can move a major story above softer items from nearby times.
+    const freshness = (age) =>
+      age <= 5 ? 100 :
+      age <= 15 ? 94 :
+      age <= 30 ? 86 :
+      age <= 60 ? 76 :
+      age <= 120 ? 62 :
+      age <= 240 ? 46 :
+      Math.max(0, 46 - (age - 240) / 12);
+
+    const aRank = freshness(aAge) * 0.58 + aImportance * 0.42;
+    const bRank = freshness(bAge) * 0.58 + bImportance * 0.42;
+
+    // If one story is dramatically newer, keep the newsroom feeling live.
+    if (Math.abs(aAge - bAge) >= 120 && Math.min(aAge, bAge) <= 30) {
+      return aAge - bAge;
+    }
+
+    return bRank - aRank || bImportance - aImportance || bMs - aMs;
+  });
+}
+
 function filteredItems() {
   const cutoff = Date.now() - state.hours * 60 * 60 * 1000;
   const candidates = state.items
@@ -2028,7 +2133,9 @@ function filteredItems() {
     return true;
   });
 
-  if (state.kind === "all" && state.category === "all" && !state.query) return mainstreamFirst(filtered);
+  if (state.kind === "all" && state.category === "all" && !state.query && !state.importantOnly && !state.hotOnly) {
+    return smartEditorialSort(filtered);
+  }
   return filtered.sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
 }
 
