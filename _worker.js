@@ -134,7 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "71.0.0",
+          version: "72.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -147,7 +147,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "71.0.0",
+        version: "72.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -161,17 +161,28 @@ export default {
     if (url.pathname === "/robots.txt") return robotsResponse(url.origin);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(url.origin);
 
-    // V71: never translate a canonical browser URL into /index.html (or another
-    // non-canonical HTML filename) before asking the Static Assets binding.
-    // Cloudflare applies html_handling to env.ASSETS.fetch(), so requesting
-    // /index.html can legitimately redirect to /. Passing that redirect back to
-    // a request for / creates a / -> /index.html -> / loop. Always fetch the
-    // incoming canonical path instead.
-    if (url.pathname === "/index.html") return Response.redirect(`${url.origin}/`, 308);
-    if (url.pathname === "/") return serveHtmlAsset(request, env, url.origin);
-    if (["/about", "/how-it-works", "/contact", "/copyright", "/privacy"].includes(url.pathname)) {
-      return serveHtmlAsset(request, env, url.origin);
+    // V72: Static Assets runs with html_handling:"none".
+    // Resolve clean HTML routes explicitly and internally so the browser always
+    // receives a 200 response. Never redirect "/" to itself and never rely on
+    // automatic HTML canonicalization.
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      return serveHtmlAsset(request, env, url.origin, "/index.html");
     }
+
+    const htmlRoutes = new Map([
+      ["/about", "/about.html"],
+      ["/about.html", "/about.html"],
+      ["/how-it-works", "/how-it-works.html"],
+      ["/how-it-works.html", "/how-it-works.html"],
+      ["/contact", "/contact.html"],
+      ["/contact.html", "/contact.html"],
+      ["/copyright", "/copyright.html"],
+      ["/copyright.html", "/copyright.html"],
+      ["/privacy", "/privacy.html"],
+      ["/privacy.html", "/privacy.html"]
+    ]);
+    const htmlAssetPath = htmlRoutes.get(url.pathname);
+    if (htmlAssetPath) return serveHtmlAsset(request, env, url.origin, htmlAssetPath);
 
     return env.ASSETS.fetch(request);
   }
@@ -188,12 +199,15 @@ async function serveNoCacheAsset(request, env, assetPath, contentType = "applica
   return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
 }
 
-async function serveHtmlAsset(request, env, origin) {
-  // Preserve the canonical incoming pathname. Static Assets performs its own
-  // HTML routing; rewriting / to /index.html here can create a redirect loop.
-  const asset = await env.ASSETS.fetch(request);
+async function serveHtmlAsset(request, env, origin, assetPath) {
+  const assetUrl = new URL(assetPath, request.url);
+  // Preserve query parameters only for cache-busting/debug parameters; the
+  // requested asset path itself is explicit and cannot be normalized into a loop.
+  assetUrl.search = new URL(request.url).search;
+  const assetRequest = new Request(assetUrl, request);
+  const asset = await env.ASSETS.fetch(assetRequest);
   if (!asset.ok) return asset;
-  const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
+
   const headers = new Headers(asset.headers);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate");
@@ -203,6 +217,13 @@ async function serveHtmlAsset(request, env, origin) {
   headers.set("Permissions-Policy", "geolocation=(self), camera=(), microphone=(), payment=(), usb=()");
   headers.set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests");
   headers.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+
+  // HEAD must remain body-less, while GET receives the rewritten HTML.
+  if (request.method === "HEAD") {
+    return new Response(null, { status: 200, headers });
+  }
+  const html = (await asset.text()).replaceAll("__SITE_URL__", origin);
+  headers.delete("Content-Length");
   return new Response(html, { status: 200, headers });
 }
 
@@ -232,7 +253,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v70/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v72/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1007,13 +1028,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "71.0.0",
+      "X-Hadashota-Version": "72.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "71.0.0",
+      "X-Hadashota-Version": "72.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1045,7 +1066,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason) {
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "71.0.0"
+        "X-Hadashota-Version": "72.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.

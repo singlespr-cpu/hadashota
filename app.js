@@ -304,13 +304,13 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("71.")) {
-      marker.textContent = apiVersion ? `גרסה V71 · API ${apiVersion}` : "גרסה V71 · API לא מזוהה";
+    if (!apiVersion.startsWith("72.")) {
+      marker.textContent = apiVersion ? `גרסה V72 · API ${apiVersion}` : "גרסה V72 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V71 · API V71";
+    marker.textContent = "גרסה V72 · API V72";
   } catch (error) {
-    marker.textContent = "גרסה V71 · API לא מחובר";
+    marker.textContent = "גרסה V72 · API לא מחובר";
     console.warn("Hadashota API health check failed", error);
   } finally {
     clearTimeout(timer);
