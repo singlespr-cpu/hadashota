@@ -215,8 +215,9 @@ const el = {
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
 const NEWS_SHARD_STAGGER_MS = 100;
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v77.";
-const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.stable.";
+const LEGACY_LAST_GOOD_PREFIXES = ["hadashota.lastGoodShard.v77.", "hadashota.lastGoodShard.v76.", "hadashota.lastGoodShard.v75."];
+const LOCAL_LAST_GOOD_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
@@ -232,6 +233,9 @@ window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   state.deferredInstallPrompt = event;
   syncInstallControl();
+  window.addEventListener("online", () => {
+    if (!state.loading) loadNews(false, true);
+  });
 });
 
 window.addEventListener("appinstalled", () => {
@@ -257,9 +261,10 @@ function init() {
   verifyApiVersion();
   restoreLocalLastGood();
   loadUtilities();
+  initPromoCard();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V79 cold-open strategy:
+  // V80 always-ready strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -305,12 +310,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V79 · API ${apiVersion}` : "גרסה V79 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V80 · API ${apiVersion}` : "גרסה V80 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V79 · API V79";
+    marker.textContent = "גרסה V80 · API V80";
   } catch (error) {
-    marker.textContent = "גרסה V79 · API לא מחובר";
+    marker.textContent = "גרסה V80 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1066,26 +1071,33 @@ function persistShardLastGood(shard, payload) {
 }
 
 function readShardLastGood(shard) {
-  const key = `${LAST_GOOD_PREFIX}${shard}`;
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.items) || !parsed.items.length) return null;
-
-    const generatedMs = Date.parse(parsed.generatedAt || "");
-    const savedMs = Number(parsed._savedAt || 0);
-    const referenceMs = Number.isFinite(generatedMs) ? generatedMs : savedMs;
-    const ageMs = Number.isFinite(referenceMs) && referenceMs > 0 ? Date.now() - referenceMs : Infinity;
-    if (ageMs < -5 * 60 * 1000 || ageMs > LOCAL_LAST_GOOD_MAX_AGE_MS) {
+  const keys = [
+    `${LAST_GOOD_PREFIX}${shard}`,
+    ...LEGACY_LAST_GOOD_PREFIXES.map((prefix) => `${prefix}${shard}`)
+  ];
+  for (const key of keys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed?.items) || !parsed.items.length) continue;
+      const generatedMs = Date.parse(parsed.generatedAt || "");
+      const savedMs = Number(parsed._savedAt || 0);
+      const referenceMs = Number.isFinite(generatedMs) ? generatedMs : savedMs;
+      const ageMs = Number.isFinite(referenceMs) && referenceMs > 0 ? Date.now() - referenceMs : Infinity;
+      if (ageMs < -5 * 60 * 1000 || ageMs > LOCAL_LAST_GOOD_MAX_AGE_MS) {
+        localStorage.removeItem(key);
+        continue;
+      }
+      if (!key.startsWith(LAST_GOOD_PREFIX)) {
+        try { localStorage.setItem(`${LAST_GOOD_PREFIX}${shard}`, JSON.stringify(parsed)); } catch {}
+      }
+      return parsed;
+    } catch {
       localStorage.removeItem(key);
-      return null;
     }
-    return parsed;
-  } catch {
-    localStorage.removeItem(key);
-    return null;
   }
+  return null;
 }
 
 function restoreLocalLastGood() {
@@ -1112,10 +1124,16 @@ function restoreLocalLastGood() {
 
 function scheduleNewsRetry() {
   clearTimeout(state.retryTimer);
-  const delays = [2, 5, 10, 20];
+  const delays = [1.5, 3, 6, 12, 20];
   const seconds = delays[Math.min(state.retryAttempt, delays.length - 1)];
   state.retryAttempt += 1;
-  state.retryTimer = setTimeout(() => loadNews(true, true), seconds * 1000);
+  state.retryTimer = setTimeout(() => {
+    if (document.hidden || state.loading) {
+      scheduleNewsRetry();
+      return;
+    }
+    loadNews(false, true);
+  }, seconds * 1000);
 }
 
 function getDataDelaySeverity({ delayed, freshShards, delayedShards, shardFreshness = {} }) {
@@ -3069,6 +3087,59 @@ function weatherLabel(code) {
   if ([71, 73, 75, 77, 85, 86].includes(n)) return "שלג";
   if ([95, 96, 99].includes(n)) return "סופות רעמים";
   return "מזג אוויר נעים";
+}
+
+
+async function initPromoCard() {
+  const card = document.querySelector("#promoCard");
+  const link = document.querySelector("#promoCardLink");
+  const image = document.querySelector("#promoCardImage");
+  const title = document.querySelector("#promoCardText");
+  const badge = document.querySelector("#promoCardBadge");
+  if (!card || !link || !image || !title || !badge) return;
+
+  const apply = (promo) => {
+    const active = Boolean(promo?.active && promo?.text && promo?.url);
+    card.classList.toggle("is-active", active);
+    if (!active) {
+      link.removeAttribute("href");
+      link.removeAttribute("target");
+      link.removeAttribute("rel");
+      image.removeAttribute("src");
+      image.classList.add("hidden");
+      badge.textContent = "פרסום";
+      title.textContent = "פרסם כאן";
+      return;
+    }
+    title.textContent = String(promo.text || "").slice(0, 120);
+    link.href = promo.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer sponsored";
+    badge.textContent = "פרסום";
+    if (promo.imageData) {
+      image.src = promo.imageData;
+      image.classList.remove("hidden");
+    } else {
+      image.removeAttribute("src");
+      image.classList.add("hidden");
+    }
+  };
+
+  try {
+    const response = await fetch(`/api/promo?_=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Promo HTTP ${response.status}`);
+    apply(await response.json());
+  } catch {
+    apply(null);
+  }
+
+  window.setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const response = await fetch(`/api/promo?_=${Date.now()}`, { cache: "no-store" });
+      if (response.ok) apply(await response.json());
+    } catch {}
+  }, 60000);
 }
 
 function renderTrending() {
