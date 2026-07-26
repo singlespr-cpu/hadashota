@@ -214,11 +214,11 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
-const NEWS_SHARD_STAGGER_MS = 100;
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.copyrightSafeV82.";
+const NEWS_SHARD_STAGGER_MS = 45;
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.correctShardsV86.";
 const LEGACY_LAST_GOOD_PREFIXES = [];
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const CLIENT_NEWS_TIMEOUT_MS = 45_000;
+const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
 const CATEGORY_LABELS = {
@@ -317,12 +317,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V85 · API ${apiVersion}` : "גרסה V85 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V86 · API ${apiVersion}` : "גרסה V86 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V85 · API V85";
+    marker.textContent = "גרסה V86 · API V86";
   } catch (error) {
-    marker.textContent = "גרסה V85 · API לא מחובר";
+    marker.textContent = "גרסה V86 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1131,7 +1131,7 @@ function restoreLocalLastGood() {
 
 function scheduleNewsRetry() {
   clearTimeout(state.retryTimer);
-  const delays = [0.5, 1.5, 3, 6, 12];
+  const delays = [0.8, 2, 5, 10];
   const seconds = delays[Math.min(state.retryAttempt, delays.length - 1)];
   state.retryAttempt += 1;
   state.retryTimer = setTimeout(() => {
