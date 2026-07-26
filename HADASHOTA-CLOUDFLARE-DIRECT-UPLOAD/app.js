@@ -259,7 +259,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V78 cold-open strategy:
+  // V79 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -305,12 +305,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V78 · API ${apiVersion}` : "גרסה V78 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V79 · API ${apiVersion}` : "גרסה V79 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V78 · API V78";
+    marker.textContent = "גרסה V79 · API V79";
   } catch (error) {
-    marker.textContent = "גרסה V78 · API לא מחובר";
+    marker.textContent = "גרסה V79 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
