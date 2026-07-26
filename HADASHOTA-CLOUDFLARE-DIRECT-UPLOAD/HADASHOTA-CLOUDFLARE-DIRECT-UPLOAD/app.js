@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "93.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v93-1";
+const KOTERET_CLIENT_BUILD = "94.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v94-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V93 · API ${apiVersion}` : "גרסה V93 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V94 · API ${apiVersion}` : "גרסה V94 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V93 · API V93";
+    marker.textContent = "גרסה V94 · API V94";
   } catch (error) {
-    marker.textContent = "גרסה V93 · API לא מחובר";
+    marker.textContent = "גרסה V94 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1900,6 +1900,44 @@ function editorialDeckForItem(item, sourceCount = 1) {
     : "דיווח חדשותי ממקור חיצוני. לפרטים המלאים ניתן לעבור למקור.";
 }
 
+
+function licensedMediaQueryVariantsForItem(item, displayTitle = "") {
+  const title = cleanDisplayTitle(displayTitle || item?.title || "");
+  const variants = [];
+  const seen = new Set();
+  const push = (q) => {
+    const clean = cleanDisplayText(q || "").trim();
+    if (!clean || clean.length < 3 || seen.has(clean)) return;
+    seen.add(clean);
+    variants.push(clean);
+  };
+
+  // 1) Named person, if present — usually Commons has a reusable portrait.
+  const person = extractLikelyPersonName([title, item?.title || ""].filter(Boolean));
+  if (person) push(person);
+
+  // 2) Specific geopolitical/place entities.
+  const entities = [...clientEventEntities(`${title} ${item?.title || ""}`)];
+  for (const entity of entities.slice(0, 3)) push(entity);
+
+  // 3) Organizations/institutions commonly appearing in Israeli news.
+  const orgPatterns = [
+    /צה["״']?ל/gu, /משטרת ישראל/gu, /כנסת ישראל/gu, /ממשלת ישראל/gu,
+    /בנק ישראל/gu, /האיחוד האירופי/gu, /נאט["״']?ו/gu, /חיזבאללה/gu,
+    /חמאס/gu, /OpenAI/giu, /Microsoft/giu, /Apple/giu, /Google/giu
+  ];
+  for (const rx of orgPatterns) {
+    const m = `${title} ${item?.title || ""}`.match(rx);
+    if (m?.[0]) push(m[0]);
+  }
+
+  // 4) Existing semantic query as the most specific attempt.
+  const existing = mediaQueryForItem(item, title);
+  if (existing) push(existing);
+
+  return variants.slice(0, 6);
+}
+
 function mediaQueryForItem(item, editorial = "") {
   const reports = normalizeClusterReports(item);
   const rawTitles = [item?.title, editorial, ...reports.map((r) => r.title)].filter(Boolean);
@@ -1995,8 +2033,8 @@ function openMediaPassesEditorialGate(media, { lead = false } = {}) {
   // Lead imagery is intentionally strict because a wrong hero photo is far
   // more damaging than no photo. Feed cards are slightly more permissive,
   // but still require multi-token semantic overlap.
-  if (lead) return score >= 62 && hits >= 2 && !media.illustrative;
-  return score >= 54 && hits >= 2 && !media.illustrative;
+  if (lead) return score >= 58 && hits >= 1 && !media.illustrative;
+  return score >= 42 && hits >= 1 && !media.illustrative;
 }
 
 function reusableSourceImageLicense(report) {
@@ -2044,8 +2082,12 @@ function preferredSourceImage(item) {
 
 async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
   if (!el.leadStoryImage || !el.leadStoryMedia) return;
-  const query = mediaQueryForItem(winner?.item, leadTitle);
-  const media = await fetchSafeMedia(query, winner?.item?.category || "other");
+  const queries = licensedMediaQueryVariantsForItem(winner?.item, leadTitle);
+  let media = null;
+  for (const query of queries) {
+    media = await fetchSafeMedia(query, winner?.item?.category || "other");
+    if (media) break;
+  }
   if (winner && leadFingerprint(winner) !== state.displayedLeadFingerprint) return;
   if (!openMediaPassesEditorialGate(media, { lead: true })) {
     el.leadStoryImage.removeAttribute("src");
@@ -2136,7 +2178,13 @@ async function hydrateSafeMediaSlot(slot) {
     return;
   }
 
-  const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
+  const mediaQueries = String(slot.dataset.mediaQuery || "").split("|").map((q) => q.trim()).filter(Boolean);
+  let media = null;
+  for (const query of mediaQueries.slice(0, 6)) {
+    media = await fetchSafeMedia(query, slot.dataset.category || "other");
+    if (openMediaPassesEditorialGate(media, { lead: false })) break;
+    media = null;
+  }
   if (!slot.isConnected) return;
   if (!openMediaPassesEditorialGate(media, { lead: false })) {
     slot.classList.add("contextual-media-fallback");
@@ -3172,7 +3220,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=93.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=94.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
