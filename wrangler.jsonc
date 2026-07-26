@@ -10,7 +10,8 @@
       "/api/*",
       "/sw.js",
       "/robots.txt",
-      "/sitemap.xml"
+      "/sitemap.xml",
+      "/manage-kp-7538"
     ]
   }
 }
