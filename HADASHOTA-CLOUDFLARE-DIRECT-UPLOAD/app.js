@@ -310,12 +310,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V83 · API ${apiVersion}` : "גרסה V83 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V84 · API ${apiVersion}` : "גרסה V84 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V83 · API V83";
+    marker.textContent = "גרסה V84 · API V84";
   } catch (error) {
-    marker.textContent = "גרסה V83 · API לא מחובר";
+    marker.textContent = "גרסה V84 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1534,126 +1534,120 @@ function conciseLeadHeadline(base, category = "other", titles = [], reportCount 
 }
 
 
-/* V83 — Independent factual headline guard.
-   Source titles remain available internally for clustering/search only.
-   The text rendered to the user must not simply mirror one publisher's wording. */
-function copyrightHeadlineCategoryLabel(category) {
-  return {
-    security: "עדכון ביטחוני",
-    diplomatic: "התפתחות מדינית",
-    politics: "עדכון פוליטי",
-    economy: "עדכון כלכלי",
-    health: "עדכון בריאותי",
-    world: "עדכון מהעולם",
-    technology: "עדכון טכנולוגיה",
-    culture: "עדכון תרבות",
-    sports: "עדכון ספורט",
-    other: "עדכון חדשותי"
-  }[String(category || "other")] || "עדכון חדשותי";
+/* V84 — factual independent headlines.
+   Keep the actual event details (subject/action/place/numbers) while removing
+   publisher-style lead-ins, hype and decorative wording. */
+function stripPublisherStyle(title) {
+  let value = cleanDisplayTitle(title || "");
+  value = value
+    .replace(/^(פרסום ראשון|בלעדי|חשיפה|דרמה|סערה|צפו|תיעוד|תיעוד דרמטי|מתעדכן|דיווח ראשוני|ראשוני|מבזק)\s*[:\-–—]\s*/i, "")
+    .replace(/^(לפי דיווחים?|על פי דיווחים?|דיווח:)\s*/i, "")
+    .replace(/\s*\|\s*[^|]{2,30}$/g, "")
+    .replace(/[!]{2,}/g, "!")
+    .replace(/\s+/g, " ")
+    .trim();
+  return value;
 }
 
-function copyrightHeadlineTopic(item, titles = []) {
-  const corpus = titles.map(cleanDisplayTitle).join(" ");
-  const category = String(item?.category || "other");
+function factualHeadlineSimilarity(a, b) {
+  return titleSimilarityScore(stripPublisherStyle(a), stripPublisherStyle(b));
+}
 
-  // Only factual entities/themes are used here — never a copied sentence.
-  const known = [
-    "איראן","ישראל","לבנון","סוריה","עזה","קטאר","מצרים","ירדן","סעודיה",
-    "ארהב","ארה״ב","ארצות הברית","וושינגטון","טהרן","ביירות",
-    "כנסת","ממשלה","קבינט","בגץ","בג״ץ","צה״ל","צהל","משטרה",
-    "בנק ישראל","נתב״ג","נתבג"
+function factualRewriteSingleTitle(title, item) {
+  const base = stripPublisherStyle(title);
+  if (!base) return "";
+
+  // Common newsroom structures: transform punctuation/order without deleting facts.
+  const colon = base.match(/^([^:]{3,52}):\s*(.+)$/);
+  if (colon) {
+    const left = cleanDisplayText(colon[1]);
+    const right = cleanDisplayText(colon[2]);
+    if (right && left) return `${right} — ${left}`;
+  }
+
+  const dash = base.match(/^(.{8,72}?)\s+[–—-]\s+(.{6,90})$/);
+  if (dash) {
+    const left = cleanDisplayText(dash[1]);
+    const right = cleanDisplayText(dash[2]);
+    if (left && right) return `${right}: ${left}`;
+  }
+
+  // Hebrew factual action patterns: retain entities and event details, change structure.
+  const patterns = [
+    [/^(.{2,45}?)\s+(תקף|תקפה|תקפו)\s+(.+)$/u, (m) => `תקיפה של ${m[1]}: ${m[3]}`],
+    [/^(.{2,45}?)\s+(אישר|אישרה|אישרו)\s+(.+)$/u, (m) => `${m[3]} — באישור ${m[1]}`],
+    [/^(.{2,45}?)\s+(הודיע|הודיעה|הודיעו)\s+(.+)$/u, (m) => `${m[3]} — כך הודיע ${m[1]}`],
+    [/^(.{2,45}?)\s+(נעצר|נעצרה|נעצרו)\s+(.+)$/u, (m) => `מעצר ${m[1]}: ${m[3]}`],
+    [/^(.{2,45}?)\s+(נפצע|נפצעה|נפצעו)\s+(.+)$/u, (m) => `${m[1]} נפגע באירוע: ${m[3]}`],
   ];
-  const foundKnown = known.filter((term) => corpus.includes(term)).slice(0, 2);
-
-  const person = extractLikelyPersonName(titles);
-  if (person && person.length <= 42 && !/^(ישראל|משטרה|ממשלה|כנסת|דיווח)/.test(person)) {
-    if (!foundKnown.includes(person)) foundKnown.unshift(person);
-  }
-
-  if (foundKnown.length) return foundKnown.slice(0, 2).join(" ו");
-
-  const actions = new Set();
-  for (const title of titles) for (const action of clientEventActions(title)) actions.add(action);
-  if (actions.has("attack")) return category === "security" ? "אירוע ביטחוני" : "אירוע תקיפה";
-  if (actions.has("missile")) return "ירי או איום רקטי";
-  if (actions.has("intercept")) return "התרעות ויירוטים";
-
-  return "";
-}
-
-function independentFallbackHeadline(item, titles = []) {
-  const label = copyrightHeadlineCategoryLabel(item?.category);
-  const topic = copyrightHeadlineTopic(item, titles);
-  const reports = normalizeClusterReports(item);
-  const sourceCount = Math.max(1, Number(item?.reportCount) || reports.length || 1);
-
-  if (sourceCount >= 2) {
-    return topic
-      ? `${label}: דיווחים ממספר מקורות בנושא ${topic}`
-      : `${label}: דיווחים ממספר מקורות על אירוע מתפתח`;
-  }
-
-  const source = cleanDisplayText(item?.sourceName || reports[0]?.sourceName || "המקור");
-  return topic
-    ? `לפי ${source}: ${label} בנושא ${topic}`
-    : `לפי ${source}: ${label} חדש`;
-}
-
-function ensureIndependentHeadline(candidate, item, titles = []) {
-  const cleanCandidate = cleanDisplayTitle(candidate || "");
-  const sourceTitles = titles.map(cleanDisplayTitle).filter(Boolean);
-
-  if (!cleanCandidate || !sourceTitles.length) {
-    return independentFallbackHeadline(item, sourceTitles);
-  }
-
-  const normalizedCandidate = cleanCandidate.replace(/[^\u0590-\u05ffa-z0-9]+/gi, " ").trim().toLowerCase();
-  let maxSimilarity = 0;
-  let exact = false;
-
-  for (const sourceTitle of sourceTitles) {
-    const normalizedSource = sourceTitle.replace(/[^\u0590-\u05ffa-z0-9]+/gi, " ").trim().toLowerCase();
-    if (normalizedCandidate && normalizedCandidate === normalizedSource) exact = true;
-    maxSimilarity = Math.max(maxSimilarity, titleSimilarityScore(cleanCandidate, sourceTitle));
-  }
-
-  // A candidate that is identical or still substantially mirrors a publisher
-  // is replaced by a neutral factual template. A genuinely synthesized title
-  // can remain.
-  if (exact || maxSimilarity >= 0.58) {
-    return independentFallbackHeadline(item, sourceTitles);
-  }
-
-  return cleanCandidate;
-}
-
-function editorialHeadlineForItem(item) {
-  const reports = normalizeClusterReports(item);
-  const titles = [...new Set(reports.map((r) => cleanDisplayTitle(r.title || "")).filter(Boolean))];
-  if (!titles.length) return independentFallbackHeadline(item, []);
-
-  const corpus = titles.join(" | ");
-  const lower = corpus.toLowerCase();
-  const reportCount = Math.max(1, Number(item?.reportCount) || reports.length || 1);
-  const found = /(נמצא|נמצאה|אותר|אותרה|אותרו|נמצאו)/.test(lower);
-  const missing = /(נעדר|נעדרת|החיפושים|אבדו עקבות|נעלם|נעלמה|חיפושים)/.test(lower);
-
-  let candidate = "";
-  if (found && missing) {
-    const name = extractLikelyPersonName(titles) || repeatedPhraseCandidate(titles);
-    candidate = name ? `החיפושים הסתיימו: ${name} אותר בשלום` : "החיפושים הסתיימו לאחר איתור הנעדר";
-  } else {
-    let base = consensusMedoidTitle(titles) || strongestFactFromTitles(titles) || "";
-    base = stripTitleLeadIns(base);
-    if (base) {
-      const polished = reportCount >= 3 && !/^[^:]{3,34}:/.test(base) && base.length < 72
-        ? polishConsensusHeadline(base, item?.category || "other", titles)
-        : base;
-      candidate = conciseLeadHeadline(polished, item?.category || "other", titles, reportCount);
+  for (const [rx, fn] of patterns) {
+    const m = base.match(rx);
+    if (m) {
+      const result = cleanDisplayTitle(fn(m));
+      if (result && result !== base) return result;
     }
   }
 
-  return ensureIndependentHeadline(candidate, item, titles);
+  // Safe fallback: keep the factual sentence, but remove publisher styling and
+  // normalize it into Koteret Plus' punctuation. We prefer useful information
+  // over a meaningless generic label.
+  return base
+    .replace(/\s*[-–—]\s*/g, ": ")
+    .replace(/\s*:\s*/g, ": ")
+    .trim();
+}
+
+function factualConsensusHeadline(item) {
+  const reports = normalizeClusterReports(item);
+  const titles = [...new Set(
+    reports.map((r) => stripPublisherStyle(r.title || "")).filter(Boolean)
+  )];
+
+  if (!titles.length) return cleanDisplayTitle(item?.title || "");
+
+  // Multi-source stories: use the consensus title engine, then clean it.
+  if (titles.length >= 2) {
+    const consensus = stripPublisherStyle(
+      consensusMedoidTitle(titles) ||
+      strongestFactFromTitles(titles) ||
+      titles[0]
+    );
+    if (consensus) {
+      const rewritten = factualRewriteSingleTitle(consensus, item);
+      if (rewritten) return rewritten;
+    }
+  }
+
+  return factualRewriteSingleTitle(titles[0], item);
+}
+
+function ensureUsefulIndependentHeadline(item) {
+  const reports = normalizeClusterReports(item);
+  const sourceTitles = reports.map((r) => stripPublisherStyle(r.title || "")).filter(Boolean);
+  const candidate = factualConsensusHeadline(item);
+  if (!candidate) return "עדכון חדשותי";
+
+  // Do NOT collapse to generic category text. If a rewrite is too similar,
+  // try another structural transformation while retaining all factual details.
+  let maxSimilarity = 0;
+  for (const sourceTitle of sourceTitles) {
+    maxSimilarity = Math.max(maxSimilarity, factualHeadlineSimilarity(candidate, sourceTitle));
+  }
+
+  if (maxSimilarity >= 0.92) {
+    const first = sourceTitles[0] || candidate;
+    const pieces = first.split(/:\s*|\s+[–—-]\s+/).filter(Boolean);
+    if (pieces.length >= 2) {
+      return cleanDisplayTitle(`${pieces.slice(1).join(": ")} — ${pieces[0]}`);
+    }
+  }
+
+  return candidate;
+}
+
+function editorialHeadlineForItem(item) {
+  const headline = ensureUsefulIndependentHeadline(item);
+  return headline || cleanDisplayTitle(item?.title || "עדכון חדשותי");
 }
 
 function polishConsensusHeadline(fact, category, titles = []) {
@@ -1713,11 +1707,17 @@ function editorialTitle(item) {
 
 
 function editorialDeckForItem(item, sourceCount = 1) {
-  return sourceCount >= 3
-    ? `${sourceCount} מקורות שונים מדווחים על האירוע. לפרטים המלאים עברו לדיווחים המקוריים.`
-    : sourceCount >= 2
-      ? "האירוע מדווח ביותר ממקור אחד. כותרת פלוס מציגה ניסוח עובדתי עצמאי ומפנה למקורות."
-      : "עדכון ממקור חיצוני. לפרטים המלאים ולניסוח המקורי עברו ישירות למקור.";
+  const reports = normalizeClusterReports(item);
+  const sources = [...new Set(reports.map((r) => cleanDisplayText(r.sourceName || "")).filter(Boolean))];
+  if (sourceCount >= 3) {
+    return `${sourceCount} מקורות מדווחים על האירוע. הכותרת נוסחה עצמאית על בסיס הפרטים המשותפים בדיווחים.`;
+  }
+  if (sourceCount >= 2) {
+    return `האירוע מופיע ביותר ממקור אחד${sources.length ? `, בהם ${sources.slice(0,2).join(" ו")}` : ""}.`;
+  }
+  return sources[0]
+    ? `הדיווח פורסם ב${sources[0]}. לפרטים המלאים ניתן לעבור ישירות למקור.`
+    : "דיווח חדשותי ממקור חיצוני. לפרטים המלאים ניתן לעבור למקור.";
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -2260,8 +2260,8 @@ function mainstreamFirst(items) {
 }
 
 function newsPreviewText(item, reportCount) {
-  if (reportCount > 1) return `${reportCount} מקורות שונים מדווחים על אותו אירוע. הטקסט בכותרת פלוס מנוסח באופן עצמאי; לחצו למקורות.`;
-  return "ניסוח עובדתי עצמאי המבוסס על דיווח המקור. לחצו למעבר לידיעה המקורית.";
+  if (reportCount > 1) return `${reportCount} מקורות שונים מדווחים על אותו אירוע. לחצו למעבר לדיווחים המקוריים.`;
+  return "עדכון חדשותי בזמן אמת. לחצו למעבר לידיעה במקור.";
 }
 
 function newsCardHtml(item) {
