@@ -134,7 +134,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "75.0.0",
+          version: "76.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -147,7 +147,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "75.0.0",
+        version: "76.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -253,7 +253,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v75/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v76/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -462,6 +462,18 @@ function mediaHardMismatch(query, candidateText, specificity = 1) {
   return false;
 }
 
+function mediaOverlapStats(query, candidateText) {
+  const q = mediaTokens(query);
+  const c = mediaTokens(candidateText);
+  const matched = [...q].filter((token) => c.has(token));
+  return {
+    queryTokens: q.size,
+    candidateTokens: c.size,
+    hits: matched.length,
+    matched
+  };
+}
+
 function mediaCandidateScore(query, candidateText, specificity = 1) {
   if (mediaHardMismatch(query, candidateText, specificity)) return -999;
   const q = mediaTokens(query);
@@ -508,7 +520,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("iiprop", "url|extmetadata");
   api.searchParams.set("iiurlwidth", "1400");
   try {
-    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/75 (+strict semantic media resolver)" } });
+    const res = await fetch(api.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/76 (+strict semantic media resolver)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const pages = Object.values(data?.query?.pages || {});
@@ -522,8 +534,9 @@ async function findCommonsMedia(query, specificity = 1) {
       const creator = stripHtmlText(meta?.Artist?.value || meta?.Credit?.value || "");
       const description = stripHtmlText(meta?.ImageDescription?.value || meta?.ObjectName?.value || meta?.Categories?.value || "");
       const candidateText = `${page?.title || ""} ${description}`;
+      const overlap = mediaOverlapStats(query, candidateText);
       const score = mediaCandidateScore(query, candidateText, specificity);
-      candidates.push({ score, page, info, meta, license, url, creator });
+      candidates.push({ score, overlap, candidateText, description, page, info, meta, license, url, creator });
     }
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
@@ -534,6 +547,15 @@ async function findCommonsMedia(query, specificity = 1) {
       ? (specificity >= 3 ? 30 : specificity >= 2 ? 28 : 26)
       : (specificity >= 3 ? 42 : specificity >= 2 ? 36 : specificity >= 1 ? 30 : 70);
     if (!best || best.score < threshold) return null;
+
+    // V76 relevance gate: for a specific query, one coincidental word is not
+    // enough. This is the rule that prevents a random Israeli celebrity/person
+    // photo from being used for an unrelated cabinet/security story.
+    const minHits = specificity >= 2
+      ? Math.min(2, Math.max(1, best.overlap.queryTokens))
+      : 1;
+    if (best.overlap.hits < minHits) return null;
+
     const attributionRequired = !String(best.license).toUpperCase().includes("PUBLIC DOMAIN") && String(best.license).toUpperCase() !== "CC0";
     return {
       url: best.url,
@@ -546,7 +568,11 @@ async function findCommonsMedia(query, specificity = 1) {
       shortAttribution: attributionRequired ? [best.creator || "Wikimedia Commons", best.license].filter(Boolean).join(" · ") : "Wikimedia Commons · נחלת הכלל",
       provider: "Wikimedia Commons",
       relevanceScore: Math.round(best.score),
-      illustrative: specificity <= 1
+      overlapHits: best.overlap.hits,
+      matchedTokens: best.overlap.matched,
+      candidateTitle: cleanText(best.page?.title || ""),
+      candidateDescription: cleanText(best.description || "").slice(0, 260),
+      illustrative: false
     };
   } catch {}
   return null;
@@ -559,7 +585,7 @@ async function findOpenverseMedia(query, specificity = 1) {
   searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
   searchUrl.searchParams.set("mature", "false");
   try {
-    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/75 (+news aggregator; strict semantic media lookup)" } });
+    const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Hadashota/76 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
     const allowed = new Set(["cc0","pdm","by","by-sa"]);
@@ -571,8 +597,9 @@ async function findOpenverseMedia(query, specificity = 1) {
       if (!allowed.has(license) || !/^https?:\/\//.test(mediaUrl)) continue;
       const tagText = Array.isArray(img?.tags) ? img.tags.map((t) => t?.name || t).join(" ") : "";
       const candidateText = `${img?.title || ""} ${img?.creator || ""} ${tagText}`;
+      const overlap = mediaOverlapStats(query, candidateText);
       const score = mediaCandidateScore(query, candidateText, specificity);
-      candidates.push({ img, license, mediaUrl, score });
+      candidates.push({ img, license, mediaUrl, candidateText, overlap, score });
     }
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
@@ -582,6 +609,10 @@ async function findOpenverseMedia(query, specificity = 1) {
       ? (specificity >= 3 ? 32 : specificity >= 2 ? 30 : 28)
       : (specificity >= 3 ? 44 : specificity >= 2 ? 38 : specificity >= 1 ? 32 : 72);
     if (!best || best.score < threshold) return null;
+    const minHits = specificity >= 2
+      ? Math.min(2, Math.max(1, best.overlap.queryTokens))
+      : 1;
+    if (best.overlap.hits < minHits) return null;
     const img = best.img;
     const creator = cleanText(img?.creator || "");
     return {
@@ -595,7 +626,11 @@ async function findOpenverseMedia(query, specificity = 1) {
       shortAttribution: [creator || "Openverse", String(img?.license || "").toUpperCase()].filter(Boolean).join(" · "),
       provider: img?.provider || "Openverse",
       relevanceScore: Math.round(best.score),
-      illustrative: specificity <= 1
+      overlapHits: best.overlap.hits,
+      matchedTokens: best.overlap.matched,
+      candidateTitle: cleanText(img?.title || ""),
+      candidateDescription: cleanText(tagText || "").slice(0, 260),
+      illustrative: false
     };
   } catch {}
   return null;
@@ -619,19 +654,11 @@ async function handleOpenMedia(url, ctx) {
   }
   // Openverse expands coverage, but still has to pass a relevance threshold.
   if (!chosen) {
-    for (const row of queries) {
+    for (const row of queries.filter((x) => x.specificity > 0)) {
       chosen = await findOpenverseMedia(row.q, row.specificity);
       if (chosen) { matchedQuery = row.q; break; }
     }
   }
-  // Last-resort Commons category imagery is accepted only with a very strong match.
-  if (!chosen) {
-    for (const row of queries.filter((x) => x.specificity === 0)) {
-      chosen = await findCommonsMedia(row.q, row.specificity);
-      if (chosen) { matchedQuery = row.q; break; }
-    }
-  }
-
   const payload = chosen ? {
     image: { ...chosen, matchedQuery },
     note: "Licensed/open-media result. Attribution and license metadata are preserved; source-license accuracy should still be independently verifiable."
@@ -942,12 +969,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=75`;
+  cacheUrl.search = `?shard=${shard}&v=76`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=75`;
+  lastGoodUrl.search = `?shard=${shard}&v=76`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -962,7 +989,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "75.0.0",
+          "X-Hadashota-Version": "76.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1085,13 +1112,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "75.0.0",
+      "X-Hadashota-Version": "76.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "75.0.0",
+      "X-Hadashota-Version": "76.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1125,7 +1152,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "75.0.0"
+        "X-Hadashota-Version": "76.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1147,7 +1174,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "75.0.0"
+    "X-Hadashota-Version": "76.0.0"
   });
 }
 
@@ -1265,7 +1292,7 @@ async function fetchWithTimeout(url, timeoutMs, forceFresh = false) {
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   try {
     const headers = {
-      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/75.0; +news-aggregator)",
+      "User-Agent": "Mozilla/5.0 (compatible; HadashotaNews/76.0; +news-aggregator)",
       "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8",
       "Accept-Language": "he-IL,he;q=0.9,en;q=0.7"
     };
@@ -1488,6 +1515,34 @@ function sanitizeImageUrl(value) {
   }
 }
 
+function sanitizeSourceImageUrl(value) {
+  const clean = sanitizeImageUrl(value);
+  if (!clean) return null;
+  try {
+    const url = new URL(clean);
+    const fingerprint = `${url.hostname}${url.pathname}${url.search}`.toLowerCase();
+
+    // Reject assets that are overwhelmingly likely to be branding, tracking,
+    // avatars or generic placeholders rather than the image of this article.
+    const blocked = [
+      "favicon", "logo", "sprite", "avatar", "profile", "placeholder",
+      "default-image", "default_image", "noimage", "no-image", "blank.",
+      "transparent", "tracking", "pixel.", "1x1", "spacer", "icon-"
+    ];
+    if (blocked.some((token) => fingerprint.includes(token))) return null;
+
+    // Obvious tiny dimension hints in URLs are also not editorial photography.
+    const tinyWidth = url.searchParams.get("w") || url.searchParams.get("width");
+    const tinyHeight = url.searchParams.get("h") || url.searchParams.get("height");
+    if (tinyWidth && Number(tinyWidth) > 0 && Number(tinyWidth) < 240) return null;
+    if (tinyHeight && Number(tinyHeight) > 0 && Number(tinyHeight) < 140) return null;
+
+    return clean;
+  } catch {
+    return null;
+  }
+}
+
 function makeItem({ source, title, url, publishedAt, preview, imageUrl = null }) {
   return {
     id: stableId(`${source.id}|${url}|${publishedAt}`),
@@ -1501,7 +1556,11 @@ function makeItem({ source, title, url, publishedAt, preview, imageUrl = null })
     language: source.language || "he",
     title: normalizeSpace(title),
     preview: normalizeSpace(preview || ""),
-    imageUrl: source.imageReuse === "allowed" ? sanitizeImageUrl(imageUrl) : null,
+    // V76: Prefer an image explicitly supplied by the same source entry/page
+    // (RSS enclosure/media, JSON-LD image or Telegram preview). This is much
+    // more relevant than guessing from a generic media search. Junk branding
+    // and placeholders are filtered by sanitizeSourceImageUrl().
+    imageUrl: sanitizeSourceImageUrl(imageUrl),
     url,
     publishedAt,
     defaultCategory: source.defaultCategory || null

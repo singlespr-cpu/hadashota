@@ -214,7 +214,7 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v75.";
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v76.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -258,7 +258,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V75 cold-open strategy:
+  // V76 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -303,13 +303,13 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("75.")) {
-      marker.textContent = apiVersion ? `גרסה V75 · API ${apiVersion}` : "גרסה V75 · API לא מזוהה";
+    if (!apiVersion.startsWith("76.")) {
+      marker.textContent = apiVersion ? `גרסה V76 · API ${apiVersion}` : "גרסה V76 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V75 · API V75";
+    marker.textContent = "גרסה V76 · API V76";
   } catch (error) {
-    marker.textContent = "גרסה V75 · API לא מחובר";
+    marker.textContent = "גרסה V76 · API לא מחובר";
     console.warn("Hadashota API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1676,12 +1676,40 @@ async function fetchSafeMedia(query, category = "other") {
   return promise;
 }
 
+function sourceImageLooksEditorial(raw) {
+  if (!raw || !/^https?:\/\//i.test(String(raw))) return false;
+  try {
+    const url = new URL(String(raw));
+    const fp = `${url.hostname}${url.pathname}${url.search}`.toLowerCase();
+    const blocked = [
+      "favicon", "logo", "sprite", "avatar", "profile", "placeholder",
+      "default-image", "default_image", "noimage", "no-image", "tracking",
+      "pixel.", "1x1", "spacer", "icon-"
+    ];
+    return !blocked.some((token) => fp.includes(token));
+  } catch {
+    return false;
+  }
+}
+
+function openMediaPassesEditorialGate(media, { lead = false } = {}) {
+  if (!media?.url) return false;
+  const score = Number(media.relevanceScore) || 0;
+  const hits = Number(media.overlapHits) || 0;
+
+  // Lead imagery is intentionally strict because a wrong hero photo is far
+  // more damaging than no photo. Feed cards are slightly more permissive,
+  // but still require multi-token semantic overlap.
+  if (lead) return score >= 62 && hits >= 2 && !media.illustrative;
+  return score >= 54 && hits >= 2 && !media.illustrative;
+}
+
 function preferredSourceImage(item) {
   const reports = normalizeClusterReports(item || {});
   const candidates = [item, ...reports].filter(Boolean);
   for (const report of candidates) {
     const raw = report?.imageUrl;
-    if (!raw || !/^https?:\/\//i.test(String(raw))) continue;
+    if (!sourceImageLooksEditorial(raw)) continue;
     return {
       url: String(raw),
       credit: `תמונה: ${report?.sourceName || report?.publisher || item?.sourceName || "המקור"}`,
@@ -1696,7 +1724,7 @@ async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
   const query = mediaQueryForItem(winner?.item, leadTitle);
   const media = await fetchSafeMedia(query, winner?.item?.category || "other");
   if (winner && leadFingerprint(winner) !== state.displayedLeadFingerprint) return;
-  if (!media?.url) {
+  if (!openMediaPassesEditorialGate(media, { lead: true })) {
     el.leadStoryImage.removeAttribute("src");
     el.leadStoryImage.alt = "";
     el.leadStoryMedia.classList.add("image-unavailable", "contextual-fallback");
@@ -1785,7 +1813,7 @@ async function hydrateSafeMediaSlot(slot) {
 
   const media = await fetchSafeMedia(slot.dataset.mediaQuery || "", slot.dataset.category || "other");
   if (!slot.isConnected) return;
-  if (!media?.url) {
+  if (!openMediaPassesEditorialGate(media, { lead: false })) {
     slot.classList.add("contextual-media-fallback");
     slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
     return;
