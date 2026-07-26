@@ -214,7 +214,7 @@ const el = {
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
 const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v74.";
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v75.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -258,7 +258,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V74 cold-open strategy:
+  // V75 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -303,13 +303,13 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("74.")) {
-      marker.textContent = apiVersion ? `גרסה V74 · API ${apiVersion}` : "גרסה V74 · API לא מזוהה";
+    if (!apiVersion.startsWith("75.")) {
+      marker.textContent = apiVersion ? `גרסה V75 · API ${apiVersion}` : "גרסה V75 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V74 · API V74";
+    marker.textContent = "גרסה V75 · API V75";
   } catch (error) {
-    marker.textContent = "גרסה V74 · API לא מחובר";
+    marker.textContent = "גרסה V75 · API לא מחובר";
     console.warn("Hadashota API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -902,12 +902,19 @@ async function loadNews(force = false, fromRetry = false) {
 
     results.forEach((result, index) => {
       const shard = NEWS_SHARDS[index];
-      if (result.status === "fulfilled" && Array.isArray(result.value?.items) && result.value.items.length) {
+      if (result.status === "fulfilled" && result.value && Array.isArray(result.value.items)) {
         payloads.push(result.value);
-        if (!result.value.stale) persistShardLastGood(shard, result.value);
-        if (result.value.stale) {
+        const hasItems = result.value.items.length > 0;
+        if (hasItems && !result.value.stale) persistShardLastGood(shard, result.value);
+
+        if (result.value.stale || !hasItems) {
           delayed = true;
-          delayedShards.push({ shard, reason: result.value.staleReason || "stale", localFallback: !!result.value.localFallback, generatedAt: result.value.generatedAt || null });
+          delayedShards.push({
+            shard,
+            reason: result.value.staleReason || (hasItems ? "stale" : "no_items"),
+            localFallback: !!result.value.localFallback,
+            generatedAt: result.value.generatedAt || null
+          });
         } else {
           freshShards += 1;
         }
@@ -1259,7 +1266,9 @@ function normalizeClusterReports(item) {
     url: item.url,
     publishedAt: item.publishedAt,
     imageUrl: item.imageUrl || null,
-    title: item.title || ""
+    title: item.title || "",
+    preview: item.preview || "",
+    category: item.category || null
   };
   return dedupeReports([base, ...(Array.isArray(item.related) ? item.related : [])]);
 }
@@ -1898,24 +1907,81 @@ function scrollToFeedFromNewsroomNav() {
   });
 }
 
+
+function reportMatchesKind(report, kind) {
+  if (!report) return false;
+  if (kind === "telegram") return report.sourceKind === "telegram";
+  if (kind === "site") return report.sourceKind === "site";
+  if (kind === "official") return !!report.official;
+  return true;
+}
+
+function projectItemForKind(item, kind) {
+  if (!item || kind === "all") return item;
+
+  const reports = normalizeClusterReports(item)
+    .filter((report) => reportMatchesKind(report, kind))
+    .sort((a, b) => Date.parse(b.publishedAt || 0) - Date.parse(a.publishedAt || 0));
+
+  if (!reports.length) return null;
+
+  const representative = reports[0];
+  const updates = normalizeClusterUpdates(item)
+    .filter((report) => reportMatchesKind(report, kind))
+    .sort((a, b) => Date.parse(a.publishedAt || 0) - Date.parse(b.publishedAt || 0))
+    .slice(-24);
+
+  const reportTimes = reports.map((report) => report.publishedAt).filter(Boolean);
+  const sameRepresentative = representative.sourceId === item.sourceId && representative.url === item.url;
+
+  return {
+    ...item,
+    sourceId: representative.sourceId,
+    publisher: representative.publisher,
+    sourceName: representative.sourceName,
+    sourceKind: representative.sourceKind,
+    verified: !!representative.verified,
+    official: !!representative.official,
+    independent: !!representative.independent,
+    url: representative.url,
+    publishedAt: representative.publishedAt,
+    imageUrl: representative.imageUrl || item.imageUrl || null,
+    title: representative.title || item.title,
+    preview: representative.preview || (sameRepresentative ? item.preview : ""),
+    category: representative.category || item.category,
+    related: reports,
+    updates,
+    reportCount: reports.length,
+    latestReportAt: newestIso(reportTimes),
+    firstReportAt: oldestIso(reportTimes),
+    _filteredKind: kind
+  };
+}
+
 function filteredItems() {
   const cutoff = Date.now() - state.hours * 60 * 60 * 1000;
-  const filtered = state.items.filter((item) => {
+  const candidates = state.items
+    .map((item) => projectItemForKind(item, state.kind))
+    .filter(Boolean);
+
+  const filtered = candidates.filter((item) => {
+    // The time range must be evaluated against the selected source kind itself.
+    // Example: a fresh Ynet report must not make a 2-day-old Telegram report
+    // appear inside the "Telegram · 24 hours" feed.
     if (Date.parse(item.latestReportAt || item.publishedAt) < cutoff) return false;
     if (state.category !== "all" && item.category !== state.category) return false;
-    if (state.kind === "site" && item.sourceKind !== "site") return false;
-    if (state.kind === "telegram" && item.sourceKind !== "telegram") return false;
-    if (state.kind === "official" && !(item.official || (item.related || []).some((report) => report.official))) return false;
     if (state.importantOnly && !isImportantStory(item)) return false;
     if (state.hotOnly && storyHotScore(item) < 60) return false;
     if (state.query) {
-      const haystack = `${item.title} ${item.preview || ""} ${item.sourceName}`.toLowerCase();
+      const relatedText = (item.related || []).map((report) => `${report.title || ""} ${report.sourceName || ""}`).join(" ");
+      const haystack = `${item.title} ${item.preview || ""} ${item.sourceName} ${relatedText}`.toLowerCase();
       if (!haystack.includes(state.query)) return false;
     }
     return true;
   });
+
   if (state.kind === "all" && state.category === "all" && !state.query) return mainstreamFirst(filtered);
-  return filtered;
+  return filtered.sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
 }
 
 function mainstreamFirst(items) {
