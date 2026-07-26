@@ -213,8 +213,9 @@ const el = {
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
-const NEWS_SHARDS = ["sites", "telegram"];
-const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v76.";
+const NEWS_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
+const NEWS_SHARD_STAGGER_MS = 100;
+const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.v77.";
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 15 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 45_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -258,7 +259,7 @@ function init() {
   loadUtilities();
   initAlertCenter();
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
-  // V76 cold-open strategy:
+  // V77 cold-open strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
   //    Home-Screen app converge on the same feed instead of sitting on separate
   //    localStorage snapshots;
@@ -303,13 +304,13 @@ async function verifyApiVersion() {
     if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("76.")) {
-      marker.textContent = apiVersion ? `גרסה V76 · API ${apiVersion}` : "גרסה V76 · API לא מזוהה";
+    if (!apiVersion.startsWith("77.")) {
+      marker.textContent = apiVersion ? `גרסה V77 · API ${apiVersion}` : "גרסה V77 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V76 · API V76";
+    marker.textContent = "גרסה V77 · API V77";
   } catch (error) {
-    marker.textContent = "גרסה V76 · API לא מחובר";
+    marker.textContent = "גרסה V77 · API לא מחובר";
     console.warn("Hadashota API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -886,8 +887,8 @@ async function loadNews(force = false, fromRetry = false) {
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
     let progressiveRendered = false;
-    const shardRequests = NEWS_SHARDS.map((shard) =>
-      fetchNewsShard(shard, force).then((value) => {
+    const shardRequests = NEWS_SHARDS.map((shard, index) =>
+      fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
         if (!progressiveRendered && Array.isArray(value?.items) && value.items.length) {
           progressiveRendered = renderProgressiveShardPayload(shard, value);
         }
@@ -1021,7 +1022,8 @@ function renderProgressiveShardPayload(shard, payload) {
   }
 }
 
-async function fetchNewsShard(shard, force = false) {
+async function fetchNewsShard(shard, force = false, delayMs = 0) {
+  if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("client_timeout"), CLIENT_NEWS_TIMEOUT_MS);
   try {
@@ -1054,7 +1056,7 @@ function persistShardLastGood(shard, payload) {
     const compact = {
       ...payload,
       _savedAt: Date.now(),
-      items: payload.items.slice(0, shard === "telegram" ? 360 : 320),
+      items: payload.items.slice(0, shard.startsWith("telegram") ? 180 : 160),
       failures: []
     };
     localStorage.setItem(`${LAST_GOOD_PREFIX}${shard}`, JSON.stringify(compact));
@@ -1132,7 +1134,7 @@ function getDataDelaySeverity({ delayed, freshShards, delayedShards, shardFreshn
 }
 
 function formatDelayedShardShort(entries = state.delayedShards) {
-  const names = [...new Set(entries.map((entry) => entry.shard === "telegram" ? "Telegram מתעדכן" : "אתרי חדשות מתעדכנים"))];
+  const names = [...new Set(entries.map((entry) => entry.shard.startsWith("telegram") ? "Telegram מתעדכן" : "אתרי חדשות מתעדכנים"))];
   return names.join(" + ") || "מקור מתעדכן";
 }
 
