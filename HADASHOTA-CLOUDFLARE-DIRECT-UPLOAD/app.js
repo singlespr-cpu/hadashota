@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "90.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v90-1";
+const KOTERET_CLIENT_BUILD = "91.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v91-1";
 
 (function healOldClientState() {
   try {
@@ -64,6 +64,8 @@ const state = {
   autoRefresh: (localStorage.getItem("hadashota.autoRefresh") ?? "1") !== "0",
   allSourcesVisible: false,
   loading: false,
+  backgroundRefreshing: false,
+  lastNewsFingerprint: "",
   timer: null,
   countdownTimer: null,
   retryTimer: null,
@@ -284,16 +286,19 @@ window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   state.deferredInstallPrompt = event;
   syncInstallControl();
-  window.addEventListener("online", () => {
-    if (!state.loading) loadNews(false, true);
-  });
-  window.addEventListener("pageshow", () => {
-    restoreLocalLastGood();
-    if (!state.loading) loadNews(false, true);
-  });
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && !state.loading) loadNews(false, true);
-  });
+});
+
+// V91: lifecycle recovery must work in every browser, not only browsers that
+// emit beforeinstallprompt. These refreshes are intentionally silent.
+window.addEventListener("online", () => {
+  if (!state.loading) loadNews(false, true, true);
+});
+window.addEventListener("pageshow", () => {
+  if (!state.items.length) restoreLocalLastGood();
+  if (!state.loading) loadNews(false, true, true);
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !state.loading) loadNews(false, true, true);
 });
 
 window.addEventListener("appinstalled", () => {
@@ -342,7 +347,7 @@ function init() {
     window.setTimeout(() => {
       if (state.loading || document.hidden) return;
       state.lastForegroundRefreshAt = 0;
-      loadNews(true, true);
+      loadNews(true, true, true);
     }, 180);
   }).catch((error) => console.warn("Initial news load failed", error));
   restartAutoRefresh();
@@ -369,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V90 · API ${apiVersion}` : "גרסה V90 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V91 · API ${apiVersion}` : "גרסה V91 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V90 · API V90";
+    marker.textContent = "גרסה V91 · API V91";
   } catch (error) {
-    marker.textContent = "גרסה V90 · API לא מחובר";
+    marker.textContent = "גרסה V91 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -933,15 +938,19 @@ function refreshNewsOnForeground(reason = "foreground") {
   // collect a fresh server snapshot immediately. Short focus changes can reuse
   // the shared snapshot to avoid hammering publishers.
   const forceFresh = hiddenFor >= 3_000 || snapshotAge >= 30_000 || reason === "online" || reason === "pageshow-bfcache";
-  loadNews(forceFresh, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
+  loadNews(forceFresh, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
-async function loadNews(force = false, fromRetry = false) {
-  if (state.loading) return;
+async function loadNews(force = false, fromRetry = false, silent = false) {
+  if (state.loading) return null;
+  const background = Boolean(silent && state.items.length);
   state.loading = true;
+  state.backgroundRefreshing = background;
   if (force) state.lastForegroundRefreshAt = Date.now();
-  el.refreshBtn.classList.add("loading");
-  if (force && state.items.length && el.lastUpdated) {
+  if (!background) el.refreshBtn.classList.add("loading");
+  // Background refresh never replaces the current status/content with a loading
+  // state. The entire site remains usable while network requests are in flight.
+  if (!background && force && state.items.length && el.lastUpdated) {
     el.lastUpdated.textContent = "מרענן עכשיו…";
   }
 
@@ -953,7 +962,7 @@ async function loadNews(force = false, fromRetry = false) {
     let progressiveRendered = false;
     const shardRequests = NEWS_SHARDS.map((shard, index) =>
       fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
-        if (!progressiveRendered && Array.isArray(value?.items) && value.items.length) {
+        if (!background && !progressiveRendered && Array.isArray(value?.items) && value.items.length) {
           progressiveRendered = renderProgressiveShardPayload(shard, value);
         }
         return value;
@@ -999,8 +1008,16 @@ async function loadNews(force = false, fromRetry = false) {
 
     if (!payloads.length) throw new Error("No news shard returned usable data");
 
-    const data = mergeNewsPayloads(payloads);
+    // A background pass uses the chunked merger. It yields to the browser
+    // repeatedly, so taps, scrolling and links remain responsive even when many
+    // reports need cross-source clustering.
+    const data = background
+      ? await mergeNewsPayloadsResponsive(payloads)
+      : mergeNewsPayloads(payloads);
     if (!data.items.length) throw new Error("Merged news feed is empty");
+
+    const nextFingerprint = newsSnapshotFingerprint(data);
+    const materiallyChanged = nextFingerprint !== state.lastNewsFingerprint;
 
     state.items = data.items;
     state.sources = data.sources;
@@ -1019,7 +1036,10 @@ async function loadNews(force = false, fromRetry = false) {
     }
 
     renderStats(data);
-    render();
+    if (materiallyChanged || !background) {
+      render();
+      state.lastNewsFingerprint = nextFingerprint;
+    }
     setDataStatus(state.dataDelayed, true, state.dataDelaySeverity);
 
     if (state.autoRefresh) scheduleNextRefresh(Math.max(Number(data.refreshAfterSeconds) || 30, getRefreshInterval()));
@@ -1029,11 +1049,11 @@ async function loadNews(force = false, fromRetry = false) {
       state.retryAttempt = 0;
       clearTimeout(state.retryTimer);
       localStorage.setItem("hadashota.lastVisitAt", String(Date.now()));
-      if (force && !fromRetry) showToast("החדשות רועננו עכשיו");
+      if (!background && force && !fromRetry) showToast("החדשות רועננו עכשיו");
     } else {
       scheduleNewsRetry();
-      if (force && state.dataDelaySeverity === "major") showToast("העדכון חלקי — מוצגים הנתונים האחרונים התקינים");
-      else if (force) showToast("מקור חדשות אחד מתעדכן ברקע");
+      if (!background && force && state.dataDelaySeverity === "major") showToast("העדכון חלקי — מוצגים הנתונים האחרונים התקינים");
+      else if (!background && force) showToast("מקור חדשות אחד מתעדכן ברקע");
     }
     return data;
   } catch (error) {
@@ -1045,14 +1065,15 @@ async function loadNews(force = false, fromRetry = false) {
     setDataStatus(true, restored, "major");
     scheduleNewsRetry();
 
-    if (!restored) {
+    if (!restored && !background) {
       el.feed.innerHTML = `<div class="connection-state" role="status"><span class="connection-spinner"></span><div><strong>אוסף עדכונים מכל מקורות החדשות…</strong><small>מתבצע ניסיון מכל האתרים וערוצי Telegram, ולאחר מכן ניסיון נוסף אוטומטי אם צריך.</small></div></div>`;
     }
-    if (force && !fromRetry) showToast(restored ? "העדכון מתעכב — מוצגים הנתונים האחרונים" : "מתחבר מחדש למקורות…");
+    if (!background && force && !fromRetry) showToast(restored ? "העדכון מתעכב — מוצגים הנתונים האחרונים" : "מתחבר מחדש למקורות…");
     return null;
   } finally {
     state.loading = false;
-    el.refreshBtn.classList.remove("loading");
+    state.backgroundRefreshing = false;
+    if (!background) el.refreshBtn.classList.remove("loading");
   }
 }
 
@@ -1179,6 +1200,7 @@ function restoreLocalLastGood() {
   el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
   renderStats(data);
   render();
+  state.lastNewsFingerprint = newsSnapshotFingerprint(data);
   setDataStatus(true, true, "major");
   return true;
 }
@@ -1193,7 +1215,7 @@ function scheduleNewsRetry() {
       scheduleNewsRetry();
       return;
     }
-    loadNews(false, true);
+    loadNews(false, true, true);
   }, seconds * 1000);
 }
 
@@ -1237,6 +1259,122 @@ function setDataStatus(delayed, hasData = state.items.length > 0, severity = sta
   el.dataStatusText.textContent = clock
     ? `העדכון חלקי — ${delayedPart}. מוצגים הנתונים האחרונים התקינים מ־${clock}, והמערכת מנסה שוב אוטומטית.`
     : `העדכון חלקי — ${delayedPart}. מוצגים הנתונים האחרונים התקינים והמערכת מנסה שוב אוטומטית.`;
+}
+
+
+function newsSnapshotFingerprint(data) {
+  const parts = (data?.items || []).slice(0, 220).map((item) =>
+    [
+      item.id || item.url || item.title || "",
+      item.latestReportAt || item.publishedAt || "",
+      item.reportCount || 1
+    ].join("|")
+  );
+  return `${parts.join("~")}#${(data?.sources || []).length}`;
+}
+
+function yieldToBrowser() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function mergeClustersClientResponsive(items) {
+  const sorted = [...items].sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
+  const clusters = [];
+
+  for (let itemIndex = 0; itemIndex < sorted.length; itemIndex += 1) {
+    const item = sorted[itemIndex];
+    const itemTime = Date.parse(item.latestReportAt || item.publishedAt);
+    let match = null;
+
+    for (let i = Math.max(0, clusters.length - 120); i < clusters.length; i++) {
+      const candidate = clusters[i];
+      const candidateTime = Date.parse(candidate.latestReportAt || candidate.publishedAt);
+      const timeDeltaMs = Math.abs(itemTime - candidateTime);
+      if (timeDeltaMs > 8 * 60 * 60 * 1000) continue;
+      const directMatch = sameEventClient(item.title, candidate.title, timeDeltaMs);
+      const relatedMatch = !directMatch && normalizeClusterReports(candidate).some((report) => {
+        if (!report?.title) return false;
+        const reportTime = Date.parse(report.publishedAt || 0);
+        const reportDeltaMs = Number.isFinite(reportTime) && Number.isFinite(itemTime) ? Math.abs(itemTime - reportTime) : timeDeltaMs;
+        return reportDeltaMs <= 180 * 60 * 1000 && sameEventClient(item.title, report.title, reportDeltaMs);
+      });
+      if (directMatch || relatedMatch) { match = candidate; break; }
+    }
+
+    if (!match) {
+      const clone = structuredCloneSafe(item);
+      clone.related = normalizeClusterReports(clone);
+      clone.updates = normalizeClusterUpdates(clone);
+      clone.reportCount = clone.related.length || 1;
+      clone.latestReportAt = clusterLatestAt(clone);
+      clone.firstReportAt = clusterFirstAt(clone);
+      clusters.push(clone);
+    } else {
+      const reports = dedupeReports([...normalizeClusterReports(match), ...normalizeClusterReports(item)]);
+      const updates = [...normalizeClusterUpdates(match), ...normalizeClusterUpdates(item)]
+        .filter((report, index, arr) => arr.findIndex((r) => `${r.url || ""}|${r.publishedAt}|${r.title || ""}` === `${report.url || ""}|${report.publishedAt}|${report.title || ""}`) === index)
+        .sort((a,b) => Date.parse(a.publishedAt || 0) - Date.parse(b.publishedAt || 0)).slice(-24);
+      const preferred = representativeRank(item) > representativeRank(match) ? item : match;
+      const other = preferred === item ? match : item;
+      const latestReportAt = newestIso(reports.map((report) => report.publishedAt).concat([match.latestReportAt, item.latestReportAt]));
+      const firstReportAt = oldestIso(reports.map((report) => report.publishedAt).concat([match.firstReportAt, item.firstReportAt]));
+      const imageUrl = preferred.imageUrl || other.imageUrl || reports.find((report) => report.imageUrl)?.imageUrl || null;
+      const preserved = { ...preferred };
+      Object.assign(match, preserved, { related: reports, updates, reportCount: reports.length, latestReportAt, firstReportAt, imageUrl });
+    }
+
+    // Yield often enough to keep pointer/touch/scroll events flowing.
+    if (itemIndex > 0 && itemIndex % 14 === 0) await yieldToBrowser();
+  }
+
+  return clusters;
+}
+
+async function mergeNewsPayloadsResponsive(payloads) {
+  const items = payloads.flatMap((payload) => Array.isArray(payload.items) ? payload.items : []);
+  const sourcesById = new Map();
+
+  for (let p = 0; p < payloads.length; p += 1) {
+    const payload = payloads[p];
+    for (const source of Array.isArray(payload.sources) ? payload.sources : []) {
+      const current = sourcesById.get(source.id);
+      if (!current || Date.parse(source.lastItemAt || 0) > Date.parse(current.lastItemAt || 0)) {
+        sourcesById.set(source.id, source);
+      }
+    }
+    if (p % 2 === 1) await yieldToBrowser();
+  }
+
+  const mergedItems = (await mergeClustersClientResponsive(items))
+    .sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt))
+    .slice(0, 650);
+
+  const generatedTimes = payloads
+    .map((payload) => payload.generatedAt)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b) - Date.parse(a));
+  const generatedAt = generatedTimes[0] || new Date().toISOString();
+  const shardFreshness = Object.fromEntries(payloads
+    .filter((payload) => payload?.shard)
+    .map((payload) => [payload.shard, {
+      generatedAt: payload.generatedAt || null,
+      snapshotId: payload.snapshotId || null,
+      stale: !!payload.stale,
+      localFallback: !!payload.localFallback
+    }]));
+
+  return {
+    generatedAt,
+    oldestGeneratedAt: generatedTimes[generatedTimes.length - 1] || generatedAt,
+    shardFreshness,
+    refreshAfterSeconds: Math.min(...payloads.map((payload) => Number(payload.refreshAfterSeconds) || 30), 30),
+    servedFromCache: payloads.some((payload) => payload?.servedFromCache === true),
+    items: mergedItems,
+    sources: [...sourcesById.values()].sort((a, b) => Date.parse(b.lastItemAt || 0) - Date.parse(a.lastItemAt || 0)),
+    stats: {
+      configuredSources: Math.max(...payloads.map((payload) => Number(payload.stats?.configuredSources) || 0), 0)
+    }
+  };
 }
 
 function mergeNewsPayloads(payloads) {
@@ -2055,9 +2193,11 @@ function render(options = {}) {
   for (const [name, step] of renderSteps) {
     try { step(); } catch (error) { console.error(`Render block failed: ${name}`, error); }
   }
-  queueMicrotask(() => {
+  const hydrate = () => {
     try { hydrateSafeMediaSlots(); } catch (error) { console.warn("Media hydration failed", error); }
-  });
+  };
+  if ("requestIdleCallback" in window) requestIdleCallback(hydrate, { timeout: 900 });
+  else setTimeout(hydrate, 40);
 }
 
 function renderStats(data = null) {
@@ -3014,7 +3154,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=90.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=91.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3301,7 +3441,7 @@ function scheduleNextRefresh(seconds = getRefreshInterval()) {
   }
   const delayMs = Math.max(15, seconds) * 1000;
   state.nextRefreshAt = Date.now() + delayMs;
-  state.timer = setTimeout(() => loadNews(true, true), delayMs);
+  state.timer = setTimeout(() => loadNews(true, true, true), delayMs);
   updateRefreshCountdown();
 }
 
@@ -3313,8 +3453,9 @@ function updateRefreshCountdown() {
     return;
   }
   const seconds = Math.max(0, Math.ceil((state.nextRefreshAt - Date.now()) / 1000));
-  el.refreshCountdown.textContent = seconds > 0 ? `רענון בעוד ${seconds} שנ׳` : "מרענן עכשיו…";
-  if (el.quickAutoStatus) el.quickAutoStatus.textContent = seconds > 0 ? `רענון בעוד ${seconds} שנ׳` : "מרענן עכשיו…";
+  const refreshLabel = seconds > 0 ? `רענון בעוד ${seconds} שנ׳` : (state.backgroundRefreshing ? "מעדכן ברקע…" : "מכין עדכון…");
+  el.refreshCountdown.textContent = refreshLabel;
+  if (el.quickAutoStatus) el.quickAutoStatus.textContent = refreshLabel;
 }
 
 async function loadUtilities() {
