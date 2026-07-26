@@ -1,6 +1,8 @@
 const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
 const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
 const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+const LEAD_SESSION_LOCK_MS = 2 * 60 * 1000;
+const LEAD_BREAKOUT_SCORE_DELTA = 30;
 
 const state = {
   items: [],
@@ -317,12 +319,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V86 · API ${apiVersion}` : "גרסה V86 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V87 · API ${apiVersion}` : "גרסה V87 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V86 · API V86";
+    marker.textContent = "גרסה V87 · API V87";
   } catch (error) {
-    marker.textContent = "גרסה V86 · API לא מחובר";
+    marker.textContent = "גרסה V87 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1025,7 +1027,9 @@ function renderProgressiveShardPayload(shard, payload) {
     const label = payload.stale ? "נתונים אחרונים" : "עדכון ראשוני";
     if (el.lastUpdated) el.lastUpdated.textContent = `${label} · ${formatClock(data.generatedAt)}`;
     renderStats(data);
-    render();
+    // V87: progressive shards may update the feed immediately, but the main
+    // story stays visually stable until the full shard round has settled.
+    render({ skipLead: true });
     setDataStatus(true, true, state.dataDelaySeverity);
     return true;
   } catch (error) {
@@ -1985,12 +1989,12 @@ function hydrateSafeMediaSlots() {
   slots.slice(0, 12).forEach((slot) => hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error)));
 }
 
-function render() {
+function render(options = {}) {
   // A secondary intelligence/visual module must never be able to blank the whole newsroom.
   // Each block renders independently so the core feed survives even if one enhancement fails.
   try { annotateStoryIntelligence(); } catch (error) { console.warn("Story intelligence render failed", error); }
   const renderSteps = [
-    ["lead", renderLeadStory],
+    ...(!options.skipLead ? [["lead", renderLeadStory]] : []),
     ["latest", renderFlashDeck],
     ["feed", renderFeed],
     ["sources", renderSources],
@@ -2556,6 +2560,30 @@ function renderLeadStory() {
   }
 
   if (!winner.leadMode) winner.leadMode = Number(winner.uniqueSources) >= 3 ? "verified" : "developing";
+
+  // V87: once a fully merged round has selected a lead, keep it stable for a
+  // short editorial window. A genuinely stronger/breaking candidate may still
+  // break through, but ordinary score fluctuations cannot make the hero jump.
+  const proposedFingerprint = leadFingerprint(winner);
+  const currentEntry = state.currentLeadEntry;
+  const currentFingerprint = currentEntry ? leadFingerprint(currentEntry) : "";
+  const lockAgeMs = state.displayedLeadSince ? Date.now() - state.displayedLeadSince : Infinity;
+
+  if (
+    currentEntry &&
+    currentFingerprint &&
+    proposedFingerprint !== currentFingerprint &&
+    lockAgeMs < LEAD_SESSION_LOCK_MS
+  ) {
+    const currentLatestMs = Date.parse(currentEntry.latestAt || currentEntry.item?.latestReportAt || currentEntry.item?.publishedAt || 0);
+    const currentTooOld = Number.isFinite(currentLatestMs) && Date.now() - currentLatestMs > 3 * 60 * 60 * 1000;
+    const scoreDelta = Number(winner.score || 0) - Number(currentEntry.score || 0);
+    const sourceDelta = Number(winner.uniqueSources || 0) - Number(currentEntry.uniqueSources || 0);
+    const breakingUpgrade = scoreDelta >= LEAD_BREAKOUT_SCORE_DELTA || sourceDelta >= 2 || currentTooOld;
+
+    if (!breakingUpgrade) winner = currentEntry;
+  }
+
   state.currentLeadEntry = winner;
 
   const winnerFingerprint = leadFingerprint(winner);

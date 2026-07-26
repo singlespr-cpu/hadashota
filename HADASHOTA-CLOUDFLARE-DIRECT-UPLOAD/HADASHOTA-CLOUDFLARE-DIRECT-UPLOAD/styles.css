@@ -4160,3 +4160,171 @@ html[data-theme="dark"] .portal-strip>.portal-status,html[data-theme="dark"] .po
   .promo-card:not(.is-active) .promo-card-text{font-size:12px!important}
   .promo-card-badge{top:6px!important;right:6px!important;font-size:7px!important;padding:3px 5px!important}
 }
+
+
+/* =========================================================
+   KOTERET PLUS V87 — premium ad card + roomier utility row
+   ========================================================= */
+@media (min-width:1181px) {
+  .portal-strip > .portal-status,
+  .portal-strip > .utility-card {
+    height: 148px !important;
+    min-height: 148px !important;
+  }
+
+  /* The ad is no longer text-over-photo. The image owns most of the card. */
+  .promo-card-link {
+    display: grid !important;
+    grid-template-rows: minmax(0, 1fr) 46px !important;
+    padding: 0 !important;
+    align-items: stretch !important;
+    background: #fff;
+  }
+
+  .promo-card-image {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    object-fit: cover !important;
+    object-position: center !important;
+    grid-row: 1 !important;
+    display: block;
+  }
+
+  .promo-card-shade {
+    display: none !important;
+  }
+
+  .promo-card-text {
+    grid-row: 2 !important;
+    position: relative !important;
+    z-index: 2 !important;
+    display: -webkit-box !important;
+    align-self: stretch !important;
+    margin: 0 !important;
+    padding: 8px 11px !important;
+    background: #fff !important;
+    color: #182230 !important;
+    border-top: 1px solid rgba(17,24,39,.08);
+    font-size: 11px !important;
+    line-height: 1.28 !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+  }
+
+  .promo-card-badge {
+    top: 8px !important;
+    right: 8px !important;
+    color: #fff !important;
+    background: rgba(17,24,39,.68) !important;
+    border-color: rgba(255,255,255,.28) !important;
+    backdrop-filter: blur(6px);
+  }
+
+  .promo-card:not(.is-active) .promo-card-link {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .promo-card:not(.is-active) .promo-card-text {
+    border: 0 !important;
+    background: transparent !important;
+    padding: 12px !important;
+    font-size: 15px !important;
+  }
+}
+
+html[data-theme="dark"] .promo-card.is-active .promo-card-text {
+  background: #151b24 !important;
+  color: #f8fafc !important;
+  border-top-color: #2b333e !important;
+}
+
+/* Tablet: preserve a meaningful photo area as well. */
+@media (max-width:1180px) and (min-width:701px) {
+  .portal-strip > .portal-status,
+  .portal-strip > .utility-card {
+    height: 132px !important;
+    min-height: 132px !important;
+  }
+  .promo-card-link {
+    display:grid !important;
+    grid-template-rows:minmax(0,1fr) 42px !important;
+    padding:0 !important;
+  }
+  .promo-card-image {
+    position:relative !important;
+    inset:auto !important;
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    grid-row:1 !important;
+  }
+  .promo-card-shade{display:none!important}
+  .promo-card-text {
+    grid-row:2 !important;
+    position:relative !important;
+    margin:0 !important;
+    padding:7px 9px !important;
+    background:#fff !important;
+    color:#182230 !important;
+    border-top:1px solid rgba(17,24,39,.08);
+    font-size:10px !important;
+    line-height:1.25 !important;
+    -webkit-line-clamp:2 !important;
+  }
+}
+
+/* Mobile stays news-first, but the ad gets extra width so the image is not tiny. */
+@media (max-width:700px) {
+  .portal-strip > .promo-card {
+    flex-basis: 190px !important;
+    width: 190px !important;
+    min-width: 190px !important;
+  }
+
+  .promo-card-link {
+    display:grid !important;
+    grid-template-columns: 58% 42% !important;
+    grid-template-rows: 1fr !important;
+    padding:0 !important;
+    align-items:stretch !important;
+  }
+
+  .promo-card-image {
+    position:relative !important;
+    inset:auto !important;
+    grid-column:1 !important;
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+  }
+
+  .promo-card-shade { display:none !important; }
+
+  .promo-card-text {
+    grid-column:2 !important;
+    position:relative !important;
+    margin:0 !important;
+    align-self:stretch !important;
+    display:flex !important;
+    align-items:center !important;
+    padding:7px !important;
+    background:#fff !important;
+    color:#182230 !important;
+    border-inline-start:1px solid rgba(17,24,39,.08);
+    font-size:9px !important;
+    line-height:1.25 !important;
+    -webkit-line-clamp:unset !important;
+  }
+
+  html[data-theme="dark"] .promo-card.is-active .promo-card-text {
+    background:#151b24 !important;
+    color:#f8fafc !important;
+    border-inline-start-color:#2b333e !important;
+  }
+}
