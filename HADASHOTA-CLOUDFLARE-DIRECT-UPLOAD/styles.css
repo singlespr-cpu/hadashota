@@ -4980,3 +4980,17 @@ html.settings-modal-open { overflow:hidden; }
   }
   .top-settings-btn { width:34px;height:34px;border-radius:11px; }
 }
+
+
+/* V103 — premium intelligence belongs in the newsroom, not the footer */
+.intelligence-bar + .premium-intelligence {
+  margin-top: 12px;
+}
+.premium-intelligence {
+  scroll-margin-top: 84px;
+}
+@media(max-width:700px){
+  .intelligence-bar + .premium-intelligence {
+    margin-top: 9px;
+  }
+}

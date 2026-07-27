@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "102.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v102-1";
+const KOTERET_CLIENT_BUILD = "103.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v103-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V102 · API ${apiVersion}` : "גרסה V102 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V103 · API ${apiVersion}` : "גרסה V103 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V102 · API V102";
+    marker.textContent = "גרסה V103 · API V103";
   } catch (error) {
-    marker.textContent = "גרסה V102 · API לא מחובר";
+    marker.textContent = "גרסה V103 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2424,6 +2424,9 @@ function render(options = {}) {
   for (const [name, step] of renderSteps) {
     try { step(); } catch (error) { console.error(`Render block failed: ${name}`, error); }
   }
+  // V103: premium intelligence is part of the newsroom render cycle, not a
+  // late decorative widget. As soon as news exists, it receives the same data.
+  try { renderPremiumIntelligence(); } catch (error) { console.warn("Premium intelligence render failed", error); }
   const hydrate = () => {
     try { hydrateSafeMediaSlots(); } catch (error) { console.warn("Media hydration failed", error); }
   };
@@ -3385,7 +3388,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=102.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=103.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3859,7 +3862,7 @@ function premiumVisibleNewsItems() {
   return source
     .filter((item) => item && item.title)
     .slice()
-    .sort((x, y) => Date.parse(y.publishedAt || 0) - Date.parse(x.publishedAt || 0));
+    .sort((x, y) => Date.parse(y.latestReportAt || y.publishedAt || 0) - Date.parse(x.latestReportAt || x.publishedAt || 0));
 }
 
 function premiumImportanceScore(item) {
@@ -3874,8 +3877,8 @@ function premiumImportanceScore(item) {
   const light = [/סינגל|זמר|זמרת|רכילות|אינסטגרם|טיקטוק|האח הגדול|ריאליטי/];
   strong.forEach((rx) => { if (rx.test(text)) score += 20; });
   light.forEach((rx) => { if (rx.test(text)) score -= 14; });
-  score += Math.min(24, Number(item?.sourceCount || item?.reports?.length || 1) * 6);
-  const ageMinutes = Math.max(0, (Date.now() - Date.parse(item?.publishedAt || Date.now())) / 60000);
+  score += Math.min(24, Math.max(1, Number(item?.reportCount) || normalizeClusterReports(item).length || 1) * 6);
+  const ageMinutes = Math.max(0, (Date.now() - Date.parse(item?.latestReportAt || item?.publishedAt || Date.now())) / 60000);
   score += Math.max(0, 18 - Math.min(18, ageMinutes / 8));
   return score;
 }
@@ -3894,7 +3897,7 @@ function renderPremiumIntelligence() {
   if (!items.length) return;
 
   const now = Date.now();
-  const recent = items.filter((item) => now - Date.parse(item.publishedAt || 0) <= 45 * 60000);
+  const recent = items.filter((item) => now - Date.parse(item.latestReportAt || item.publishedAt || 0) <= 45 * 60000);
   const ranked = (recent.length ? recent : items.slice(0, 30))
     .map((item) => ({ item, score: premiumImportanceScore(item) }))
     .sort((x, y) => y.score - x.score);
@@ -3904,8 +3907,8 @@ function renderPremiumIntelligence() {
   const risingMeta = document.getElementById("risingStoryMeta");
   if (risingEl && rising) risingEl.textContent = cleanDisplayTitle(rising.title);
   if (risingMeta && rising) {
-    const sources = Number(rising.sourceCount || rising.reports?.length || 1);
-    risingMeta.textContent = `${sources > 1 ? `${sources} מקורות · ` : ""}${formatRelativeTime(rising.publishedAt || new Date().toISOString())}`;
+    const sources = Math.max(1, Number(rising.reportCount) || normalizeClusterReports(rising).length || 1);
+    risingMeta.textContent = `${sources > 1 ? `${sources} מקורות · ` : ""}${formatAge(rising.latestReportAt || rising.publishedAt || new Date().toISOString())}`;
   }
 
   const topicMap = new Map();
@@ -3918,9 +3921,19 @@ function renderPremiumIntelligence() {
     if (item.sourceName) row.sources.add(item.sourceName);
     topicMap.set(key, row);
   }
-  const topics = [...topicMap.values()]
+  let topics = [...topicMap.values()]
     .sort((x, y) => (y.score + y.count * 5 + y.sources.size * 7) - (x.score + x.count * 5 + x.sources.size * 7))
     .slice(0, 3);
+
+  // Quiet-period fallback: use the highest-ranked recent stories as topic labels.
+  if (!topics.length) {
+    topics = ranked.slice(0, 3).map(({ item }) => ({
+      key: premiumTopicKey(item),
+      count: 1,
+      sources: new Set(normalizeClusterReports(item).map((r) => r.sourceName || r.source || "").filter(Boolean)),
+      score: premiumImportanceScore(item)
+    }));
+  }
 
   const topicsEl = document.getElementById("premiumTopics");
   if (topicsEl) {
@@ -3954,9 +3967,14 @@ function renderSinceVisitPremium(items) {
   const title = document.getElementById("sinceVisitTitle");
   if (!box || !list) return;
 
-  const previous = Number(localStorage.getItem("koteretPlusLastMeaningfulVisit") || 0);
   const now = Date.now();
-  localStorage.setItem("koteretPlusLastMeaningfulVisit", String(now));
+  const sessionKey = "koteretPlusVisitSessionStarted";
+  let previous = Number(sessionStorage.getItem(sessionKey) || 0);
+  if (!previous) {
+    previous = Number(localStorage.getItem("koteretPlusLastMeaningfulVisit") || 0);
+    sessionStorage.setItem(sessionKey, String(previous || now));
+    localStorage.setItem("koteretPlusLastMeaningfulVisit", String(now));
+  }
 
   if (!previous || now - previous < 20 * 60000) {
     box.hidden = true;
