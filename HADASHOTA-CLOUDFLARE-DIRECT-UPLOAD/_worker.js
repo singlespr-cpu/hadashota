@@ -163,7 +163,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "96.0.0",
+          version: "97.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -176,7 +176,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "96.0.0",
+        version: "97.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -338,7 +338,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v96/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v97/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -597,7 +597,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("origin", "*");
   api.searchParams.set("generator", "search");
   api.searchParams.set("gsrnamespace", "6");
-  api.searchParams.set("gsrlimit", "24");
+  api.searchParams.set("gsrlimit", "36");
   const queryConcepts = mediaConcepts(query);
   const needsVector = queryConcepts.has("openai") || queryConcepts.has("anthropic") || queryConcepts.has("gemini") || queryConcepts.has("microsoft") || queryConcepts.has("apple");
   api.searchParams.set("gsrsearch", needsVector ? query : `${query} filetype:bitmap`);
@@ -629,16 +629,14 @@ async function findCommonsMedia(query, specificity = 1) {
     const concepts = mediaConcepts(query);
     const subjectStrict = concepts.has("openai") || concepts.has("motorcycle") || concepts.has("scooter");
     const threshold = subjectStrict
-      ? (specificity >= 3 ? 22 : specificity >= 2 ? 20 : 18)
-      : (specificity >= 3 ? 26 : specificity >= 2 ? 22 : specificity >= 1 ? 18 : 70);
+      ? (specificity >= 3 ? 16 : specificity >= 2 ? 14 : 12)
+      : (specificity >= 3 ? 18 : specificity >= 2 ? 16 : specificity >= 1 ? 12 : 70);
     if (!best || best.score < threshold) return null;
 
     // V76 relevance gate: for a specific query, one coincidental word is not
     // enough. This is the rule that prevents a random Israeli celebrity/person
     // photo from being used for an unrelated cabinet/security story.
-    const minHits = specificity >= 2
-      ? Math.min(2, Math.max(1, best.overlap.queryTokens))
-      : 1;
+    const minHits = 1;
     if (best.overlap.hits < minHits) return null;
 
     const attributionRequired = !String(best.license).toUpperCase().includes("PUBLIC DOMAIN") && String(best.license).toUpperCase() !== "CC0";
@@ -667,13 +665,13 @@ async function findOpenverseMedia(query, specificity = 1) {
   const searchUrl = new URL("https://api.openverse.org/v1/images/");
   searchUrl.searchParams.set("q", query);
   searchUrl.searchParams.set("page_size", "24");
-  searchUrl.searchParams.set("license", "cc0,pdm,by,by-sa");
+  searchUrl.searchParams.set("license", "cc0,pdm");
   searchUrl.searchParams.set("mature", "false");
   try {
     const res = await fetch(searchUrl.toString(), { headers: { "Accept": "application/json", "User-Agent": "Koteret Plus/77 (+news aggregator; strict semantic media lookup)" } });
     if (!res.ok) return null;
     const data = await res.json();
-    const allowed = new Set(["cc0","pdm","by","by-sa"]);
+    const allowed = new Set(["cc0","pdm"]);
     const results = Array.isArray(data?.results) ? data.results : [];
     const candidates = [];
     for (const img of results) {
@@ -691,12 +689,10 @@ async function findOpenverseMedia(query, specificity = 1) {
     const concepts = mediaConcepts(query);
     const subjectStrict = concepts.has("openai") || concepts.has("motorcycle") || concepts.has("scooter");
     const threshold = subjectStrict
-      ? (specificity >= 3 ? 32 : specificity >= 2 ? 30 : 28)
-      : (specificity >= 3 ? 44 : specificity >= 2 ? 38 : specificity >= 1 ? 32 : 72);
+      ? (specificity >= 3 ? 16 : specificity >= 2 ? 14 : 12)
+      : (specificity >= 3 ? 18 : specificity >= 2 ? 16 : specificity >= 1 ? 12 : 72);
     if (!best || best.score < threshold) return null;
-    const minHits = specificity >= 2
-      ? Math.min(2, Math.max(1, best.overlap.queryTokens))
-      : 1;
+    const minHits = 1;
     if (best.overlap.hits < minHits) return null;
     const img = best.img;
     const creator = cleanText(img?.creator || "");
@@ -726,7 +722,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v96-balanced-context?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v97-richer-safe?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -737,10 +733,14 @@ async function handleOpenMedia(url, ctx) {
     chosen = await findCommonsMedia(row.q, row.specificity);
     if (chosen) { matchedQuery = row.q; break; }
   }
-  // V93 legal-safe mode: do not fall back to Openverse. Openverse itself
-  // states that it does not independently verify each work's license.
-  // If Commons cannot provide a sufficiently relevant reusable file, the UI
-  // uses the branded contextual fallback instead.
+  // V97: broader coverage via Openverse, but only CC0/Public Domain.
+  // Attribution-bearing licenses remain excluded here.
+  if (!chosen) {
+    for (const row of queries.filter((x) => x.specificity > 0).slice(0, 6)) {
+      chosen = await findOpenverseMedia(row.q, row.specificity);
+      if (chosen) { matchedQuery = row.q; break; }
+    }
+  }
   const payload = chosen ? {
     image: { ...chosen, matchedQuery },
     note: "Wikimedia Commons reusable-media result. File-page attribution and license metadata are preserved."
@@ -1077,12 +1077,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=96`;
+  cacheUrl.search = `?shard=${shard}&v=97`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=96`;
+  lastGoodUrl.search = `?shard=${shard}&v=97`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1097,7 +1097,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "96.0.0",
+          "X-Hadashota-Version": "97.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1220,13 +1220,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "96.0.0",
+      "X-Hadashota-Version": "97.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "96.0.0",
+      "X-Hadashota-Version": "97.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1260,7 +1260,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "96.0.0"
+        "X-Hadashota-Version": "97.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1282,7 +1282,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "96.0.0"
+    "X-Hadashota-Version": "97.0.0"
   });
 }
 

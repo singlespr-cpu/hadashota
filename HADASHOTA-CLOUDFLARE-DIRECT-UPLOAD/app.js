@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "96.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v96-1";
+const KOTERET_CLIENT_BUILD = "97.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v97-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V96 · API ${apiVersion}` : "גרסה V96 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V97 · API ${apiVersion}` : "גרסה V97 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V96 · API V96";
+    marker.textContent = "גרסה V97 · API V97";
   } catch (error) {
-    marker.textContent = "גרסה V96 · API לא מחובר";
+    marker.textContent = "גרסה V97 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1989,7 +1989,7 @@ function licensedMediaQueryVariantsForItem(item, displayTitle = "") {
   // Commons metadata is richer in English; try contextual English variants too.
   for (const q of mediaEnglishContextQueries(item, title)) push(q);
 
-  return variants.slice(0, 10);
+  return variants.slice(0, 14);
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -2053,7 +2053,7 @@ async function fetchSafeMedia(query, category = "other") {
   if (!normalized) return null;
   const key = `${category}|${normalized}`;
   if (SAFE_MEDIA_CACHE.has(key)) return SAFE_MEDIA_CACHE.get(key);
-  if (safeMediaRequests >= 36) return null;
+  if (safeMediaRequests >= 72) return null;
   safeMediaRequests += 1;
   const promise = fetch(`/api/media?q=${encodeURIComponent(normalized)}&category=${encodeURIComponent(category)}`, { cache: "no-store" })
     .then((r) => r.ok ? r.json() : null)
@@ -2107,19 +2107,21 @@ function mediaMatchesStoryStrictly(media, item, displayTitle = "", { lead = fals
   if (mediaContextConflict(storyText, media)) return false;
 
   const story = mediaEventContext(storyText);
-  const image = mediaEventContext([
+  const imageText = [
     media?.candidateTitle||"", media?.candidateDescription||"",
     media?.title||"", media?.description||"", media?.query||"",
     media?.matchedQuery||"", media?.landingUrl||""
-  ].join(" "));
+  ].join(" ");
+  const image = mediaEventContext(imageText);
 
   const highRisk = ["sea_rescue","road","fire","security"];
   const storyContexts = highRisk.filter((c) => story.has(c));
   const contextMatch = storyContexts.some((c) => image.has(c));
 
+  // Exact/strong semantic match.
   if (openMediaPassesEditorialGate(media, { lead })) {
-    if (!storyContexts.length || contextMatch) {
-      media._contextualIllustration = false;
+    if (!storyContexts.length || contextMatch || !image.size) {
+      media._contextualIllustration = storyContexts.length > 0 && !contextMatch;
       return true;
     }
   }
@@ -2127,14 +2129,26 @@ function mediaMatchesStoryStrictly(media, item, displayTitle = "", { lead = fals
   const score = Number(media.relevanceScore) || 0;
   const hits = Number(media.overlapHits) || 0;
 
-  // Allow a same-context Commons photo as an illustration, explicitly labelled.
-  if (storyContexts.length && contextMatch && score >= (lead ? 28 : 22) && hits >= 1) {
+  // Same-event-family illustration. The image does not have to depict the exact
+  // incident, but it must stay in the same visual context.
+  if (storyContexts.length && contextMatch && score >= (lead ? 18 : 14)) {
     media._contextualIllustration = true;
     return true;
   }
 
-  // Lower-risk stories can use a matching person/place/institution image.
-  if (!storyContexts.length && score >= (lead ? 36 : 26) && hits >= 1) {
+  // If the resolver found a clearly named person/place/institution, allow it as
+  // contextual illustration even with only light token overlap.
+  const hasNamedCandidate = Boolean(
+    String(media?.candidateTitle || "").trim().length >= 4 ||
+    String(media?.matchedQuery || "").trim().length >= 4
+  );
+  if (!storyContexts.length && hasNamedCandidate && score >= (lead ? 20 : 12)) {
+    media._contextualIllustration = true;
+    return true;
+  }
+
+  // Last safe fallback: one real token match and no context contradiction.
+  if (!lead && hits >= 1 && score >= 10) {
     media._contextualIllustration = true;
     return true;
   }
@@ -2150,8 +2164,8 @@ function openMediaPassesEditorialGate(media, { lead = false } = {}) {
   // Lead imagery is intentionally strict because a wrong hero photo is far
   // more damaging than no photo. Feed cards are slightly more permissive,
   // but still require multi-token semantic overlap.
-  if (lead) return score >= 64 && hits >= 2 && !media.illustrative;
-  return score >= 48 && hits >= 1 && !media.illustrative;
+  if (lead) return score >= 44 && hits >= 1 && !media.illustrative;
+  return score >= 28 && hits >= 1 && !media.illustrative;
 }
 
 function reusableSourceImageLicense(report) {
@@ -2301,7 +2315,7 @@ async function hydrateSafeMediaSlot(slot) {
 
   const mediaQueries = String(slot.dataset.mediaQuery || "").split("|").map((q) => q.trim()).filter(Boolean);
   let media = null;
-  for (const query of mediaQueries.slice(0, 10)) {
+  for (const query of mediaQueries.slice(0, 14)) {
     media = await fetchSafeMedia(query, slot.dataset.category || "other");
     if (mediaMatchesStoryStrictly(media, item, displayTitle, { lead: false })) break;
     media = null;
@@ -3342,7 +3356,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=96.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=97.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
