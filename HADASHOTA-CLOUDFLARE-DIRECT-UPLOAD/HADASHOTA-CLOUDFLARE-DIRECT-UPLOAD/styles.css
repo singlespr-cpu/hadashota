@@ -4994,3 +4994,104 @@ html.settings-modal-open { overflow:hidden; }
     margin-top: 9px;
   }
 }
+
+
+/* =========================================================
+   V104 — unified "מה באמת קורה עכשיו?"
+   ========================================================= */
+.premium-now-footer {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin-top:14px;
+  padding-top:14px;
+  border-top:1px solid rgba(15,23,42,.07);
+}
+.premium-hot-summary {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+}
+.premium-hot-summary strong {
+  font-size:12px;
+  color:#0f172a;
+}
+.premium-hot-summary small {
+  font-size:9px;
+  color:#94a3b8;
+}
+.premium-hot-dot {
+  flex:0 0 auto;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#ef4444;
+  box-shadow:0 0 0 5px rgba(239,68,68,.1);
+}
+.premium-now-actions {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+}
+.premium-now-actions button {
+  min-height:34px;
+  padding:7px 11px;
+  border:1px solid #e2e8f0;
+  border-radius:10px;
+  background:#fff;
+  color:#334155;
+  font-size:10px;
+  font-weight:800;
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease, transform .15s ease;
+}
+.premium-now-actions button:hover {
+  transform:translateY(-1px);
+  background:#f8fafc;
+  color:#0f172a;
+}
+.premium-now-actions button.active,
+.premium-now-actions button[aria-pressed="true"] {
+  background:#111827;
+  color:#fff;
+  border-color:#111827;
+}
+
+/* The old standalone bars are intentionally gone in V104. */
+#breakingBanner,
+#trendingStrip,
+.intelligence-bar {
+  display:none !important;
+}
+
+@media(max-width:760px) {
+  .premium-now-footer {
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .premium-hot-summary {
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .premium-hot-summary small {
+    flex-basis:100%;
+    padding-inline-start:15px;
+  }
+  .premium-now-actions {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:6px;
+  }
+  .premium-now-actions button {
+    padding:7px 6px;
+    font-size:9px;
+  }
+}
+@media(max-width:520px) {
+  .premium-now-actions {
+    grid-template-columns:1fr;
+  }
+}
