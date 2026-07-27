@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "100.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v100-1";
+const KOTERET_CLIENT_BUILD = "102.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v102-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V100 · API ${apiVersion}` : "גרסה V100 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V102 · API ${apiVersion}` : "גרסה V102 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V100 · API V100";
+    marker.textContent = "גרסה V102 · API V102";
   } catch (error) {
-    marker.textContent = "גרסה V100 · API לא מחובר";
+    marker.textContent = "גרסה V102 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3385,7 +3385,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=100.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=102.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3852,6 +3852,182 @@ function weatherLabel(code) {
 }
 
 
+
+
+function premiumVisibleNewsItems() {
+  const source = Array.isArray(state?.items) ? state.items : [];
+  return source
+    .filter((item) => item && item.title)
+    .slice()
+    .sort((x, y) => Date.parse(y.publishedAt || 0) - Date.parse(x.publishedAt || 0));
+}
+
+function premiumImportanceScore(item) {
+  const text = `${item?.title || ""} ${item?.preview || ""}`.toLowerCase();
+  let score = 0;
+  const strong = [
+    /מלחמה|פיגוע|ירי|טיל|רקטה|כטב|חטופ|הרוג|נהרג|פצוע קשה|אזעק/,
+    /ראש הממשלה|קבינט|ממשלה|כנסת|נשיא|בחירות|בג"ץ|בית המשפט העליון/,
+    /רעידת אדמה|שריפה|קריסה|אסון|חילוץ|טביעה|נעדר/,
+    /ריבית|בנק ישראל|דולר|בורסה|אינפלציה|אבטלה/,
+  ];
+  const light = [/סינגל|זמר|זמרת|רכילות|אינסטגרם|טיקטוק|האח הגדול|ריאליטי/];
+  strong.forEach((rx) => { if (rx.test(text)) score += 20; });
+  light.forEach((rx) => { if (rx.test(text)) score -= 14; });
+  score += Math.min(24, Number(item?.sourceCount || item?.reports?.length || 1) * 6);
+  const ageMinutes = Math.max(0, (Date.now() - Date.parse(item?.publishedAt || Date.now())) / 60000);
+  score += Math.max(0, 18 - Math.min(18, ageMinutes / 8));
+  return score;
+}
+
+function premiumTopicKey(item) {
+  const title = cleanDisplayTitle(item?.title || "");
+  const entities = [...clientEventEntities(`${title} ${item?.preview || ""}`)];
+  if (entities.length) return entities[0];
+  const words = title.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/)
+    .filter((w) => w.length >= 4 && !/^(דיווח|חדש|היום|עכשיו|לאחר|במהלך|בעקבות|ישראל)$/u.test(w));
+  return words.slice(0, 2).join(" ") || "חדשות";
+}
+
+function renderPremiumIntelligence() {
+  const items = premiumVisibleNewsItems();
+  if (!items.length) return;
+
+  const now = Date.now();
+  const recent = items.filter((item) => now - Date.parse(item.publishedAt || 0) <= 45 * 60000);
+  const ranked = (recent.length ? recent : items.slice(0, 30))
+    .map((item) => ({ item, score: premiumImportanceScore(item) }))
+    .sort((x, y) => y.score - x.score);
+
+  const rising = ranked[0]?.item;
+  const risingEl = document.getElementById("risingStory");
+  const risingMeta = document.getElementById("risingStoryMeta");
+  if (risingEl && rising) risingEl.textContent = cleanDisplayTitle(rising.title);
+  if (risingMeta && rising) {
+    const sources = Number(rising.sourceCount || rising.reports?.length || 1);
+    risingMeta.textContent = `${sources > 1 ? `${sources} מקורות · ` : ""}${formatRelativeTime(rising.publishedAt || new Date().toISOString())}`;
+  }
+
+  const topicMap = new Map();
+  for (const item of recent.slice(0, 50)) {
+    const key = premiumTopicKey(item);
+    const row = topicMap.get(key) || { key, count: 0, sources: new Set(), score: 0 };
+    row.count += 1;
+    row.score += premiumImportanceScore(item);
+    normalizeClusterReports(item).forEach((r) => row.sources.add(r.sourceName || r.source || ""));
+    if (item.sourceName) row.sources.add(item.sourceName);
+    topicMap.set(key, row);
+  }
+  const topics = [...topicMap.values()]
+    .sort((x, y) => (y.score + y.count * 5 + y.sources.size * 7) - (x.score + x.count * 5 + x.sources.size * 7))
+    .slice(0, 3);
+
+  const topicsEl = document.getElementById("premiumTopics");
+  if (topicsEl) {
+    topicsEl.innerHTML = topics.map((t, i) =>
+      `<span class="premium-topic"><b>${escapeHtml(t.key)}</b><small>${Math.max(t.sources.size, 1)} מקורות ${i === 0 ? "↑" : "→"}</small></span>`
+    ).join("");
+  }
+
+  const volume = recent.length;
+  const high = ranked.filter((x) => x.score >= 35).length;
+  let level = "שקט יחסית";
+  let cls = "calm";
+  if (volume >= 18 || high >= 6) { level = "פעילות גבוהה"; cls = "hot"; }
+  else if (volume >= 9 || high >= 3) { level = "פעילות ערה"; cls = "active"; }
+
+  const activity = document.getElementById("activityLevel");
+  const activityMeta = document.getElementById("activityMeta");
+  const pulse = document.getElementById("newsPulse");
+  const pulseLabel = document.getElementById("newsPulseLabel");
+  if (activity) activity.textContent = level;
+  if (activityMeta) activityMeta.textContent = `${volume} עדכונים ב־45 הדקות האחרונות · ${high} בעלי חשיבות גבוהה`;
+  if (pulse) pulse.dataset.level = cls;
+  if (pulseLabel) pulseLabel.textContent = level;
+
+  renderSinceVisitPremium(ranked.map((x) => x.item));
+}
+
+function renderSinceVisitPremium(items) {
+  const box = document.getElementById("sinceVisitPremium");
+  const list = document.getElementById("sinceVisitItems");
+  const title = document.getElementById("sinceVisitTitle");
+  if (!box || !list) return;
+
+  const previous = Number(localStorage.getItem("koteretPlusLastMeaningfulVisit") || 0);
+  const now = Date.now();
+  localStorage.setItem("koteretPlusLastMeaningfulVisit", String(now));
+
+  if (!previous || now - previous < 20 * 60000) {
+    box.hidden = true;
+    return;
+  }
+
+  const missed = items
+    .filter((item) => Date.parse(item.publishedAt || 0) > previous)
+    .sort((x, y) => premiumImportanceScore(y) - premiumImportanceScore(x))
+    .slice(0, 3);
+
+  if (!missed.length) {
+    box.hidden = true;
+    return;
+  }
+
+  box.hidden = false;
+  if (title) title.textContent = `מאז הביקור האחרון קרו ${missed.length} דברים שכדאי לדעת`;
+  list.innerHTML = missed.map((item, idx) =>
+    `<a class="since-visit-item" href="${escapeHtml(item.url || "#")}" target="_blank" rel="noopener noreferrer">
+      <span>${idx + 1}</span><strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
+    </a>`
+  ).join("");
+}
+
+function premiumWhyImportantText(item) {
+  const sources = Number(item?.sourceCount || item?.reports?.length || 1);
+  const score = premiumImportanceScore(item);
+  const reasons = [];
+  if (sources >= 3) reasons.push(`מדווח ב־${sources} מקורות שונים`);
+  else if (sources === 2) reasons.push("מדווח בשני מקורות שונים");
+  if (score >= 40) reasons.push("בעל חשיבות חדשותית גבוהה");
+  const age = Math.max(0, (Date.now() - Date.parse(item?.publishedAt || Date.now())) / 60000);
+  if (age <= 30) reasons.push("מתפתח בזמן אמת");
+  return reasons.length ? reasons.join(" · ") : "נבחר לפי שילוב של עדכניות, חשיבות והצלבת מקורות";
+}
+
+function attachPremiumWhyButtons() {
+  document.querySelectorAll(".news-card").forEach((card) => {
+    if (card.querySelector(".why-important")) return;
+    const titleEl = card.querySelector(".news-title, h3, h2");
+    const hrefEl = card.querySelector("a[href]");
+    const title = titleEl?.textContent?.trim();
+    if (!title) return;
+    const item = premiumVisibleNewsItems().find((x) => cleanDisplayTitle(x.title) === title);
+    if (!item || premiumImportanceScore(item) < 28) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "why-important";
+    button.textContent = "למה זה חשוב?";
+    button.title = premiumWhyImportantText(item);
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.classList.toggle("open");
+      button.textContent = button.classList.contains("open")
+        ? premiumWhyImportantText(item)
+        : "למה זה חשוב?";
+    });
+    (titleEl.parentElement || card).appendChild(button);
+  });
+}
+
+function refreshPremiumLayer() {
+  try {
+    renderPremiumIntelligence();
+    requestAnimationFrame(attachPremiumWhyButtons);
+  } catch (error) {
+    console.warn("Premium layer:", error);
+  }
+}
 
 async function initFeedPromo() {
   const apply = (promo) => {
@@ -4602,3 +4778,105 @@ function runAlertTest() {
   showToast("זו בדיקה בלבד — לא התקבלה התרעה אמיתית");
   setTimeout(() => { scheduleAlertPoll(0); }, 2600);
 }
+
+
+// V101 premium intelligence is intentionally additive and non-blocking.
+window.addEventListener("DOMContentLoaded", () => {
+  setTimeout(refreshPremiumLayer, 900);
+  setTimeout(refreshPremiumLayer, 2600);
+  setInterval(refreshPremiumLayer, 30000);
+
+  const target = document.getElementById("newsFeed") || document.querySelector(".news-list") || document.body;
+  const observer = new MutationObserver(() => {
+    clearTimeout(window.__koteretPremiumMutationTimer);
+    window.__koteretPremiumMutationTimer = setTimeout(refreshPremiumLayer, 180);
+  });
+  observer.observe(target, { childList: true, subtree: true });
+});
+
+
+function koteretFindPreferencesPanel() {
+  const heading = [...document.querySelectorAll("h1,h2,h3,strong")].find((el) =>
+    /העדפות תצוגה/.test(el.textContent || "")
+  );
+  if (!heading) return null;
+  return heading.closest("section,aside,.panel,.card,.settings-panel") || heading.parentElement?.parentElement || null;
+}
+
+function koteretSyncSettingsClone() {
+  const original = koteretFindPreferencesPanel();
+  const content = document.getElementById("settingsModalContent");
+  if (!original || !content) return;
+
+  const clone = original.cloneNode(true);
+  clone.removeAttribute("id");
+  clone.querySelectorAll("[id]").forEach((el) => {
+    el.dataset.originalId = el.id;
+    el.id = `modal-${el.id}`;
+  });
+
+  clone.querySelectorAll("input,button,select").forEach((control) => {
+    const originalId = control.dataset.originalId;
+    const source = originalId ? document.getElementById(originalId) : null;
+    if (!source) return;
+
+    if ("checked" in source) control.checked = source.checked;
+    if ("value" in source) control.value = source.value;
+
+    const relay = () => {
+      if ("checked" in control) source.checked = control.checked;
+      if ("value" in control) source.value = control.value;
+      source.dispatchEvent(new Event("change", { bubbles:true }));
+      source.dispatchEvent(new Event("input", { bubbles:true }));
+      setTimeout(koteretUpdateSettingsDot, 40);
+    };
+    control.addEventListener("change", relay);
+    if (control.tagName === "BUTTON") {
+      control.addEventListener("click", (event) => {
+        event.preventDefault();
+        source.click();
+        setTimeout(() => koteretSyncSettingsClone(), 60);
+      });
+    }
+  });
+
+  content.replaceChildren(clone);
+}
+
+function koteretOpenSettings() {
+  const modal = document.getElementById("settingsModal");
+  if (!modal) return;
+  koteretSyncSettingsClone();
+  modal.hidden = false;
+  document.documentElement.classList.add("settings-modal-open");
+  requestAnimationFrame(() => modal.classList.add("is-open"));
+}
+
+function koteretCloseSettings() {
+  const modal = document.getElementById("settingsModal");
+  if (!modal) return;
+  modal.classList.remove("is-open");
+  document.documentElement.classList.remove("settings-modal-open");
+  setTimeout(() => { modal.hidden = true; }, 160);
+}
+
+function koteretUpdateSettingsDot() {
+  const dot = document.getElementById("settingsCustomDot");
+  const panel = koteretFindPreferencesPanel();
+  if (!dot || !panel) return;
+  const toggles = [...panel.querySelectorAll('input[type="checkbox"]')];
+  // Dot means the user has an explicit local settings state, not necessarily "non-default".
+  const hasSavedPrefs = Object.keys(localStorage).some((key) =>
+    /theme|dark|compact|image|source|refresh|notif|alert|preference|setting/i.test(key)
+  );
+  dot.classList.toggle("visible", hasSavedPrefs && toggles.length > 0);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("topSettingsBtn")?.addEventListener("click", koteretOpenSettings);
+  document.querySelectorAll("[data-close-settings]").forEach((el) => el.addEventListener("click", koteretCloseSettings));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !document.getElementById("settingsModal")?.hidden) koteretCloseSettings();
+  });
+  setTimeout(koteretUpdateSettingsDot, 700);
+});
