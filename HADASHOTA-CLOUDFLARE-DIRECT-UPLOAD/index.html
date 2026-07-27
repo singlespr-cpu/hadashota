@@ -19,16 +19,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f7f8fb" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="generator" content="Koteret Plus 107.0.0" />
+  <meta name="generator" content="Koteret Plus 108.0.0" />
   <meta name="apple-mobile-web-app-title" content="כותרת פלוס" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="canonical" href="__SITE_URL__/" />
-  <link rel="icon" href="/favicon.svg?v=107.0.0" type="image/svg+xml" />
-  <link rel="icon" href="/favicon-32.png?v=107.0.0" sizes="32x32" type="image/png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=107.0.0" sizes="180x180" />
-  <link rel="manifest" href="/site.webmanifest?v=107.0.0" />
+  <link rel="icon" href="/favicon.svg?v=108.0.0" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png?v=108.0.0" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=108.0.0" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest?v=108.0.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -42,7 +42,7 @@
     })();
   </script>
   <title>כותרת פלוס | חדשות ועדכונים בזמן אמת מכל המקורות</title>
-  <link rel="stylesheet" href="/styles.css?v=107.0.0" />
+  <link rel="stylesheet" href="/styles.css?v=108.0.0" />
 
   <script type="application/ld+json">
 {
@@ -315,51 +315,35 @@
       </section>
     </section>
 <strong id="sinceVisitText"></strong></section>
-<section class="premium-intelligence premium-intelligence--v107" id="premiumIntelligence" aria-label="מרכז המודיעין החדשותי">
-  <div class="premium-intelligence__head premium-intelligence__head--compact">
-    <div>
-      <span class="premium-eyebrow">KOTERET PLUS · NEWS INTELLIGENCE</span>
-      <h2>מה באמת קורה עכשיו?</h2>
-      <p id="premiumNowSummary">מזקקים את כל המקורות למה שבאמת חשוב עכשיו.</p>
-    </div>
-    <div class="news-pulse" id="newsPulse">
-      <span class="news-pulse__dot"></span>
-      <span id="newsPulseLabel">מחשב תמונת מצב…</span>
-    </div>
+<section class="now-status-strip" id="premiumIntelligence" aria-label="תמונת מצב חדשותית עכשיו">
+  <div class="now-status-strip__activity">
+    <span class="news-pulse" id="newsPulse"><span class="news-pulse__dot"></span><b id="activityLevel">מתעדכן</b></span>
+    <small id="activityMeta">לפי קצב, מקורות וחשיבות</small>
   </div>
 
-  <div class="v107-grid">
-    <article class="v107-main-card">
-      <div class="v107-card-top">
-        <span class="v107-label"><span class="v105-live-dot"></span> הסיפור שמתחזק עכשיו</span>
-        <span class="v107-activity"><b id="activityLevel">מתעדכן</b><small id="activityMeta">לפי קצב וריבוי מקורות</small></span>
-      </div>
-      <h3 id="risingStory">מזהה את הסיפור שמתחזק…</h3>
-      <div class="v107-main-meta">
-        <span id="risingStoryMeta">בודק הצלבה בין מקורות</span>
-        <span class="v107-hot-inline"><b id="premiumHotCount">0</b> אירועים חמים</span>
-      </div>
-      <div class="v107-main-actions">
-        <button type="button" class="v105-story-button" id="risingStoryOpenBtn" disabled>לסיפור המלא ←</button>
-        <button type="button" class="v107-primary-action" id="premiumQuickBriefBtn">⚡ 30 שניות להבין מה קורה</button>
-      </div>
-    </article>
-
-    <article class="v107-side-card">
-      <div class="v107-side-head">
-        <span class="v107-label">על מה כולם מדברים</span>
-        <div class="premium-topics" id="premiumTopics"></div>
-      </div>
-      <div class="v107-watch-mini">
-        <span class="v107-label">כדאי לעקוב</span>
-        <div id="premiumWatchItems"></div>
-      </div>
-      <div class="v107-side-actions">
-        <button type="button" id="premiumImportantBtn" aria-pressed="false">רק חשוב</button>
-        <button type="button" id="premiumNearYouBtn">⌖ מה קורה לידך</button>
-      </div>
-    </article>
+  <div class="now-status-strip__topics">
+    <span class="now-status-strip__label">מדברים עכשיו</span>
+    <div class="now-status-strip__topic-list" id="premiumTopics"></div>
   </div>
+
+  <div class="now-status-strip__watch">
+    <span class="premium-hot-dot"></span>
+    <b id="premiumHotCount">0</b>
+    <span>במעקב</span>
+  </div>
+
+  <div class="now-status-strip__actions">
+    <button type="button" id="premiumQuickBriefBtn">⚡ 30 שניות</button>
+    <button type="button" id="premiumImportantBtn" aria-pressed="false">רק חשוב</button>
+    <button type="button" id="premiumNearYouBtn">⌖ לידך</button>
+  </div>
+
+  <span class="sr-only" id="premiumNowSummary">תמונת מצב חיה לפי כל מקורות החדשות.</span>
+  <span class="sr-only" id="newsPulseLabel">מתעדכן</span>
+  <span class="sr-only" id="risingStory"></span>
+  <span class="sr-only" id="risingStoryMeta"></span>
+  <button class="sr-only" type="button" id="risingStoryOpenBtn" disabled></button>
+  <div class="sr-only" id="premiumWatchItems"></div>
 </section>
 <section class="control-panel" id="controlPanel">
       <div class="control-row control-row-main">
@@ -494,7 +478,7 @@
       <p class="footer-seo-links"><a href="/about">אודות</a><span>·</span><a href="/how-it-works">איך כותרת פלוס עובד</a><span>·</span><a href="/contact">יצירת קשר</a><span>·</span><a href="/copyright">זכויות יוצרים והסרת תוכן</a><span>·</span><a href="/privacy">פרטיות</a></p>
       <p>לפרטים נוספים ויצירת קשר: <a href="mailto:singles.pr@gmail.com">singles.pr@gmail.com</a></p>
       <small>המערכת אינה מעתיקה כתבות מלאות. כל ידיעה מפנה למקור המקורי — כתבות לאתר החדשות ודיווחי Telegram להודעת המקור.</small>
-      <small id="siteVersion" class="site-version" aria-label="גרסת האתר ומצב ה-API">גרסה V107 · בודק API…</small>
+      <small id="siteVersion" class="site-version" aria-label="גרסת האתר ומצב ה-API">גרסה V108 · בודק API…</small>
     </div>
   </footer>
 
@@ -678,7 +662,7 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=107.0.0" defer></script>
+  <script src="/app.js?v=108.0.0" defer></script>
 
 <div class="settings-modal" id="settingsModal" hidden>
   <div class="settings-modal__backdrop" data-close-settings></div>

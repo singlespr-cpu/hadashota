@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "107.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v107-1";
+const KOTERET_CLIENT_BUILD = "108.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v108-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V107 · API ${apiVersion}` : "גרסה V107 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V108 · API ${apiVersion}` : "גרסה V108 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V107 · API V107";
+    marker.textContent = "גרסה V108 · API V108";
   } catch (error) {
-    marker.textContent = "גרסה V107 · API לא מחובר";
+    marker.textContent = "גרסה V108 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3388,7 +3388,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=107.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=108.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3922,7 +3922,7 @@ function renderPremiumIntelligence() {
   if (summaryEl) {
     const sourceCount = rising ? Math.max(1, Number(rising.reportCount) || normalizeClusterReports(rising).length || 1) : 0;
     summaryEl.textContent = rising
-      ? `המערכת מזהה כרגע ${sourceCount > 1 ? `הצלבה בין ${sourceCount} מקורות` : "אירוע בולט"} סביב הסיפור המתחזק, לצד ${recent.length} עדכונים ב־45 הדקות האחרונות.`
+      ? `תמונת מצב: ${recent.length} עדכונים ב־45 הדקות האחרונות, עם ${sourceCount > 1 ? `הצלבה בין ${sourceCount} מקורות` : "אירוע בולט אחד"}`
       : "מנתח את קצב הדיווחים, הצלבת המקורות והאירועים שמתפתחים עכשיו.";
   }
 
@@ -3953,7 +3953,7 @@ function renderPremiumIntelligence() {
   const topicsEl = document.getElementById("premiumTopics");
   if (topicsEl) {
     topicsEl.innerHTML = topics.map((t, i) =>
-      `<span class="premium-topic"><b>${escapeHtml(t.key)}</b><small>${Math.max(t.sources.size, 1)} מקורות ${i === 0 ? "↑" : "→"}</small></span>`
+      `<span class="now-topic-chip"><b>${escapeHtml(t.key)}</b><small>${Math.max(t.sources.size, 1)} מקורות ${i === 0 ? "↑" : "→"}</small></span>`
     ).join("");
   }
 
@@ -3987,10 +3987,7 @@ function renderPremiumIntelligence() {
       const reports = Math.max(1, Number(item.reportCount) || normalizeClusterReports(item).length || 1);
       return score >= 28 || reports >= 2;
     }).slice(0,2);
-    watchEl.innerHTML = watch.length ? watch.map(({item}) => {
-      const reports = Math.max(1, Number(item.reportCount) || normalizeClusterReports(item).length || 1);
-      return `<div class="v107-watch-item"><span></span><strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong><small>${reports} ${reports===1?"מקור":"מקורות"}</small></div>`;
-    }).join("") : `<div class="v105-empty">אין כרגע אירועים חריגים.</div>`;
+    watchEl.textContent = watch.map(({item}) => cleanDisplayTitle(item.title)).join(" | ");
   }
 }
 
