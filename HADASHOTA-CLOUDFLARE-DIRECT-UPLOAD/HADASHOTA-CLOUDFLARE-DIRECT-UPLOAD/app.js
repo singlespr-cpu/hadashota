@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "99.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v99-1";
+const KOTERET_CLIENT_BUILD = "100.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v100-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V99 · API ${apiVersion}` : "גרסה V99 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V100 · API ${apiVersion}` : "גרסה V100 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V99 · API V99";
+    marker.textContent = "גרסה V100 · API V100";
   } catch (error) {
-    marker.textContent = "גרסה V99 · API לא מחובר";
+    marker.textContent = "גרסה V100 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2197,9 +2197,13 @@ function originalFeedSourceImage(item) {
   for (const report of reports) {
     const raw = String(report?.imageUrl || report?.image || report?.thumbnailUrl || report?.thumbnail || report?.enclosure?.url || "").trim();
     if (!raw || !sourceImageLooksEditorial(raw)) continue;
+    const sourceName = cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה");
+    const photographer = cleanDisplayText(report?.imageCredit || report?.imageCreator || report?.photoCredit || "");
     return {
       url: raw,
-      credit: cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה"),
+      photographer,
+      credit: photographer ? `צילום: ${photographer} / ${sourceName}` : `מקור תמונה: ${sourceName}`,
+      sourceName,
       sourceUrl: report?.url || item?.url || ""
     };
   }
@@ -3381,7 +3385,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=99.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=100.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);

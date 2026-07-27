@@ -163,7 +163,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "99.0.0",
+          version: "100.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -176,7 +176,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "99.0.0",
+        version: "100.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -338,7 +338,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v99/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v100/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1077,12 +1077,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=99`;
+  cacheUrl.search = `?shard=${shard}&v=100`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=99`;
+  lastGoodUrl.search = `?shard=${shard}&v=100`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1097,7 +1097,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "99.0.0",
+          "X-Hadashota-Version": "100.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1220,13 +1220,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "99.0.0",
+      "X-Hadashota-Version": "100.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "99.0.0",
+      "X-Hadashota-Version": "100.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1260,7 +1260,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "99.0.0"
+        "X-Hadashota-Version": "100.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1282,7 +1282,23 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "99.0.0"
+    "X-Hadashota-Version": "100.0.0"
+  });
+}
+
+
+function enrichItemsWithPhotoCredits(items, html, source) {
+  if (!Array.isArray(items) || !items.length || !html) return items;
+  return items.map((item) => {
+    if (!item?.imageUrl || item.imageCredit) return item;
+    const credit = extractPhotoCredit(html, item.imageUrl);
+    if (!credit) return item;
+    return {
+      ...item,
+      imageCredit: credit,
+      imageCreator: credit,
+      imageCreditSource: cleanText(source?.name || item?.sourceName || "")
+    };
   });
 }
 
@@ -1914,6 +1930,167 @@ function firstTag(block, tags) {
 
 function unwrapCdata(value) {
   return String(value || "").replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/i, "$1");
+}
+
+
+function normalizePhotoCreditText(value) {
+  return cleanText(String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'"))
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+function photoCreditLooksUseful(value) {
+  const text = normalizePhotoCreditText(value);
+  if (!text || text.length < 2 || text.length > 180) return false;
+  if (/^(צילום|צלם|קרדיט|photo|credit)\s*:?\s*$/i.test(text)) return false;
+  if (/^(מערכת|יחצ|יח"צ|יח״צ|ארכיון|שאטרסטוק|shutterstock|istock|getty images?)$/i.test(text)) return true;
+  return /[\p{L}]/u.test(text);
+}
+
+function extractPhotoCreditFromJsonLd(html, targetImageUrl = "") {
+  const scripts = [...String(html || "").matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  const target = String(targetImageUrl || "").split("?")[0];
+
+  const scan = (node) => {
+    if (!node) return "";
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const found = scan(child);
+        if (found) return found;
+      }
+      return "";
+    }
+    if (typeof node !== "object") return "";
+
+    const type = String(node["@type"] || "").toLowerCase();
+    const imageObj = node.image || node.thumbnailUrl || node.associatedMedia || null;
+
+    const imageMatches = (() => {
+      if (!target) return true;
+      const urls = [];
+      const collect = (v) => {
+        if (!v) return;
+        if (typeof v === "string") urls.push(v);
+        else if (Array.isArray(v)) v.forEach(collect);
+        else if (typeof v === "object") {
+          collect(v.url); collect(v.contentUrl); collect(v.thumbnailUrl);
+        }
+      };
+      collect(imageObj);
+      return urls.some((u) => String(u).split("?")[0] === target);
+    })();
+
+    if (imageMatches || type.includes("imageobject")) {
+      const candidates = [
+        node.creditText,
+        node.creator?.name,
+        node.creator,
+        node.author?.name,
+        node.author,
+        node.copyrightHolder?.name,
+        node.copyrightHolder,
+        node.provider?.name
+      ];
+      for (const candidate of candidates) {
+        const text = normalizePhotoCreditText(candidate?.name || candidate);
+        if (photoCreditLooksUseful(text)) return text;
+      }
+
+      const imageCandidates = Array.isArray(imageObj) ? imageObj : [imageObj];
+      for (const img of imageCandidates) {
+        if (!img || typeof img !== "object") continue;
+        const candidates2 = [
+          img.creditText,
+          img.creator?.name,
+          img.creator,
+          img.author?.name,
+          img.author,
+          img.copyrightHolder?.name,
+          img.copyrightHolder
+        ];
+        for (const candidate of candidates2) {
+          const text = normalizePhotoCreditText(candidate?.name || candidate);
+          if (photoCreditLooksUseful(text)) return text;
+        }
+      }
+    }
+
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") {
+        const found = scan(value);
+        if (found) return found;
+      }
+    }
+    return "";
+  };
+
+  for (const match of scripts) {
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      const found = scan(parsed);
+      if (found) return found;
+    } catch {}
+  }
+  return "";
+}
+
+function extractPhotoCreditFromMeta(html) {
+  const source = String(html || "");
+  const metaPatterns = [
+    /<meta[^>]+(?:name|property)=["'](?:credit|photo:credit|image:credit|og:image:credit|twitter:image:credit)["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["'](?:credit|photo:credit|image:credit|og:image:credit|twitter:image:credit)["'][^>]*>/i,
+    /<meta[^>]+name=["']author["'][^>]+content=["']([^"']+)["'][^>]*>/i
+  ];
+  for (const rx of metaPatterns) {
+    const m = source.match(rx);
+    const text = normalizePhotoCreditText(m?.[1] || "");
+    if (photoCreditLooksUseful(text)) return text;
+  }
+  return "";
+}
+
+function extractPhotoCreditNearImage(html, targetImageUrl = "") {
+  const source = String(html || "");
+  const decodedTarget = String(targetImageUrl || "").replace(/&amp;/g, "&");
+  const filename = (() => {
+    try { return new URL(decodedTarget).pathname.split("/").pop() || ""; } catch { return ""; }
+  })();
+
+  const needles = [decodedTarget, filename].filter((v) => v && v.length >= 6);
+  for (const needle of needles) {
+    const idx = source.indexOf(needle);
+    if (idx < 0) continue;
+    const windowText = source.slice(Math.max(0, idx - 1200), Math.min(source.length, idx + 2200));
+    const textOnly = normalizePhotoCreditText(windowText);
+    const patterns = [
+      /צילום\s*[:\-–—]\s*([^|•<>]{2,90})/i,
+      /צלם\s*[:\-–—]\s*([^|•<>]{2,90})/i,
+      /קרדיט\s*[:\-–—]\s*([^|•<>]{2,90})/i,
+      /Photo(?:graphy)?\s*[:\-–—]\s*([^|•<>]{2,90})/i,
+      /Credit\s*[:\-–—]\s*([^|•<>]{2,90})/i
+    ];
+    for (const rx of patterns) {
+      const m = textOnly.match(rx);
+      const credit = normalizePhotoCreditText(m?.[1] || "");
+      if (photoCreditLooksUseful(credit)) return credit;
+    }
+  }
+  return "";
+}
+
+function extractPhotoCredit(html, targetImageUrl = "") {
+  return (
+    extractPhotoCreditFromJsonLd(html, targetImageUrl) ||
+    extractPhotoCreditNearImage(html, targetImageUrl) ||
+    extractPhotoCreditFromMeta(html) ||
+    ""
+  );
 }
 
 function cleanText(value) {

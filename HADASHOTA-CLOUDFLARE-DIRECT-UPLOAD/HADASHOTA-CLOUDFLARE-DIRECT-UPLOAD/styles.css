@@ -4663,3 +4663,15 @@ a.media-credit:hover {
     min-height: 78px;
   }
 }
+
+
+/* V100 — photographer/source credit on source images */
+.safe-media-slot.hydrated-direct > .media-credit,
+.news-image > .media-credit {
+  font-size: 7.5px !important;
+  line-height: 1.2 !important;
+  padding: 2px 5px !important;
+  max-width: calc(100% - 10px) !important;
+  white-space: normal !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.35);
+}
