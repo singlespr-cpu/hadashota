@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "104.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v104-1";
+const KOTERET_CLIENT_BUILD = "105.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v105-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V104 · API ${apiVersion}` : "גרסה V104 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V105 · API ${apiVersion}` : "גרסה V105 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V104 · API V104";
+    marker.textContent = "גרסה V105 · API V105";
   } catch (error) {
-    marker.textContent = "גרסה V104 · API לא מחובר";
+    marker.textContent = "גרסה V105 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3388,7 +3388,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=104.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=105.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3910,6 +3910,21 @@ function renderPremiumIntelligence() {
     const sources = Math.max(1, Number(rising.reportCount) || normalizeClusterReports(rising).length || 1);
     risingMeta.textContent = `${sources > 1 ? `${sources} מקורות · ` : ""}${formatAge(rising.latestReportAt || rising.publishedAt || new Date().toISOString())}`;
   }
+  const storyBtn = document.getElementById("risingStoryOpenBtn");
+  if (storyBtn && rising) {
+    const report = normalizeClusterReports(rising)[0];
+    const targetUrl = rising.url || report?.url || "";
+    storyBtn.disabled = !targetUrl;
+    storyBtn.onclick = targetUrl ? () => window.open(targetUrl, "_blank", "noopener,noreferrer") : null;
+  }
+
+  const summaryEl = document.getElementById("premiumNowSummary");
+  if (summaryEl) {
+    const sourceCount = rising ? Math.max(1, Number(rising.reportCount) || normalizeClusterReports(rising).length || 1) : 0;
+    summaryEl.textContent = rising
+      ? `המערכת מזהה כרגע ${sourceCount > 1 ? `הצלבה בין ${sourceCount} מקורות` : "אירוע בולט"} סביב הסיפור המתחזק, לצד ${recent.length} עדכונים ב־45 הדקות האחרונות.`
+      : "מנתח את קצב הדיווחים, הצלבת המקורות והאירועים שמתפתחים עכשיו.";
+  }
 
   const topicMap = new Map();
   for (const item of recent.slice(0, 50)) {
@@ -3964,6 +3979,18 @@ function renderPremiumIntelligence() {
       try { return storyHotScore(item) >= 42; } catch { return premiumImportanceScore(item) >= 34; }
     });
     hotCountEl.textContent = String(hotItems.length);
+  }
+
+  const watchEl = document.getElementById("premiumWatchItems");
+  if (watchEl) {
+    const watch = ranked.filter(({item,score}) => {
+      const reports = Math.max(1, Number(item.reportCount) || normalizeClusterReports(item).length || 1);
+      return score >= 28 || reports >= 2;
+    }).slice(0,3);
+    watchEl.innerHTML = watch.length ? watch.map(({item}) => {
+      const reports = Math.max(1, Number(item.reportCount) || normalizeClusterReports(item).length || 1);
+      return `<div class="v105-watch-item"><span></span><strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong><small>${reports} ${reports===1?"מקור":"מקורות"}</small></div>`;
+    }).join("") : `<div class="v105-empty">אין כרגע אירועים חריגים שדורשים מעקב.</div>`;
   }
 
   renderSinceVisitPremium(ranked.map((x) => x.item));
@@ -4047,34 +4074,110 @@ function attachPremiumWhyButtons() {
 }
 
 
+
+function v105RankedItems() {
+  return premiumVisibleNewsItems()
+    .map((item) => ({ item, score: premiumImportanceScore(item) }))
+    .sort((x,y) => y.score - x.score);
+}
+
+function v105OpenModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.hidden = false;
+  document.documentElement.classList.add("v105-modal-open");
+  requestAnimationFrame(() => modal.classList.add("is-open"));
+}
+function v105CloseModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.remove("is-open");
+  document.documentElement.classList.remove("v105-modal-open");
+  setTimeout(() => { modal.hidden = true; }, 150);
+}
+
+function v105OpenBrief() {
+  const list = document.getElementById("v105BriefList");
+  if (!list) return;
+  const ranked = v105RankedItems().slice(0,5);
+  list.innerHTML = ranked.length ? ranked.map(({item},i) => {
+    const reports = Math.max(1, Number(item.reportCount) || normalizeClusterReports(item).length || 1);
+    const url = item.url || normalizeClusterReports(item)[0]?.url || "#";
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="v105-brief-item">
+      <span>${i+1}</span>
+      <div><strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
+      <small>${reports} ${reports===1?"מקור":"מקורות"} · ${escapeHtml(formatAge(item.latestReportAt || item.publishedAt || new Date().toISOString()))}</small></div>
+    </a>`;
+  }).join("") : `<div class="v105-empty">עדיין אין מספיק נתונים לסיכום.</div>`;
+  v105OpenModal("v105BriefModal");
+}
+
+function v105ToggleImportant() {
+  const btn = document.getElementById("premiumImportantBtn");
+  if (!btn) return;
+  const active = btn.getAttribute("aria-pressed") === "true";
+  const next = !active;
+  btn.setAttribute("aria-pressed", String(next));
+  btn.classList.toggle("active", next);
+
+  // Use the site's own preference/state when available; otherwise filter the rendered feed locally.
+  try {
+    if (typeof state === "object" && state) state.importantOnly = next;
+  } catch {}
+  const cards = [...document.querySelectorAll(".news-card")];
+  cards.forEach((card) => {
+    if (!next) { card.hidden = false; return; }
+    const title = card.querySelector(".news-title,h3,h2")?.textContent?.trim() || "";
+    const item = premiumVisibleNewsItems().find((x) => cleanDisplayTitle(x.title) === title);
+    card.hidden = item ? premiumImportanceScore(item) < 28 : false;
+  });
+}
+
+function v105OpenNear() {
+  const input = document.getElementById("v105NearInput");
+  if (input) input.value = localStorage.getItem("koteretPlusNearArea") || "";
+  v105OpenModal("v105NearModal");
+}
+function v105ApplyNear() {
+  const input = document.getElementById("v105NearInput");
+  const value = input?.value?.trim() || "";
+  if (!value) return;
+  localStorage.setItem("koteretPlusNearArea", value);
+  v105CloseModal("v105NearModal");
+  const q = value.toLowerCase();
+  document.querySelectorAll(".news-card").forEach((card) => {
+    const text = (card.textContent || "").toLowerCase();
+    card.hidden = !text.includes(q);
+  });
+  const btn = document.getElementById("premiumNearYouBtn");
+  if (btn) { btn.classList.add("active"); btn.textContent = `⌖ ${value}`; }
+}
+function v105ClearNear() {
+  localStorage.removeItem("koteretPlusNearArea");
+  document.querySelectorAll(".news-card").forEach((card) => card.hidden = false);
+  const btn = document.getElementById("premiumNearYouBtn");
+  if (btn) { btn.classList.remove("active"); btn.textContent = "⌖ מה קורה לידך"; }
+  v105CloseModal("v105NearModal");
+}
+
 function bindUnifiedNowCenterActions() {
-  const relay = (fromId, toId) => {
-    const from = document.getElementById(fromId);
-    const to = document.getElementById(toId);
-    if (!from || !to || from.dataset.relayBound === "1") return;
-    from.dataset.relayBound = "1";
-    from.addEventListener("click", (event) => {
-      event.preventDefault();
-      to.click();
-      if (fromId === "premiumImportantBtn") {
-        requestAnimationFrame(() => {
-          from.setAttribute("aria-pressed", to.getAttribute("aria-pressed") || "false");
-          from.classList.toggle("active", to.getAttribute("aria-pressed") === "true");
-        });
-      }
-    });
-  };
+  const brief=document.getElementById("premiumQuickBriefBtn");
+  const important=document.getElementById("premiumImportantBtn");
+  const near=document.getElementById("premiumNearYouBtn");
+  if (brief && brief.dataset.bound!=="1") { brief.dataset.bound="1"; brief.addEventListener("click",v105OpenBrief); }
+  if (important && important.dataset.bound!=="1") { important.dataset.bound="1"; important.addEventListener("click",v105ToggleImportant); }
+  if (near && near.dataset.bound!=="1") { near.dataset.bound="1"; near.addEventListener("click",v105OpenNear); }
 
-  relay("premiumNearYouBtn", "nearYouBtn");
-  relay("premiumImportantBtn", "importantOnlyBtn");
-  relay("premiumQuickBriefBtn", "quickBriefBtn");
-
-  const originalImportant = document.getElementById("importantOnlyBtn");
-  const premiumImportant = document.getElementById("premiumImportantBtn");
-  if (originalImportant && premiumImportant) {
-    premiumImportant.setAttribute("aria-pressed", originalImportant.getAttribute("aria-pressed") || "false");
-    premiumImportant.classList.toggle("active", originalImportant.getAttribute("aria-pressed") === "true");
-  }
+  document.querySelectorAll("[data-v105-close]").forEach((el)=>{
+    if(el.dataset.bound==="1") return; el.dataset.bound="1"; el.addEventListener("click",()=>v105CloseModal("v105BriefModal"));
+  });
+  document.querySelectorAll("[data-v105-near-close]").forEach((el)=>{
+    if(el.dataset.bound==="1") return; el.dataset.bound="1"; el.addEventListener("click",()=>v105CloseModal("v105NearModal"));
+  });
+  const apply=document.getElementById("v105NearApply");
+  if(apply && apply.dataset.bound!=="1"){apply.dataset.bound="1";apply.addEventListener("click",v105ApplyNear);}
+  const clear=document.getElementById("v105NearClear");
+  if(clear && clear.dataset.bound!=="1"){clear.dataset.bound="1";clear.addEventListener("click",v105ClearNear);}
 }
 
 function refreshPremiumLayer() {
