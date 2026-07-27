@@ -5370,3 +5370,187 @@ html.v105-modal-open{overflow:hidden}
   .v107-side-head,.v107-watch-mini{grid-template-columns:1fr}
   .v107-side-actions{display:grid;grid-template-columns:1fr 1fr}
 }
+
+
+/* =========================================================
+   V108 — slim live status strip
+   ========================================================= */
+.now-status-strip{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:14px;
+  min-height:58px;
+  margin:10px 0 12px;
+  padding:10px 14px;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:17px;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 10px 28px rgba(15,23,42,.045);
+}
+.now-status-strip__activity{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:max-content;
+}
+.now-status-strip__activity .news-pulse{
+  padding:0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+  font-size:11px;
+}
+.now-status-strip__activity small{
+  color:#94a3b8;
+  font-size:8px;
+  white-space:nowrap;
+}
+.now-status-strip__topics{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding-inline:12px;
+  border-inline:1px solid #eef2f7;
+}
+.now-status-strip__label{
+  flex:0 0 auto;
+  font-size:9px;
+  font-weight:900;
+  color:#64748b;
+}
+.now-status-strip__topic-list{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  overflow:hidden;
+}
+.now-topic-chip{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  min-width:0;
+  padding:5px 7px;
+  border-radius:9px;
+  background:#f8fafc;
+  border:1px solid #eef2f7;
+  white-space:nowrap;
+}
+.now-topic-chip b{
+  max-width:120px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:9px;
+  color:#0f172a;
+}
+.now-topic-chip small{
+  color:#94a3b8;
+  font-size:7.5px;
+}
+.now-status-strip__watch{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  min-width:max-content;
+  color:#475569;
+  font-size:9px;
+  font-weight:800;
+}
+.now-status-strip__watch .premium-hot-dot{
+  width:6px;height:6px;box-shadow:0 0 0 4px rgba(239,68,68,.09);
+}
+.now-status-strip__actions{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  min-width:max-content;
+}
+.now-status-strip__actions button{
+  min-height:31px;
+  padding:6px 9px;
+  border:1px solid #e2e8f0;
+  border-radius:9px;
+  background:#fff;
+  color:#334155;
+  font-size:8.5px;
+  font-weight:900;
+  cursor:pointer;
+  transition:background .15s ease,color .15s ease,transform .15s ease;
+}
+.now-status-strip__actions button:hover{transform:translateY(-1px);background:#f8fafc}
+.now-status-strip__actions button:first-child{
+  background:#e11d48;
+  color:#fff;
+  border-color:#e11d48;
+}
+.now-status-strip__actions button.active,
+.now-status-strip__actions button[aria-pressed="true"]{
+  background:#111827;
+  color:#fff;
+  border-color:#111827;
+}
+
+/* Hide old premium layouts completely */
+.premium-intelligence--v107,
+.v107-grid,
+.v107-main-card,
+.v107-side-card,
+.v107-watch-mini,
+.v107-main-actions,
+.v107-side-actions{display:none!important}
+
+@media(max-width:900px){
+  .now-status-strip{
+    grid-template-columns:auto 1fr auto;
+  }
+  .now-status-strip__watch{
+    display:none;
+  }
+}
+@media(max-width:700px){
+  .now-status-strip{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-height:52px;
+    padding:8px 10px;
+    overflow-x:auto;
+    overscroll-behavior-inline:contain;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+  }
+  .now-status-strip::-webkit-scrollbar{display:none}
+  .now-status-strip__activity,
+  .now-status-strip__topics,
+  .now-status-strip__watch,
+  .now-status-strip__actions{
+    flex:0 0 auto;
+  }
+  .now-status-strip__topics{
+    padding-inline:8px;
+    border-inline:1px solid #eef2f7;
+  }
+  .now-status-strip__topic-list{
+    overflow:visible;
+  }
+  .now-topic-chip b{max-width:100px}
+  .now-status-strip__watch{display:flex}
+  .now-status-strip__activity small{display:none}
+  .now-status-strip__actions button{
+    min-height:30px;
+    font-size:8px;
+    padding:6px 8px;
+  }
+}
+@media(max-width:480px){
+  .now-status-strip{
+    margin:8px 0 10px;
+    border-radius:14px;
+  }
+  .now-status-strip__label{font-size:8px}
+  .now-topic-chip{padding:4px 6px}
+  .now-topic-chip b{font-size:8.5px}
+  .now-topic-chip small{font-size:7px}
+}
