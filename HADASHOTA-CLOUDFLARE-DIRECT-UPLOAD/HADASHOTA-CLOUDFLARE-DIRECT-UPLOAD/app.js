@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "98.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v98-1";
+const KOTERET_CLIENT_BUILD = "99.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v99-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V98 · API ${apiVersion}` : "גרסה V98 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V99 · API ${apiVersion}` : "גרסה V99 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V98 · API V98";
+    marker.textContent = "גרסה V99 · API V99";
   } catch (error) {
-    marker.textContent = "גרסה V98 · API לא מחובר";
+    marker.textContent = "גרסה V99 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1989,7 +1989,7 @@ function licensedMediaQueryVariantsForItem(item, displayTitle = "") {
   // Commons metadata is richer in English; try contextual English variants too.
   for (const q of mediaEnglishContextQueries(item, title)) push(q);
 
-  return variants.slice(0, 18);
+  return variants.slice(0, 20);
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -2053,7 +2053,7 @@ async function fetchSafeMedia(query, category = "other") {
   if (!normalized) return null;
   const key = `${category}|${normalized}`;
   if (SAFE_MEDIA_CACHE.has(key)) return SAFE_MEDIA_CACHE.get(key);
-  if (safeMediaRequests >= 160) return null;
+  if (safeMediaRequests >= 220) return null;
   safeMediaRequests += 1;
   const promise = fetch(`/api/media?q=${encodeURIComponent(normalized)}&category=${encodeURIComponent(category)}`, { cache: "no-store" })
     .then((r) => r.ok ? r.json() : null)
@@ -2191,6 +2191,21 @@ function reusableSourceImageLicense(report) {
   return { license, normalized, creator, licenseUrl, landingUrl };
 }
 
+
+function originalFeedSourceImage(item) {
+  const reports = [item, ...normalizeClusterReports(item || {})].filter(Boolean);
+  for (const report of reports) {
+    const raw = String(report?.imageUrl || report?.image || report?.thumbnailUrl || report?.thumbnail || report?.enclosure?.url || "").trim();
+    if (!raw || !sourceImageLooksEditorial(raw)) continue;
+    return {
+      url: raw,
+      credit: cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה"),
+      sourceUrl: report?.url || item?.url || ""
+    };
+  }
+  return null;
+}
+
 function preferredSourceImage(item) {
   const reports = normalizeClusterReports(item || {});
   const candidates = [item, ...reports].filter(Boolean);
@@ -2295,9 +2310,14 @@ async function hydrateSafeMediaSlot(slot) {
     img.addEventListener('error', () => {
       if (!img.isConnected) return;
       const replacement = document.createElement("span");
-      replacement.className = "safe-media-slot contextual-media-fallback";
+      replacement.className = "safe-media-slot";
+      replacement.dataset.mediaQuery = slot.dataset.mediaQuery || "";
+      replacement.dataset.category = slot.dataset.category || "other";
+      replacement.dataset.storyTitle = slot.dataset.storyTitle || "";
+      replacement.dataset.storyPreview = slot.dataset.storyPreview || "";
       replacement.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
       img.replaceWith(replacement);
+      hydrateSafeMediaSlot(replacement);
     }, { once:true });
     slot.replaceWith(img);
     if (a && directCredit) {
@@ -2314,10 +2334,15 @@ async function hydrateSafeMediaSlot(slot) {
   }
 
   const mediaQueries = String(slot.dataset.mediaQuery || "").split("|").map((q) => q.trim()).filter(Boolean);
+  const feedStory = {
+    title: slot.dataset.storyTitle || "",
+    preview: slot.dataset.storyPreview || "",
+    category: slot.dataset.category || "other"
+  };
   let media = null;
-  for (const query of mediaQueries.slice(0, 18)) {
-    media = await fetchSafeMedia(query, slot.dataset.category || "other");
-    if (mediaMatchesStoryStrictly(media, item, displayTitle, { lead: false })) break;
+  for (const query of mediaQueries.slice(0, 20)) {
+    media = await fetchSafeMedia(query, feedStory.category);
+    if (mediaMatchesStoryStrictly(media, feedStory, feedStory.title, { lead: false })) break;
     media = null;
   }
   if (!slot.isConnected) return;
@@ -2688,9 +2713,9 @@ function newsCardHtml(item) {
   const isSite = item.sourceKind === "site";
   const storyUrl = escapeHtml(storyHref(item));
   const mediaQuery = escapeHtml(licensedMediaQueryVariantsForItem(item, safeTitle).join(" | "));
-  const preferredImage = preferredSourceImage(item);
+  const preferredImage = originalFeedSourceImage(item) || preferredSourceImage(item);
   const imageHtml = state.showImages
-    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit)}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" aria-hidden="true"></span></a>`
+    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit)}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="${escapeHtml(newsPreviewText(item, reportCount))}" aria-hidden="true"></span></a>`
     : "";
   const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeTitle)}</a>`;
   const relatedHtml = related.length ? `
@@ -3356,7 +3381,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=98.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=99.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
