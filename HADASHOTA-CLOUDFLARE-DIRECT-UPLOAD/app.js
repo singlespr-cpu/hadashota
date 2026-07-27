@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "97.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v97-1";
+const KOTERET_CLIENT_BUILD = "98.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v98-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V97 · API ${apiVersion}` : "גרסה V97 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V98 · API ${apiVersion}` : "גרסה V98 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V97 · API V97";
+    marker.textContent = "גרסה V98 · API V98";
   } catch (error) {
-    marker.textContent = "גרסה V97 · API לא מחובר";
+    marker.textContent = "גרסה V98 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1989,7 +1989,7 @@ function licensedMediaQueryVariantsForItem(item, displayTitle = "") {
   // Commons metadata is richer in English; try contextual English variants too.
   for (const q of mediaEnglishContextQueries(item, title)) push(q);
 
-  return variants.slice(0, 14);
+  return variants.slice(0, 18);
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -2053,7 +2053,7 @@ async function fetchSafeMedia(query, category = "other") {
   if (!normalized) return null;
   const key = `${category}|${normalized}`;
   if (SAFE_MEDIA_CACHE.has(key)) return SAFE_MEDIA_CACHE.get(key);
-  if (safeMediaRequests >= 72) return null;
+  if (safeMediaRequests >= 160) return null;
   safeMediaRequests += 1;
   const promise = fetch(`/api/media?q=${encodeURIComponent(normalized)}&category=${encodeURIComponent(category)}`, { cache: "no-store" })
     .then((r) => r.ok ? r.json() : null)
@@ -2315,7 +2315,7 @@ async function hydrateSafeMediaSlot(slot) {
 
   const mediaQueries = String(slot.dataset.mediaQuery || "").split("|").map((q) => q.trim()).filter(Boolean);
   let media = null;
-  for (const query of mediaQueries.slice(0, 14)) {
+  for (const query of mediaQueries.slice(0, 18)) {
     media = await fetchSafeMedia(query, slot.dataset.category || "other");
     if (mediaMatchesStoryStrictly(media, item, displayTitle, { lead: false })) break;
     media = null;
@@ -2376,7 +2376,7 @@ function hydrateSafeMediaSlots() {
 
   // Legacy fallback: hydrate only the first screenful-ish batch instead of firing
   // dozens of open-media lookups at once.
-  slots.slice(0, 12).forEach((slot) => hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error)));
+  slots.slice(0, 30).forEach((slot) => hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error)));
 }
 
 function render(options = {}) {
@@ -2687,7 +2687,7 @@ function newsCardHtml(item) {
   const verifyBadge = reportCount >= 2 ? `<span class="verification-badge" title="רמת אימות לפי מספר וסוג המקורות">✓ ${verification.label}</span>` : "";
   const isSite = item.sourceKind === "site";
   const storyUrl = escapeHtml(storyHref(item));
-  const mediaQuery = escapeHtml(mediaQueryForItem(item, safeTitle));
+  const mediaQuery = escapeHtml(licensedMediaQueryVariantsForItem(item, safeTitle).join(" | "));
   const preferredImage = preferredSourceImage(item);
   const imageHtml = state.showImages
     ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit)}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" aria-hidden="true"></span></a>`
@@ -3356,7 +3356,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=97.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=98.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
