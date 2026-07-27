@@ -19,16 +19,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f7f8fb" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="generator" content="Koteret Plus 100.0.0" />
+  <meta name="generator" content="Koteret Plus 102.0.0" />
   <meta name="apple-mobile-web-app-title" content="כותרת פלוס" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="canonical" href="__SITE_URL__/" />
-  <link rel="icon" href="/favicon.svg?v=100.0.0" type="image/svg+xml" />
-  <link rel="icon" href="/favicon-32.png?v=100.0.0" sizes="32x32" type="image/png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=100.0.0" sizes="180x180" />
-  <link rel="manifest" href="/site.webmanifest?v=100.0.0" />
+  <link rel="icon" href="/favicon.svg?v=102.0.0" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png?v=102.0.0" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=102.0.0" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest?v=102.0.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -42,7 +42,7 @@
     })();
   </script>
   <title>כותרת פלוס | חדשות ועדכונים בזמן אמת מכל המקורות</title>
-  <link rel="stylesheet" href="/styles.css?v=100.0.0" />
+  <link rel="stylesheet" href="/styles.css?v=102.0.0" />
 
   <script type="application/ld+json">
 {
@@ -105,6 +105,14 @@
           <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"></path></svg>
           <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"></path></svg>
         </button>
+
+<button class="top-settings-btn" id="topSettingsBtn" type="button" aria-label="הגדרות" title="הגדרות">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8Zm8.1 3.4c0-.5-.05-1-.14-1.47l2.03-1.58-2-3.46-2.52 1a8.4 8.4 0 0 0-2.55-1.47L14.54 2h-4.08l-.38 3.02a8.4 8.4 0 0 0-2.55 1.47l-2.52-1-2 3.46 2.03 1.58A8.2 8.2 0 0 0 4.9 12c0 .5.05 1 .14 1.47l-2.03 1.58 2 3.46 2.52-1a8.4 8.4 0 0 0 2.55 1.47l.38 3.02h4.08l.38-3.02a8.4 8.4 0 0 0 2.55-1.47l2.52 1 2-3.46-2.03-1.58c.09-.47.14-.97.14-1.47Z"/>
+  </svg>
+  <span class="settings-custom-dot" id="settingsCustomDot" aria-hidden="true"></span>
+</button>
+
         <button class="icon-button" id="refreshBtn" type="button" title="רענון עכשיו" aria-label="רענון עכשיו">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
         </button>
@@ -457,7 +465,46 @@
         </section>
       </aside>
     </div>
-  </main>
+  
+<section class="premium-intelligence" id="premiumIntelligence" aria-label="תמונת מצב חדשותית">
+  <div class="premium-intelligence__head">
+    <div>
+      <span class="premium-eyebrow">KOTERET PLUS INTELLIGENCE</span>
+      <h2>מה באמת קורה עכשיו?</h2>
+      <p>תמונת מצב חיה שמזקקת את הרעש החדשותי למה שחשוב באמת.</p>
+    </div>
+    <div class="news-pulse" id="newsPulse">
+      <span class="news-pulse__dot"></span>
+      <span id="newsPulseLabel">מחשב תמונת מצב…</span>
+    </div>
+  </div>
+  <div class="premium-intelligence__grid">
+    <article class="premium-signal premium-signal--hero">
+      <span class="premium-signal__label">הסיפור שמתחזק</span>
+      <strong id="risingStory">מזהה מגמה…</strong>
+      <small id="risingStoryMeta">בודק הצלבה בין מקורות ועדכונים</small>
+    </article>
+    <article class="premium-signal">
+      <span class="premium-signal__label">עכשיו מדברים על</span>
+      <div class="premium-topics" id="premiumTopics"></div>
+    </article>
+    <article class="premium-signal">
+      <span class="premium-signal__label">רמת פעילות</span>
+      <strong id="activityLevel">מתעדכן</strong>
+      <small id="activityMeta">לפי קצב, ריבוי מקורות וחשיבות</small>
+    </article>
+  </div>
+</section>
+
+<section class="since-visit-premium" id="sinceVisitPremium" hidden>
+  <div>
+    <span class="premium-eyebrow">מאז שנכנסת</span>
+    <h2 id="sinceVisitTitle">מה פספסת?</h2>
+  </div>
+  <div class="since-visit-items" id="sinceVisitItems"></div>
+</section>
+
+</main>
 
   <button class="back-to-top" id="backToTop" type="button" aria-label="חזרה לראש העמוד" title="חזרה למעלה">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6"></path></svg>
@@ -470,7 +517,7 @@
       <p class="footer-seo-links"><a href="/about">אודות</a><span>·</span><a href="/how-it-works">איך כותרת פלוס עובד</a><span>·</span><a href="/contact">יצירת קשר</a><span>·</span><a href="/copyright">זכויות יוצרים והסרת תוכן</a><span>·</span><a href="/privacy">פרטיות</a></p>
       <p>לפרטים נוספים ויצירת קשר: <a href="mailto:singles.pr@gmail.com">singles.pr@gmail.com</a></p>
       <small>המערכת אינה מעתיקה כתבות מלאות. כל ידיעה מפנה למקור המקורי — כתבות לאתר החדשות ודיווחי Telegram להודעת המקור.</small>
-      <small id="siteVersion" class="site-version" aria-label="גרסת האתר ומצב ה-API">גרסה V100 · בודק API…</small>
+      <small id="siteVersion" class="site-version" aria-label="גרסת האתר ומצב ה-API">גרסה V102 · בודק API…</small>
     </div>
   </footer>
 
@@ -654,6 +701,22 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=100.0.0" defer></script>
+  <script src="/app.js?v=102.0.0" defer></script>
+
+<div class="settings-modal" id="settingsModal" hidden>
+  <div class="settings-modal__backdrop" data-close-settings></div>
+  <section class="settings-modal__panel" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="settings-modal__head">
+      <div>
+        <span class="settings-modal__eyebrow">שליטה</span>
+        <h2 id="settingsModalTitle">העדפות תצוגה</h2>
+        <p>ההגדרות נשמרות אוטומטית במכשיר הזה</p>
+      </div>
+      <button class="settings-modal__close" type="button" data-close-settings aria-label="סגירה">×</button>
+    </div>
+    <div class="settings-modal__content" id="settingsModalContent"></div>
+  </section>
+</div>
+
 </body>
 </html>
