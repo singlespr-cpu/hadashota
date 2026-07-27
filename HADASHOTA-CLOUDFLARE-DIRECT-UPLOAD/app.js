@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "95.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v95-1";
+const KOTERET_CLIENT_BUILD = "96.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v96-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V95 · API ${apiVersion}` : "גרסה V95 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V96 · API ${apiVersion}` : "גרסה V96 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V95 · API V95";
+    marker.textContent = "גרסה V96 · API V96";
   } catch (error) {
-    marker.textContent = "גרסה V95 · API לא מחובר";
+    marker.textContent = "גרסה V96 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1901,6 +1901,57 @@ function editorialDeckForItem(item, sourceCount = 1) {
 }
 
 
+
+function mediaEnglishContextQueries(item, displayTitle = "") {
+  const text = `${displayTitle || ""} ${item?.title || ""} ${item?.preview || ""}`;
+  const contexts = mediaEventContext(text);
+  const queries = [];
+  const push = (q) => { if (q && !queries.includes(q)) queries.push(q); };
+
+  if (contexts.has("sea_rescue")) {
+    push("sea rescue lifeguard beach");
+    push("lifeguard rescue beach");
+    push("Magen David Adom ambulance beach");
+  }
+  if (contexts.has("road")) {
+    push("road accident emergency services");
+    push("ambulance road accident Israel");
+  }
+  if (contexts.has("fire")) {
+    push("firefighters Israel fire");
+    push("fire rescue firefighters");
+  }
+  if (contexts.has("security")) {
+    push("Israel Defense Forces");
+    push("missile interception Israel");
+    push("Home Front Command Israel");
+  }
+  if (contexts.has("medical")) {
+    push("Magen David Adom ambulance");
+    push("ambulance Israel emergency");
+  }
+  if (contexts.has("politics")) {
+    push("Knesset Israel");
+    push("Israeli government");
+  }
+
+  const entityMap = [
+    [/איראן|טהרן/i, "Iran"],
+    [/לבנון|ביירות/i, "Lebanon"],
+    [/סוריה|דמשק/i, "Syria"],
+    [/עזה/i, "Gaza"],
+    [/ירושלים/i, "Jerusalem"],
+    [/תל אביב/i, "Tel Aviv"],
+    [/חיפה/i, "Haifa"],
+    [/כנסת/i, "Knesset"],
+    [/בנק ישראל/i, "Bank of Israel"],
+    [/צה["״']?ל/i, "Israel Defense Forces"],
+    [/מד["״']?א/i, "Magen David Adom"]
+  ];
+  for (const [rx, q] of entityMap) if (rx.test(text)) push(q);
+  return queries.slice(0, 6);
+}
+
 function licensedMediaQueryVariantsForItem(item, displayTitle = "") {
   const title = cleanDisplayTitle(displayTitle || item?.title || "");
   const variants = [];
@@ -1935,7 +1986,10 @@ function licensedMediaQueryVariantsForItem(item, displayTitle = "") {
   const existing = mediaQueryForItem(item, title);
   if (existing) push(existing);
 
-  return variants.slice(0, 6);
+  // Commons metadata is richer in English; try contextual English variants too.
+  for (const q of mediaEnglishContextQueries(item, title)) push(q);
+
+  return variants.slice(0, 10);
 }
 
 function mediaQueryForItem(item, editorial = "") {
@@ -2048,17 +2102,46 @@ function mediaContextConflict(storyText, media) {
 }
 function mediaMatchesStoryStrictly(media, item, displayTitle = "", { lead = false } = {}) {
   if (!media) return false;
+
   const storyText = `${displayTitle} ${item?.title||""} ${item?.preview||""}`;
   if (mediaContextConflict(storyText, media)) return false;
+
   const story = mediaEventContext(storyText);
-  const image = mediaEventContext([media?.title||"",media?.description||"",media?.query||"",media?.matchedQuery||"",media?.landingUrl||""].join(" "));
-  if (lead) {
-    for (const context of ["sea_rescue","road","fire","security"]) {
-      if (story.has(context) && !image.has(context)) return false;
+  const image = mediaEventContext([
+    media?.candidateTitle||"", media?.candidateDescription||"",
+    media?.title||"", media?.description||"", media?.query||"",
+    media?.matchedQuery||"", media?.landingUrl||""
+  ].join(" "));
+
+  const highRisk = ["sea_rescue","road","fire","security"];
+  const storyContexts = highRisk.filter((c) => story.has(c));
+  const contextMatch = storyContexts.some((c) => image.has(c));
+
+  if (openMediaPassesEditorialGate(media, { lead })) {
+    if (!storyContexts.length || contextMatch) {
+      media._contextualIllustration = false;
+      return true;
     }
   }
-  return openMediaPassesEditorialGate(media, { lead });
+
+  const score = Number(media.relevanceScore) || 0;
+  const hits = Number(media.overlapHits) || 0;
+
+  // Allow a same-context Commons photo as an illustration, explicitly labelled.
+  if (storyContexts.length && contextMatch && score >= (lead ? 28 : 22) && hits >= 1) {
+    media._contextualIllustration = true;
+    return true;
+  }
+
+  // Lower-risk stories can use a matching person/place/institution image.
+  if (!storyContexts.length && score >= (lead ? 36 : 26) && hits >= 1) {
+    media._contextualIllustration = true;
+    return true;
+  }
+
+  return false;
 }
+
 function openMediaPassesEditorialGate(media, { lead = false } = {}) {
   if (!media?.url) return false;
   const score = Number(media.relevanceScore) || 0;
@@ -2126,7 +2209,7 @@ async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
     }
   }
   if (winner && leadFingerprint(winner) !== state.displayedLeadFingerprint) return;
-  if (!openMediaPassesEditorialGate(media, { lead: true })) {
+  if (!media) {
     el.leadStoryImage.removeAttribute("src");
     el.leadStoryImage.alt = "";
     el.leadStoryMedia.classList.add("image-unavailable", "contextual-fallback");
@@ -2139,8 +2222,9 @@ async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
   el.leadStoryImage.referrerPolicy = "no-referrer";
   el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
   delete el.leadStoryMedia.dataset.fallbackLabel;
-  el.leadStoryMedia.dataset.mediaCredit = `${media.illustrative ? "צילום אילוסטרציה · " : ""}${media.shortAttribution || media.attribution || "מדיה ברישיון פתוח"}`;
-  el.leadStoryMedia.title = `${media.illustrative ? "צילום אילוסטרציה — " : ""}${media.attribution ? `תמונה ברישיון פתוח · ${media.attribution}` : "תמונה ברישיון פתוח"}`;
+  const isIllustration = Boolean(media._contextualIllustration || media.illustrative);
+  el.leadStoryMedia.dataset.mediaCredit = `${isIllustration ? "תמונת המחשה · " : ""}${media.shortAttribution || media.attribution || "מדיה ברישיון פתוח"}`;
+  el.leadStoryMedia.title = `${isIllustration ? "תמונת המחשה — " : ""}${media.attribution ? `תמונה ברישיון פתוח · ${media.attribution}` : "תמונה ברישיון פתוח"}`;
 }
 
 async function hydrateLeadSafeMedia(winner, leadTitle) {
@@ -2217,13 +2301,13 @@ async function hydrateSafeMediaSlot(slot) {
 
   const mediaQueries = String(slot.dataset.mediaQuery || "").split("|").map((q) => q.trim()).filter(Boolean);
   let media = null;
-  for (const query of mediaQueries.slice(0, 6)) {
+  for (const query of mediaQueries.slice(0, 10)) {
     media = await fetchSafeMedia(query, slot.dataset.category || "other");
     if (mediaMatchesStoryStrictly(media, item, displayTitle, { lead: false })) break;
     media = null;
   }
   if (!slot.isConnected) return;
-  if (!openMediaPassesEditorialGate(media, { lead: false })) {
+  if (!media) {
     slot.classList.add("contextual-media-fallback");
     slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
     return;
@@ -2241,7 +2325,8 @@ async function hydrateSafeMediaSlot(slot) {
     a.title = `תמונה ברישיון פתוח · ${media.attribution}`;
     const credit = document.createElement(media.landingUrl ? "a" : "span");
     credit.className = "media-credit";
-    credit.textContent = `${media.illustrative ? "אילוסטרציה · " : ""}${media.shortAttribution || media.attribution}`;
+    const isIllustration = Boolean(media._contextualIllustration || media.illustrative);
+    credit.textContent = `${isIllustration ? "תמונת המחשה · " : ""}${media.shortAttribution || media.attribution}`;
     if (media.landingUrl) {
       credit.href = media.landingUrl;
       credit.target = "_blank";
@@ -3257,7 +3342,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=95.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=96.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);

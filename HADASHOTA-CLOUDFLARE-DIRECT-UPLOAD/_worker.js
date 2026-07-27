@@ -163,7 +163,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "95.0.0",
+          version: "96.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -176,7 +176,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "95.0.0",
+        version: "96.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -338,7 +338,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v95/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v96/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -597,7 +597,7 @@ async function findCommonsMedia(query, specificity = 1) {
   api.searchParams.set("origin", "*");
   api.searchParams.set("generator", "search");
   api.searchParams.set("gsrnamespace", "6");
-  api.searchParams.set("gsrlimit", "14");
+  api.searchParams.set("gsrlimit", "24");
   const queryConcepts = mediaConcepts(query);
   const needsVector = queryConcepts.has("openai") || queryConcepts.has("anthropic") || queryConcepts.has("gemini") || queryConcepts.has("microsoft") || queryConcepts.has("apple");
   api.searchParams.set("gsrsearch", needsVector ? query : `${query} filetype:bitmap`);
@@ -629,8 +629,8 @@ async function findCommonsMedia(query, specificity = 1) {
     const concepts = mediaConcepts(query);
     const subjectStrict = concepts.has("openai") || concepts.has("motorcycle") || concepts.has("scooter");
     const threshold = subjectStrict
-      ? (specificity >= 3 ? 28 : specificity >= 2 ? 25 : 22)
-      : (specificity >= 3 ? 34 : specificity >= 2 ? 30 : specificity >= 1 ? 24 : 70);
+      ? (specificity >= 3 ? 22 : specificity >= 2 ? 20 : 18)
+      : (specificity >= 3 ? 26 : specificity >= 2 ? 22 : specificity >= 1 ? 18 : 70);
     if (!best || best.score < threshold) return null;
 
     // V76 relevance gate: for a specific query, one coincidental word is not
@@ -726,7 +726,7 @@ async function handleOpenMedia(url, ctx) {
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v95-strict-context?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v96-balanced-context?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1077,12 +1077,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=95`;
+  cacheUrl.search = `?shard=${shard}&v=96`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=95`;
+  lastGoodUrl.search = `?shard=${shard}&v=96`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1097,7 +1097,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "95.0.0",
+          "X-Hadashota-Version": "96.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1220,13 +1220,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "95.0.0",
+      "X-Hadashota-Version": "96.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "95.0.0",
+      "X-Hadashota-Version": "96.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1260,7 +1260,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "95.0.0"
+        "X-Hadashota-Version": "96.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1282,7 +1282,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "95.0.0"
+    "X-Hadashota-Version": "96.0.0"
   });
 }
 
