@@ -19,16 +19,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f7f8fb" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="generator" content="Koteret Plus 102.0.0" />
+  <meta name="generator" content="Koteret Plus 103.0.0" />
   <meta name="apple-mobile-web-app-title" content="כותרת פלוס" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="format-detection" content="telephone=no" />
   <link rel="canonical" href="__SITE_URL__/" />
-  <link rel="icon" href="/favicon.svg?v=102.0.0" type="image/svg+xml" />
-  <link rel="icon" href="/favicon-32.png?v=102.0.0" sizes="32x32" type="image/png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=102.0.0" sizes="180x180" />
-  <link rel="manifest" href="/site.webmanifest?v=102.0.0" />
+  <link rel="icon" href="/favicon.svg?v=103.0.0" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32.png?v=103.0.0" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=103.0.0" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest?v=103.0.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -42,7 +42,7 @@
     })();
   </script>
   <title>כותרת פלוס | חדשות ועדכונים בזמן אמת מכל המקורות</title>
-  <link rel="stylesheet" href="/styles.css?v=102.0.0" />
+  <link rel="stylesheet" href="/styles.css?v=103.0.0" />
 
   <script type="application/ld+json">
 {
@@ -87,8 +87,7 @@
       </a>
 
       <div class="topbar-actions">
-        <span class="live-pill"><i></i> LIVE</span>
-        <button class="auto-refresh-pill" id="autoRefreshPill" type="button" title="רענון אוטומטי חכם"><i></i><span>רענון אוטומטי</span></button>
+<button class="auto-refresh-pill" id="autoRefreshPill" type="button" title="רענון אוטומטי חכם"><i></i><span>רענון אוטומטי</span></button>
         <button class="header-action-button notifications-button" id="notificationsBtn" type="button" title="התראות דפדפן על שינוי הכותרת הראשית" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"></path><path d="M10 19a2 2 0 0 0 4 0"></path></svg>
           <span>התראות</span>
@@ -348,6 +347,45 @@
       </div>
     </section>
 
+<section class="premium-intelligence" id="premiumIntelligence" aria-label="תמונת מצב חדשותית">
+  <div class="premium-intelligence__head">
+    <div>
+      <span class="premium-eyebrow">KOTERET PLUS INTELLIGENCE</span>
+      <h2>מה באמת קורה עכשיו?</h2>
+      <p>תמונת מצב חיה שמזקקת את הרעש החדשותי למה שחשוב באמת.</p>
+    </div>
+    <div class="news-pulse" id="newsPulse">
+      <span class="news-pulse__dot"></span>
+      <span id="newsPulseLabel">מחשב תמונת מצב…</span>
+    </div>
+  </div>
+  <div class="premium-intelligence__grid">
+    <article class="premium-signal premium-signal--hero">
+      <span class="premium-signal__label">הסיפור שמתחזק</span>
+      <strong id="risingStory">מזהה מגמה…</strong>
+      <small id="risingStoryMeta">בודק הצלבה בין מקורות ועדכונים</small>
+    </article>
+    <article class="premium-signal">
+      <span class="premium-signal__label">עכשיו מדברים על</span>
+      <div class="premium-topics" id="premiumTopics"></div>
+    </article>
+    <article class="premium-signal">
+      <span class="premium-signal__label">רמת פעילות</span>
+      <strong id="activityLevel">מתעדכן</strong>
+      <small id="activityMeta">לפי קצב, ריבוי מקורות וחשיבות</small>
+    </article>
+  </div>
+</section>
+
+<section class="since-visit-premium" id="sinceVisitPremium" hidden>
+  <div>
+    <span class="premium-eyebrow">מאז שנכנסת</span>
+    <h2 id="sinceVisitTitle">מה פספסת?</h2>
+  </div>
+  <div class="since-visit-items" id="sinceVisitItems"></div>
+</section>
+
+
     <section class="control-panel" id="controlPanel">
       <div class="control-row control-row-main">
         <label class="search-box">
@@ -466,43 +504,7 @@
       </aside>
     </div>
   
-<section class="premium-intelligence" id="premiumIntelligence" aria-label="תמונת מצב חדשותית">
-  <div class="premium-intelligence__head">
-    <div>
-      <span class="premium-eyebrow">KOTERET PLUS INTELLIGENCE</span>
-      <h2>מה באמת קורה עכשיו?</h2>
-      <p>תמונת מצב חיה שמזקקת את הרעש החדשותי למה שחשוב באמת.</p>
-    </div>
-    <div class="news-pulse" id="newsPulse">
-      <span class="news-pulse__dot"></span>
-      <span id="newsPulseLabel">מחשב תמונת מצב…</span>
-    </div>
-  </div>
-  <div class="premium-intelligence__grid">
-    <article class="premium-signal premium-signal--hero">
-      <span class="premium-signal__label">הסיפור שמתחזק</span>
-      <strong id="risingStory">מזהה מגמה…</strong>
-      <small id="risingStoryMeta">בודק הצלבה בין מקורות ועדכונים</small>
-    </article>
-    <article class="premium-signal">
-      <span class="premium-signal__label">עכשיו מדברים על</span>
-      <div class="premium-topics" id="premiumTopics"></div>
-    </article>
-    <article class="premium-signal">
-      <span class="premium-signal__label">רמת פעילות</span>
-      <strong id="activityLevel">מתעדכן</strong>
-      <small id="activityMeta">לפי קצב, ריבוי מקורות וחשיבות</small>
-    </article>
-  </div>
-</section>
 
-<section class="since-visit-premium" id="sinceVisitPremium" hidden>
-  <div>
-    <span class="premium-eyebrow">מאז שנכנסת</span>
-    <h2 id="sinceVisitTitle">מה פספסת?</h2>
-  </div>
-  <div class="since-visit-items" id="sinceVisitItems"></div>
-</section>
 
 </main>
 
@@ -517,7 +519,7 @@
       <p class="footer-seo-links"><a href="/about">אודות</a><span>·</span><a href="/how-it-works">איך כותרת פלוס עובד</a><span>·</span><a href="/contact">יצירת קשר</a><span>·</span><a href="/copyright">זכויות יוצרים והסרת תוכן</a><span>·</span><a href="/privacy">פרטיות</a></p>
       <p>לפרטים נוספים ויצירת קשר: <a href="mailto:singles.pr@gmail.com">singles.pr@gmail.com</a></p>
       <small>המערכת אינה מעתיקה כתבות מלאות. כל ידיעה מפנה למקור המקורי — כתבות לאתר החדשות ודיווחי Telegram להודעת המקור.</small>
-      <small id="siteVersion" class="site-version" aria-label="גרסת האתר ומצב ה-API">גרסה V102 · בודק API…</small>
+      <small id="siteVersion" class="site-version" aria-label="גרסת האתר ומצב ה-API">גרסה V103 · בודק API…</small>
     </div>
   </footer>
 
@@ -701,7 +703,7 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=102.0.0" defer></script>
+  <script src="/app.js?v=103.0.0" defer></script>
 
 <div class="settings-modal" id="settingsModal" hidden>
   <div class="settings-modal__backdrop" data-close-settings></div>
