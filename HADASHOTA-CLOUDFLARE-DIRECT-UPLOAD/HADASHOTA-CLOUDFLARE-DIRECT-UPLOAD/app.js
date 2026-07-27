@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "105.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v105-1";
+const KOTERET_CLIENT_BUILD = "106.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v106-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V105 · API ${apiVersion}` : "גרסה V105 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V106 · API ${apiVersion}` : "גרסה V106 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V105 · API V105";
+    marker.textContent = "גרסה V106 · API V106";
   } catch (error) {
-    marker.textContent = "גרסה V105 · API לא מחובר";
+    marker.textContent = "גרסה V106 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3388,7 +3388,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=105.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=106.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -4112,52 +4112,161 @@ function v105OpenBrief() {
   v105OpenModal("v105BriefModal");
 }
 
-function v105ToggleImportant() {
-  const btn = document.getElementById("premiumImportantBtn");
-  if (!btn) return;
-  const active = btn.getAttribute("aria-pressed") === "true";
-  const next = !active;
-  btn.setAttribute("aria-pressed", String(next));
-  btn.classList.toggle("active", next);
 
-  // Use the site's own preference/state when available; otherwise filter the rendered feed locally.
-  try {
-    if (typeof state === "object" && state) state.importantOnly = next;
-  } catch {}
-  const cards = [...document.querySelectorAll(".news-card")];
-  cards.forEach((card) => {
-    if (!next) { card.hidden = false; return; }
-    const title = card.querySelector(".news-title,h3,h2")?.textContent?.trim() || "";
-    const item = premiumVisibleNewsItems().find((x) => cleanDisplayTitle(x.title) === title);
-    card.hidden = item ? premiumImportanceScore(item) < 28 : false;
+function v106CardItem(card) {
+  const title = card.querySelector(".news-title,h3,h2")?.textContent?.trim() || "";
+  return premiumVisibleNewsItems().find((x) => cleanDisplayTitle(x.title) === title) || null;
+}
+
+function v106FilterStatus(message, active=true) {
+  let bar = document.getElementById("v106FilterStatus");
+  const feed = document.getElementById("newsFeed") || document.querySelector(".news-list");
+  if (!feed) return;
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "v106FilterStatus";
+    bar.className = "v106-filter-status";
+    feed.parentElement?.insertBefore(bar, feed);
+  }
+  bar.hidden = !active;
+  bar.innerHTML = active ? `<span>${escapeHtml(message)}</span><button type="button" id="v106ClearFilter">הצג הכל</button>` : "";
+  document.getElementById("v106ClearFilter")?.addEventListener("click", v106ClearAllFilters, {once:true});
+}
+
+function v106ClearAllFilters() {
+  document.querySelectorAll(".news-card").forEach((card)=>card.hidden=false);
+  const important=document.getElementById("premiumImportantBtn");
+  if(important){important.setAttribute("aria-pressed","false");important.classList.remove("active");important.textContent="רק חשוב";}
+  const near=document.getElementById("premiumNearYouBtn");
+  if(near){near.classList.remove("active");near.textContent="⌖ מה קורה לידך";}
+  window.__v106ImportantOnly=false;
+  window.__v106NearArea="";
+  v106FilterStatus("",false);
+}
+
+function v105ToggleImportant() {
+  const btn=document.getElementById("premiumImportantBtn");
+  if(!btn) return;
+  const next=!(window.__v106ImportantOnly===true);
+  window.__v106ImportantOnly=next;
+  window.__v106NearArea="";
+  btn.setAttribute("aria-pressed",String(next));
+  btn.classList.toggle("active",next);
+
+  const cards=[...document.querySelectorAll(".news-card")];
+  let shown=0;
+  cards.forEach((card)=>{
+    if(!next){card.hidden=false;shown++;return;}
+    const item=v106CardItem(card);
+    const important=item ? premiumImportanceScore(item)>=28 : false;
+    card.hidden=!important;
+    if(important) shown++;
   });
+
+  btn.textContent=next ? `רק חשוב · ${shown}` : "רק חשוב";
+  const near=document.getElementById("premiumNearYouBtn");
+  if(near){near.classList.remove("active");near.textContent="⌖ מה קורה לידך";}
+  v106FilterStatus(next ? `מוצגים ${shown} עדכונים בעלי חשיבות גבוהה` : "", next);
+
+  // Scroll just enough to make the result obvious.
+  if(next) (document.getElementById("newsFeed") || document.querySelector(".news-list"))?.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 function v105OpenNear() {
-  const input = document.getElementById("v105NearInput");
-  if (input) input.value = localStorage.getItem("koteretPlusNearArea") || "";
+  const input=document.getElementById("v105NearInput");
+  if(input) input.value=localStorage.getItem("koteretPlusNearArea") || "";
   v105OpenModal("v105NearModal");
 }
-function v105ApplyNear() {
-  const input = document.getElementById("v105NearInput");
-  const value = input?.value?.trim() || "";
-  if (!value) return;
-  localStorage.setItem("koteretPlusNearArea", value);
-  v105CloseModal("v105NearModal");
-  const q = value.toLowerCase();
-  document.querySelectorAll(".news-card").forEach((card) => {
-    const text = (card.textContent || "").toLowerCase();
-    card.hidden = !text.includes(q);
-  });
-  const btn = document.getElementById("premiumNearYouBtn");
-  if (btn) { btn.classList.add("active"); btn.textContent = `⌖ ${value}`; }
+
+function v106LocationTerms(value) {
+  const raw=String(value||"").trim();
+  const aliases={
+    "תל אביב":["תל אביב","תל-אביב","ת״א","ת\"א","יפו","גוש דן"],
+    "ירושלים":["ירושלים","ירושלמי","ירושלמית"],
+    "חיפה":["חיפה","חיפאי","חיפאית","קריות"],
+    "באר שבע":["באר שבע","באר-שבע","ב״ש","ב\"ש","נגב"],
+    "אשדוד":["אשדוד"],"אשקלון":["אשקלון"],"נתניה":["נתניה"],"פתח תקווה":["פתח תקווה","פתח-תקווה"],
+    "ראשון לציון":["ראשון לציון","ראשל״צ","ראשל\"צ"],"רמת גן":["רמת גן","רמת-גן"],
+    "הרצליה":["הרצליה"],"אילת":["אילת","ערבה"]
+  };
+  const key=Object.keys(aliases).find((k)=>raw===k || aliases[k].includes(raw));
+  return [...new Set([raw,...(key?aliases[key]:[])])].filter(Boolean);
 }
+
+function v106ItemLocationText(item) {
+  if(!item) return "";
+  const reports=normalizeClusterReports(item);
+  return [
+    item.title,item.preview,item.description,item.location,item.city,item.region,item.sourceName,
+    ...reports.flatMap((r)=>[r.title,r.preview,r.description,r.location,r.city,r.region])
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function v105ApplyNear() {
+  const input=document.getElementById("v105NearInput");
+  const value=input?.value?.trim() || "";
+  if(!value) return;
+
+  localStorage.setItem("koteretPlusNearArea",value);
+  window.__v106NearArea=value;
+  window.__v106ImportantOnly=false;
+  const terms=v106LocationTerms(value).map((x)=>x.toLowerCase());
+
+  const cards=[...document.querySelectorAll(".news-card")];
+  let shown=0;
+  cards.forEach((card)=>{
+    const item=v106CardItem(card);
+    const text=(v106ItemLocationText(item)+" "+(card.textContent||"")).toLowerCase();
+    const match=terms.some((term)=>text.includes(term));
+    card.hidden=!match;
+    if(match) shown++;
+  });
+
+  const important=document.getElementById("premiumImportantBtn");
+  if(important){important.setAttribute("aria-pressed","false");important.classList.remove("active");important.textContent="רק חשוב";}
+  const btn=document.getElementById("premiumNearYouBtn");
+  if(btn){btn.classList.add("active");btn.textContent=`⌖ ${value} · ${shown}`;}
+
+  v105CloseModal("v105NearModal");
+  v106FilterStatus(
+    shown ? `מה קורה ב${value}: נמצאו ${shown} עדכונים רלוונטיים` : `אין כרגע אירועים חדשותיים משמעותיים ב${value}`,
+    true
+  );
+  (document.getElementById("newsFeed") || document.querySelector(".news-list"))?.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
 function v105ClearNear() {
   localStorage.removeItem("koteretPlusNearArea");
-  document.querySelectorAll(".news-card").forEach((card) => card.hidden = false);
-  const btn = document.getElementById("premiumNearYouBtn");
-  if (btn) { btn.classList.remove("active"); btn.textContent = "⌖ מה קורה לידך"; }
+  v106ClearAllFilters();
   v105CloseModal("v105NearModal");
+}
+
+function v106ReapplyActiveFilter() {
+  // Background refresh rebuilds cards every ~30s; preserve the user's active filter.
+  if(window.__v106ImportantOnly===true){
+    const cards=[...document.querySelectorAll(".news-card")];
+    let shown=0;
+    cards.forEach((card)=>{
+      const item=v106CardItem(card);
+      const ok=item ? premiumImportanceScore(item)>=28 : false;
+      card.hidden=!ok;if(ok)shown++;
+    });
+    const btn=document.getElementById("premiumImportantBtn");
+    if(btn) btn.textContent=`רק חשוב · ${shown}`;
+    v106FilterStatus(`מוצגים ${shown} עדכונים בעלי חשיבות גבוהה`,true);
+  } else if(window.__v106NearArea){
+    const value=window.__v106NearArea;
+    const terms=v106LocationTerms(value).map((x)=>x.toLowerCase());
+    const cards=[...document.querySelectorAll(".news-card")];let shown=0;
+    cards.forEach((card)=>{
+      const item=v106CardItem(card);
+      const text=(v106ItemLocationText(item)+" "+(card.textContent||"")).toLowerCase();
+      const ok=terms.some((term)=>text.includes(term));card.hidden=!ok;if(ok)shown++;
+    });
+    const btn=document.getElementById("premiumNearYouBtn");
+    if(btn) btn.textContent=`⌖ ${value} · ${shown}`;
+    v106FilterStatus(shown?`מה קורה ב${value}: נמצאו ${shown} עדכונים רלוונטיים`:`אין כרגע אירועים חדשותיים משמעותיים ב${value}`,true);
+  }
 }
 
 function bindUnifiedNowCenterActions() {
@@ -4176,6 +4285,11 @@ function bindUnifiedNowCenterActions() {
   });
   const apply=document.getElementById("v105NearApply");
   if(apply && apply.dataset.bound!=="1"){apply.dataset.bound="1";apply.addEventListener("click",v105ApplyNear);}
+  const nearInput=document.getElementById("v105NearInput");
+  if(nearInput && nearInput.dataset.bound!=="1"){
+    nearInput.dataset.bound="1";
+    nearInput.addEventListener("keydown",(event)=>{if(event.key==="Enter")v105ApplyNear();});
+  }
   const clear=document.getElementById("v105NearClear");
   if(clear && clear.dataset.bound!=="1"){clear.dataset.bound="1";clear.addEventListener("click",v105ClearNear);}
 }
@@ -4184,7 +4298,10 @@ function refreshPremiumLayer() {
   try {
     renderPremiumIntelligence();
     bindUnifiedNowCenterActions();
-    requestAnimationFrame(attachPremiumWhyButtons);
+    requestAnimationFrame(() => {
+      attachPremiumWhyButtons();
+      v106ReapplyActiveFilter();
+    });
   } catch (error) {
     console.warn("Premium layer:", error);
   }
