@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "94.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v94-1";
+const KOTERET_CLIENT_BUILD = "95.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v95-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V94 · API ${apiVersion}` : "גרסה V94 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V95 · API ${apiVersion}` : "גרסה V95 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V94 · API V94";
+    marker.textContent = "גרסה V95 · API V95";
   } catch (error) {
-    marker.textContent = "גרסה V94 · API לא מחובר";
+    marker.textContent = "גרסה V95 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2025,6 +2025,40 @@ function sourceImageLooksEditorial(raw) {
   }
 }
 
+
+function mediaEventContext(text = "") {
+  const t = cleanDisplayText(text).toLowerCase();
+  const contexts = new Set();
+  const rules = [
+    ["sea_rescue", /ים|חוף|טביעה|טבעה|נמש(?:ה|תה)|מציל|מצילים|שחייה|סירה|חילוץ ימי/],
+    ["road", /כביש|רכב|מכונית|אוטובוס|משאית|אופנוע|רוכב|דריסה|תאונת דרכים|התנגשות/],
+    ["fire", /שריפה|אש|עשן|כבאות|כבאים|נשרף/],
+    ["security", /ירי|רקטה|טיל|כטב|פיגוע|מחבל|צה"ל|צבא|חייל|תקיפה|יירוט|אזעקה/],
+    ["medical", /בית חולים|רופא|רופאה|מד"א|אמבולנס|מחוסר(?:ת)? הכרה|פצוע|פצועה/],
+    ["politics", /כנסת|ממשלה|שר |שרה |ראש הממשלה|קבינט|בחירות|מפלגה/]
+  ];
+  for (const [name, rx] of rules) if (rx.test(t)) contexts.add(name);
+  return contexts;
+}
+function mediaContextConflict(storyText, media) {
+  const story = mediaEventContext(storyText);
+  const image = mediaEventContext([media?.title||"",media?.description||"",media?.attribution||"",media?.landingUrl||"",media?.query||"",media?.matchedQuery||""].join(" "));
+  const conflicts = [["sea_rescue","road"],["sea_rescue","politics"],["road","sea_rescue"],["road","politics"],["fire","sea_rescue"],["fire","road"],["politics","road"],["politics","sea_rescue"]];
+  return conflicts.some(([needed,wrong]) => story.has(needed) && image.has(wrong) && !image.has(needed));
+}
+function mediaMatchesStoryStrictly(media, item, displayTitle = "", { lead = false } = {}) {
+  if (!media) return false;
+  const storyText = `${displayTitle} ${item?.title||""} ${item?.preview||""}`;
+  if (mediaContextConflict(storyText, media)) return false;
+  const story = mediaEventContext(storyText);
+  const image = mediaEventContext([media?.title||"",media?.description||"",media?.query||"",media?.matchedQuery||"",media?.landingUrl||""].join(" "));
+  if (lead) {
+    for (const context of ["sea_rescue","road","fire","security"]) {
+      if (story.has(context) && !image.has(context)) return false;
+    }
+  }
+  return openMediaPassesEditorialGate(media, { lead });
+}
 function openMediaPassesEditorialGate(media, { lead = false } = {}) {
   if (!media?.url) return false;
   const score = Number(media.relevanceScore) || 0;
@@ -2033,8 +2067,8 @@ function openMediaPassesEditorialGate(media, { lead = false } = {}) {
   // Lead imagery is intentionally strict because a wrong hero photo is far
   // more damaging than no photo. Feed cards are slightly more permissive,
   // but still require multi-token semantic overlap.
-  if (lead) return score >= 58 && hits >= 1 && !media.illustrative;
-  return score >= 42 && hits >= 1 && !media.illustrative;
+  if (lead) return score >= 64 && hits >= 2 && !media.illustrative;
+  return score >= 48 && hits >= 1 && !media.illustrative;
 }
 
 function reusableSourceImageLicense(report) {
@@ -2085,8 +2119,11 @@ async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
   const queries = licensedMediaQueryVariantsForItem(winner?.item, leadTitle);
   let media = null;
   for (const query of queries) {
-    media = await fetchSafeMedia(query, winner?.item?.category || "other");
-    if (media) break;
+    const candidate = await fetchSafeMedia(query, winner?.item?.category || "other");
+    if (mediaMatchesStoryStrictly(candidate, winner?.item, leadTitle, { lead: true })) {
+      media = candidate;
+      break;
+    }
   }
   if (winner && leadFingerprint(winner) !== state.displayedLeadFingerprint) return;
   if (!openMediaPassesEditorialGate(media, { lead: true })) {
@@ -2182,7 +2219,7 @@ async function hydrateSafeMediaSlot(slot) {
   let media = null;
   for (const query of mediaQueries.slice(0, 6)) {
     media = await fetchSafeMedia(query, slot.dataset.category || "other");
-    if (openMediaPassesEditorialGate(media, { lead: false })) break;
+    if (mediaMatchesStoryStrictly(media, item, displayTitle, { lead: false })) break;
     media = null;
   }
   if (!slot.isConnected) return;
@@ -3220,7 +3257,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=94.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=95.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
