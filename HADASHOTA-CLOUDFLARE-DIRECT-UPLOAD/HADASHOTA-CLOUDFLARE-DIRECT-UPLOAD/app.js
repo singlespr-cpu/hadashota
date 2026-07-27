@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "106.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v106-1";
+const KOTERET_CLIENT_BUILD = "107.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v107-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V106 · API ${apiVersion}` : "גרסה V106 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V107 · API ${apiVersion}` : "גרסה V107 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V106 · API V106";
+    marker.textContent = "גרסה V107 · API V107";
   } catch (error) {
-    marker.textContent = "גרסה V106 · API לא מחובר";
+    marker.textContent = "גרסה V107 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3388,7 +3388,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=106.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=107.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3986,55 +3986,17 @@ function renderPremiumIntelligence() {
     const watch = ranked.filter(({item,score}) => {
       const reports = Math.max(1, Number(item.reportCount) || normalizeClusterReports(item).length || 1);
       return score >= 28 || reports >= 2;
-    }).slice(0,3);
+    }).slice(0,2);
     watchEl.innerHTML = watch.length ? watch.map(({item}) => {
       const reports = Math.max(1, Number(item.reportCount) || normalizeClusterReports(item).length || 1);
-      return `<div class="v105-watch-item"><span></span><strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong><small>${reports} ${reports===1?"מקור":"מקורות"}</small></div>`;
-    }).join("") : `<div class="v105-empty">אין כרגע אירועים חריגים שדורשים מעקב.</div>`;
+      return `<div class="v107-watch-item"><span></span><strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong><small>${reports} ${reports===1?"מקור":"מקורות"}</small></div>`;
+    }).join("") : `<div class="v105-empty">אין כרגע אירועים חריגים.</div>`;
   }
-
-  renderSinceVisitPremium(ranked.map((x) => x.item));
 }
 
 function renderSinceVisitPremium(items) {
-  const box = document.getElementById("sinceVisitPremium");
-  const list = document.getElementById("sinceVisitItems");
-  const title = document.getElementById("sinceVisitTitle");
-  if (!box || !list) return;
-
-  const now = Date.now();
-  const sessionKey = "koteretPlusVisitSessionStarted";
-  let previous = Number(sessionStorage.getItem(sessionKey) || 0);
-  if (!previous) {
-    previous = Number(localStorage.getItem("koteretPlusLastMeaningfulVisit") || 0);
-    sessionStorage.setItem(sessionKey, String(previous || now));
-    localStorage.setItem("koteretPlusLastMeaningfulVisit", String(now));
-  }
-
-  if (!previous || now - previous < 20 * 60000) {
-    box.hidden = true;
-    return;
-  }
-
-  const missed = items
-    .filter((item) => Date.parse(item.publishedAt || 0) > previous)
-    .sort((x, y) => premiumImportanceScore(y) - premiumImportanceScore(x))
-    .slice(0, 3);
-
-  if (!missed.length) {
-    box.hidden = true;
-    return;
-  }
-
-  box.hidden = false;
-  if (title) title.textContent = `מאז הביקור האחרון קרו ${missed.length} דברים שכדאי לדעת`;
-  list.innerHTML = missed.map((item, idx) =>
-    `<a class="since-visit-item" href="${escapeHtml(item.url || "#")}" target="_blank" rel="noopener noreferrer">
-      <span>${idx + 1}</span><strong>${escapeHtml(cleanDisplayTitle(item.title))}</strong>
-    </a>`
-  ).join("");
+  // V107: removed from the homepage to keep the intelligence center compact.
 }
-
 function premiumWhyImportantText(item) {
   const sources = Number(item?.sourceCount || item?.reports?.length || 1);
   const score = premiumImportanceScore(item);
