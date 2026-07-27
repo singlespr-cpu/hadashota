@@ -5554,3 +5554,81 @@ html.v105-modal-open{overflow:hidden}
   .now-topic-chip b{font-size:8.5px}
   .now-topic-chip small{font-size:7px}
 }
+
+
+/* V109 — slightly taller, substantially more readable status strip */
+.now-status-strip{
+  min-height:76px;
+  padding:14px 18px;
+  gap:17px;
+}
+.now-status-strip__activity .news-pulse{
+  font-size:13px;
+}
+.now-status-strip__activity small{
+  font-size:10px;
+}
+.now-status-strip__label{
+  font-size:11px;
+}
+.now-status-strip__topics{
+  gap:10px;
+  padding-inline:15px;
+}
+.now-status-strip__topic-list{
+  gap:8px;
+}
+.now-topic-chip{
+  gap:6px;
+  padding:7px 10px;
+  border-radius:10px;
+}
+.now-topic-chip b{
+  max-width:145px;
+  font-size:11px;
+}
+.now-topic-chip small{
+  font-size:9px;
+}
+.now-status-strip__watch{
+  gap:6px;
+  font-size:11px;
+}
+.now-status-strip__actions{
+  gap:7px;
+}
+.now-status-strip__actions button{
+  min-height:36px;
+  padding:8px 11px;
+  font-size:10px;
+}
+
+@media(max-width:700px){
+  .now-status-strip{
+    min-height:64px;
+    padding:11px 12px;
+    gap:10px;
+  }
+  .now-status-strip__activity .news-pulse{font-size:11px}
+  .now-status-strip__label{font-size:10px}
+  .now-topic-chip{
+    padding:6px 8px;
+  }
+  .now-topic-chip b{
+    max-width:120px;
+    font-size:10px;
+  }
+  .now-topic-chip small{font-size:8px}
+  .now-status-strip__watch{font-size:10px}
+  .now-status-strip__actions button{
+    min-height:34px;
+    padding:7px 10px;
+    font-size:9px;
+  }
+}
+@media(max-width:480px){
+  .now-status-strip{
+    min-height:62px;
+    padding-block:10px;
+  }
+}
