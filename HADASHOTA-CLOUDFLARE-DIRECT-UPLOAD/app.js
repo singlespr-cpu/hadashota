@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "103.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v103-1";
+const KOTERET_CLIENT_BUILD = "104.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v104-1";
 
 (function healOldClientState() {
   try {
@@ -374,12 +374,12 @@ async function verifyApiVersion() {
     const data = await response.json();
     const apiVersion = String(data?.version || "");
     if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V103 · API ${apiVersion}` : "גרסה V103 · API לא מזוהה";
+      marker.textContent = apiVersion ? `גרסה V104 · API ${apiVersion}` : "גרסה V104 · API לא מזוהה";
       return;
     }
-    marker.textContent = "גרסה V103 · API V103";
+    marker.textContent = "גרסה V104 · API V104";
   } catch (error) {
-    marker.textContent = "גרסה V103 · API לא מחובר";
+    marker.textContent = "גרסה V104 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3388,7 +3388,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=103.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=104.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3958,6 +3958,14 @@ function renderPremiumIntelligence() {
   if (pulse) pulse.dataset.level = cls;
   if (pulseLabel) pulseLabel.textContent = level;
 
+  const hotCountEl = document.getElementById("premiumHotCount");
+  if (hotCountEl) {
+    const hotItems = items.filter((item) => {
+      try { return storyHotScore(item) >= 42; } catch { return premiumImportanceScore(item) >= 34; }
+    });
+    hotCountEl.textContent = String(hotItems.length);
+  }
+
   renderSinceVisitPremium(ranked.map((x) => x.item));
 }
 
@@ -4038,9 +4046,41 @@ function attachPremiumWhyButtons() {
   });
 }
 
+
+function bindUnifiedNowCenterActions() {
+  const relay = (fromId, toId) => {
+    const from = document.getElementById(fromId);
+    const to = document.getElementById(toId);
+    if (!from || !to || from.dataset.relayBound === "1") return;
+    from.dataset.relayBound = "1";
+    from.addEventListener("click", (event) => {
+      event.preventDefault();
+      to.click();
+      if (fromId === "premiumImportantBtn") {
+        requestAnimationFrame(() => {
+          from.setAttribute("aria-pressed", to.getAttribute("aria-pressed") || "false");
+          from.classList.toggle("active", to.getAttribute("aria-pressed") === "true");
+        });
+      }
+    });
+  };
+
+  relay("premiumNearYouBtn", "nearYouBtn");
+  relay("premiumImportantBtn", "importantOnlyBtn");
+  relay("premiumQuickBriefBtn", "quickBriefBtn");
+
+  const originalImportant = document.getElementById("importantOnlyBtn");
+  const premiumImportant = document.getElementById("premiumImportantBtn");
+  if (originalImportant && premiumImportant) {
+    premiumImportant.setAttribute("aria-pressed", originalImportant.getAttribute("aria-pressed") || "false");
+    premiumImportant.classList.toggle("active", originalImportant.getAttribute("aria-pressed") === "true");
+  }
+}
+
 function refreshPremiumLayer() {
   try {
     renderPremiumIntelligence();
+    bindUnifiedNowCenterActions();
     requestAnimationFrame(attachPremiumWhyButtons);
   } catch (error) {
     console.warn("Premium layer:", error);
