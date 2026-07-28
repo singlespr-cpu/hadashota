@@ -5721,3 +5721,22 @@ img, video, canvas, svg {
     min-width: 0;
   }
 }
+
+
+/* V112 — fast paint after a discarded/suspended tab is restored */
+.news-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 190px;
+}
+.feed > .news-card:nth-child(-n+8) {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+.sidebar-card,
+.source-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 120px;
+}
+@media(max-width:700px){
+  .news-card { contain-intrinsic-size: 170px; }
+}

@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "111.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v111-1";
+const KOTERET_CLIENT_BUILD = "112.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v112-1";
 
 (function healOldClientState() {
   try {
@@ -269,6 +269,8 @@ const NEWS_SHARD_STAGGER_MS = 45;
 const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.correctShardsV86.";
 const LEGACY_LAST_GOOD_PREFIXES = [];
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v112";
+const FAST_RENDER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
 
@@ -343,8 +345,10 @@ function init() {
   installInteractionSafetyNet();
   registerServiceWorker();
   verifyApiVersion();
-  restoreLocalLastGood();
-  loadUtilities();
+  const restoredInstantly = restoreFastRenderSnapshot();
+  if (!restoredInstantly) restoreLocalLastGood();
+  // Utilities are secondary to first paint. They fill in shortly afterwards.
+  setTimeout(loadUtilities, restoredInstantly ? 650 : 150);
   initPromoCard();
   initFeedPromo();
   initAlertCenter();
@@ -392,9 +396,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V111 · API ${apiVersion}` : "גרסה V111 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V112 · API ${apiVersion}` : "גרסה V112 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V111 · API לא מחובר";
+    marker.textContent = "גרסה V112 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -679,9 +683,9 @@ function bindEvents() {
 
     // Paint is already on screen. Refresh only after the browser has had a
     // moment to resume rendering/input; focus/pageshow are deduplicated below.
-    loadUtilities();
-    scheduleAlertPoll(100);
-    scheduleInstantResumeRefresh("visibility", 120);
+    setTimeout(() => { if (!document.hidden) loadUtilities(); }, 700);
+    setTimeout(() => { if (!document.hidden) scheduleAlertPoll(0); }, 500);
+    scheduleInstantResumeRefresh("visibility", 340);
   });
 
   window.addEventListener("pagehide", () => {
@@ -689,17 +693,17 @@ function bindEvents() {
   });
 
   window.addEventListener("focus", () => {
-    scheduleInstantResumeRefresh("focus", 140);
+    scheduleInstantResumeRefresh("focus", 380);
   });
 
   window.addEventListener("pageshow", (event) => {
-    if (!state.items.length) restoreLocalLastGood();
-    scheduleInstantResumeRefresh(event.persisted ? "pageshow-bfcache" : "pageshow", 110);
+    if (!state.items.length && !restoreFastRenderSnapshot()) restoreLocalLastGood();
+    scheduleInstantResumeRefresh(event.persisted ? "pageshow-bfcache" : "pageshow", 360);
   });
 
   window.addEventListener("online", () => {
     loadUtilities();
-    scheduleInstantResumeRefresh("online", 80);
+    scheduleInstantResumeRefresh("online", 220);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -1064,6 +1068,7 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     }
 
     renderStats(data);
+    persistFastRenderSnapshot(data);
     if (materiallyChanged || !background) {
       render();
       state.lastNewsFingerprint = nextFingerprint;
@@ -1161,6 +1166,74 @@ async function fetchNewsShard(shard, force = false, delayMs = 0) {
     return await response.json();
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+
+function compactFastRenderItem(item) {
+  if (!item) return item;
+  const compact = { ...item };
+  // Keep enough clustered context for links/source counts, but remove oversized
+  // arrays/text that are not needed for the first paint.
+  compact.related = normalizeClusterReports(item).slice(0, 8).map((r) => ({
+    title:r.title, url:r.url, publishedAt:r.publishedAt, sourceName:r.sourceName,
+    publisher:r.publisher, imageUrl:r.imageUrl, imageCredit:r.imageCredit,
+    preview:r.preview ? String(r.preview).slice(0, 260) : ""
+  }));
+  compact.updates = normalizeClusterUpdates(item).slice(-8);
+  if (compact.description) compact.description = String(compact.description).slice(0, 400);
+  if (compact.preview) compact.preview = String(compact.preview).slice(0, 320);
+  return compact;
+}
+
+function persistFastRenderSnapshot(data) {
+  if (!data?.items?.length) return;
+  try {
+    const payload = {
+      version: 112,
+      savedAt: Date.now(),
+      generatedAt: data.generatedAt || new Date().toISOString(),
+      items: data.items.slice(0, 140).map(compactFastRenderItem),
+      sources: (data.sources || []).slice(0, 80),
+      stats: data.stats || {},
+      shardFreshness: data.shardFreshness || {}
+    };
+    localStorage.setItem(FAST_RENDER_SNAPSHOT_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn("Fast render snapshot could not be saved", error);
+  }
+}
+
+function restoreFastRenderSnapshot() {
+  try {
+    const raw = localStorage.getItem(FAST_RENDER_SNAPSHOT_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data?.items) || !data.items.length) return false;
+    const savedAt = Number(data.savedAt || 0);
+    if (!savedAt || Date.now() - savedAt > FAST_RENDER_MAX_AGE_MS) {
+      localStorage.removeItem(FAST_RENDER_SNAPSHOT_KEY);
+      return false;
+    }
+
+    // No clustering, no cross-shard merge, no network wait: paint the already
+    // merged newsroom snapshot as-is.
+    state.items = data.items;
+    state.sources = Array.isArray(data.sources) ? data.sources : [];
+    state.lastDataGeneratedAt = data.generatedAt || null;
+    state.shardFreshness = data.shardFreshness || {};
+    state.dataDelayed = false;
+    state.dataDelaySeverity = "ok";
+    state.delayedShards = [];
+    if (el.lastUpdated) el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
+    renderStats(data);
+    render();
+    state.lastNewsFingerprint = newsSnapshotFingerprint(data);
+    return true;
+  } catch (error) {
+    console.warn("Fast render snapshot could not be restored", error);
+    try { localStorage.removeItem(FAST_RENDER_SNAPSHOT_KEY); } catch {}
+    return false;
   }
 }
 
@@ -3460,7 +3533,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=111.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=112.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -5114,18 +5187,26 @@ function runAlertTest() {
 }
 
 
-// V101 premium intelligence is intentionally additive and non-blocking.
+// V112: premium intelligence must never compete with first paint/resume.
+let premiumMutationObserver = null;
+function schedulePremiumIdleRefresh(delay = 350) {
+  clearTimeout(window.__koteretPremiumMutationTimer);
+  window.__koteretPremiumMutationTimer = setTimeout(() => {
+    if (document.hidden) return;
+    const run = () => { try { refreshPremiumLayer(); } catch {} };
+    if ("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 900 });
+    else setTimeout(run, 0);
+  }, delay);
+}
+
 window.addEventListener("DOMContentLoaded", () => {
-  setTimeout(refreshPremiumLayer, 900);
-  setTimeout(refreshPremiumLayer, 2600);
-  setInterval(refreshPremiumLayer, 30000);
+  schedulePremiumIdleRefresh(900);
+  setTimeout(() => schedulePremiumIdleRefresh(0), 2800);
+  setInterval(() => schedulePremiumIdleRefresh(0), 30000);
 
   const target = document.getElementById("newsFeed") || document.querySelector(".news-list") || document.body;
-  const observer = new MutationObserver(() => {
-    clearTimeout(window.__koteretPremiumMutationTimer);
-    window.__koteretPremiumMutationTimer = setTimeout(refreshPremiumLayer, 180);
-  });
-  observer.observe(target, { childList: true, subtree: true });
+  premiumMutationObserver = new MutationObserver(() => schedulePremiumIdleRefresh(450));
+  premiumMutationObserver.observe(target, { childList: true, subtree: false });
 });
 
 
