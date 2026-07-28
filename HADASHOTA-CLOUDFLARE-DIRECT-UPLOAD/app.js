@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "109.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v109-1";
+const KOTERET_CLIENT_BUILD = "110.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v110-1";
 
 (function healOldClientState() {
   try {
@@ -312,6 +312,35 @@ window.addEventListener("appinstalled", () => {
 
 init();
 
+
+function installInteractionSafetyNet() {
+  if (window.__koteretInteractionSafetyNet) return;
+  window.__koteretInteractionSafetyNet = true;
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button || button.disabled) return;
+
+    // Dynamic premium controls already mark themselves once bound.
+    // Only provide a fallback when their normal binder did not attach.
+    if (button.id === "premiumQuickBriefBtn" && button.dataset.bound !== "1" && typeof v105OpenBrief === "function") {
+      event.preventDefault(); v105OpenBrief(); return;
+    }
+    if (button.id === "premiumImportantBtn" && button.dataset.bound !== "1" && typeof v105ToggleImportant === "function") {
+      event.preventDefault(); v105ToggleImportant(); return;
+    }
+    if (button.id === "premiumNearYouBtn" && button.dataset.bound !== "1" && typeof v105OpenNear === "function") {
+      event.preventDefault(); v105OpenNear(); return;
+    }
+    if (button.id === "topSettingsBtn" && typeof koteretOpenSettings === "function") {
+      // The regular listener usually handles this. Avoid a double open.
+      if (document.getElementById("settingsModal")?.hidden !== false) {
+        event.preventDefault(); koteretOpenSettings();
+      }
+    }
+  }, { capture: false });
+}
+
 function init() {
   state.visitCount += 1;
   localStorage.setItem("hadashota.visitCount", String(state.visitCount));
@@ -320,6 +349,7 @@ function init() {
   reconcileNotificationPermission();
   syncControlsFromState();
   bindEvents();
+  installInteractionSafetyNet();
   registerServiceWorker();
   verifyApiVersion();
   restoreLocalLastGood();
@@ -369,23 +399,16 @@ async function verifyApiVersion() {
       signal: controller.signal
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    if (!contentType.includes("application/json")) throw new Error("API did not return JSON");
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    if (!apiVersion.startsWith("77.")) {
-      marker.textContent = apiVersion ? `גרסה V109 · API ${apiVersion}` : "גרסה V109 · API לא מזוהה";
-      return;
-    }
-    marker.textContent = "גרסה V109 · API V109";
+    marker.textContent = apiVersion ? `גרסה V110 · API ${apiVersion}` : "גרסה V110 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V109 · API לא מחובר";
+    marker.textContent = "גרסה V110 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
   }
 }
-
 function bindEvents() {
   el.timeFilters.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-hours]");
@@ -1064,6 +1087,7 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     const restored = state.items.length > 0 || restoreLocalLastGood();
     setDataStatus(true, restored, "major");
     scheduleNewsRetry();
+    if (state.autoRefresh && !state.timer) scheduleNextRefresh(getRefreshInterval());
 
     if (!restored && !background) {
       el.feed.innerHTML = `<div class="connection-state" role="status"><span class="connection-spinner"></span><div><strong>אוסף עדכונים מכל מקורות החדשות…</strong><small>מתבצע ניסיון מכל האתרים וערוצי Telegram, ולאחר מכן ניסיון נוסף אוטומטי אם צריך.</small></div></div>`;
@@ -2465,6 +2489,9 @@ function renderFeed() {
 
   const feedPromoHtml = feedPromoData ? feedPromoCardHtml(feedPromoData) : "";
   el.feed.innerHTML = feedPromoHtml + items.map(newsCardHtml).join("");
+  requestAnimationFrame(() => {
+    try { if (typeof v106ReapplyActiveFilter === "function") v106ReapplyActiveFilter(); } catch {}
+  });
 }
 
 function currentFeedLabel() {
@@ -3374,7 +3401,9 @@ function cleanDisplayTitle(text = "") {
 }
 
 function getRefreshInterval() {
-  return document.hidden ? 60 : 30;
+  // V110: the requested cadence is 30 seconds. Background tabs may still be
+  // throttled by the browser, so visibility/focus handlers perform an immediate catch-up.
+  return 30;
 }
 
 
@@ -3388,7 +3417,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=109.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=110.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3666,16 +3695,41 @@ function restartAutoRefresh() {
   state.countdownTimer = setInterval(updateRefreshCountdown, 1000);
 }
 
+async function runScheduledRefresh() {
+  state.timer = null;
+  if (!state.autoRefresh) return;
+
+  // Never lose the automatic-refresh loop because another network pass happens
+  // to be running when the 30-second timer fires.
+  if (state.loading) {
+    scheduleNextRefresh(2);
+    return;
+  }
+
+  try {
+    await loadNews(true, true, true);
+  } catch (error) {
+    console.warn("Scheduled refresh failed", error);
+  } finally {
+    // Successful loadNews() schedules the next pass itself. On any exceptional
+    // path, guarantee that the loop remains alive.
+    if (state.autoRefresh && !state.timer) {
+      scheduleNextRefresh(getRefreshInterval());
+    }
+  }
+}
+
 function scheduleNextRefresh(seconds = getRefreshInterval()) {
   clearTimeout(state.timer);
+  state.timer = null;
   if (!state.autoRefresh) {
     state.nextRefreshAt = 0;
     updateRefreshCountdown();
     return;
   }
-  const delayMs = Math.max(15, seconds) * 1000;
+  const delayMs = Math.max(2, Number(seconds) || getRefreshInterval()) * 1000;
   state.nextRefreshAt = Date.now() + delayMs;
-  state.timer = setTimeout(() => loadNews(true, true, true), delayMs);
+  state.timer = setTimeout(runScheduledRefresh, delayMs);
   updateRefreshCountdown();
 }
 

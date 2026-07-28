@@ -5632,3 +5632,92 @@ html.v105-modal-open{overflow:hidden}
     padding-block:10px;
   }
 }
+
+
+/* =========================================================
+   V110 — production mobile containment
+   The page itself never pans horizontally; only explicitly scrollable controls do.
+   ========================================================= */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip !important;
+}
+body {
+  position: relative;
+  min-width: 0;
+}
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+img, video, canvas, svg {
+  max-width: 100%;
+}
+.shell,
+.page,
+.topbar-inner,
+.content-grid,
+.feed-column,
+.sidebar,
+.hero-news-grid,
+.control-panel,
+.pulse-strip,
+.portal-strip,
+.alert-center,
+.footer,
+.premium-intelligence,
+.now-status-strip {
+  min-width: 0;
+  max-width: 100%;
+}
+.content-grid > *,
+.hero-news-grid > *,
+.pulse-strip > *,
+.portal-strip > * {
+  min-width: 0;
+}
+@supports not (overflow: clip) {
+  html, body { overflow-x: hidden !important; }
+}
+
+/* Horizontal movement is allowed only inside components designed for it. */
+.filter-scroll,
+.now-status-strip,
+.flash-deck-viewport,
+.trending-topics {
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+}
+
+@media (max-width:700px) {
+  .shell {
+    width: min(calc(100% - 20px), var(--shell)) !important;
+    margin-inline: auto !important;
+  }
+  .page,
+  main,
+  header,
+  footer {
+    max-width: 100vw;
+  }
+  .topbar-inner,
+  .topbar-actions,
+  .section-head,
+  .lead-story-body,
+  .feed,
+  .news-card {
+    min-width: 0;
+  }
+  .news-card,
+  .lead-story,
+  .utility-card,
+  .sidebar-card,
+  .control-panel,
+  .now-status-strip {
+    max-width: 100%;
+  }
+  input, select, textarea {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
