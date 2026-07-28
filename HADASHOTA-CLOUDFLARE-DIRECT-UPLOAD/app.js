@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "112.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v112-1";
+const KOTERET_CLIENT_BUILD = "113.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v113-1";
 
 (function healOldClientState() {
   try {
@@ -107,7 +107,8 @@ const state = {
   summaryOpen: false,
   currentAlerts: [],
   currentMatchingAlerts: [],
-  currentLeadEntry: null
+  currentLeadEntry: null,
+  forceLeadReevaluation: false
 };
 
 const el = {
@@ -396,9 +397,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V112 · API ${apiVersion}` : "גרסה V112 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V113 · API ${apiVersion}` : "גרסה V113 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V112 · API לא מחובר";
+    marker.textContent = "גרסה V113 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -428,6 +429,7 @@ function scheduleInstantResumeRefresh(reason = "resume", delayMs = 140) {
 
     try {
       state.lastForegroundRefreshAt = Date.now();
+      state.forceLeadReevaluation = true;
       await loadNews(true, true, true);
     } catch (error) {
       console.warn(`Resume refresh (${resumeRefreshReason}) failed`, error);
@@ -493,7 +495,18 @@ function bindEvents() {
     }, 120);
   });
 
-  el.refreshBtn.addEventListener("click", () => { loadNews(true); loadUtilities(); });
+  el.refreshBtn.addEventListener("click", async () => {
+    if (state.loading) {
+      showToast("העדכון כבר מתבצע ברקע");
+      return;
+    }
+    state.forceLeadReevaluation = true;
+    try {
+      await loadNews(true, false, false);
+    } finally {
+      setTimeout(loadUtilities, 150);
+    }
+  });
   el.installOfferAccept?.addEventListener("click", handleInstallAccept);
   el.installOfferLater?.addEventListener("click", () => {
     localStorage.setItem("hadashota.installSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
@@ -1059,6 +1072,10 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     state.delayedShards = delayedShards;
     state.dataDelaySeverity = getDataDelaySeverity({ delayed: state.dataDelayed, freshShards, delayedShards, shardFreshness: data.shardFreshness });
 
+    // V113: every real forced source collection must be allowed to pick a new
+    // lead immediately. The anti-flicker lock is only for local/internal rerenders.
+    if (force && freshShards > 0) state.forceLeadReevaluation = true;
+
     if (!state.dataDelayed) {
       el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
     } else if (state.dataDelaySeverity === "minor") {
@@ -1072,6 +1089,10 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     if (materiallyChanged || !background) {
       render();
       state.lastNewsFingerprint = nextFingerprint;
+    } else {
+      // Even when the item fingerprint is unchanged, time/source eligibility can
+      // change which story deserves the lead position.
+      try { renderLeadStory(); } catch (error) { console.warn("Lead reevaluation failed", error); }
     }
     setDataStatus(state.dataDelayed, true, state.dataDelaySeverity);
 
@@ -3112,6 +3133,7 @@ function renderLeadStory() {
 
   if (!winner) {
     state.currentLeadEntry = null;
+    state.forceLeadReevaluation = false;
     const hasFeed = state.items.length > 0;
     el.leadStoryTitle.textContent = hasFeed ? "ממתין לאימות ממקורות נוספים" : "מתחבר לעדכונים האחרונים…";
     el.leadStoryPreview.textContent = hasFeed
@@ -3138,6 +3160,7 @@ function renderLeadStory() {
   const lockAgeMs = state.displayedLeadSince ? Date.now() - state.displayedLeadSince : Infinity;
 
   if (
+    !state.forceLeadReevaluation &&
     currentEntry &&
     currentFingerprint &&
     proposedFingerprint !== currentFingerprint &&
@@ -3153,6 +3176,7 @@ function renderLeadStory() {
   }
 
   state.currentLeadEntry = winner;
+  state.forceLeadReevaluation = false;
 
   const winnerFingerprint = leadFingerprint(winner);
   if (winnerFingerprint !== state.displayedLeadFingerprint) {
@@ -3533,7 +3557,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=112.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=113.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3823,6 +3847,7 @@ async function runScheduledRefresh() {
   }
 
   try {
+    state.forceLeadReevaluation = true;
     await loadNews(true, true, true);
   } catch (error) {
     console.warn("Scheduled refresh failed", error);
