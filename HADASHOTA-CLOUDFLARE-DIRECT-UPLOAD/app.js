@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "110.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v110-1";
+const KOTERET_CLIENT_BUILD = "111.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v111-1";
 
 (function healOldClientState() {
   try {
@@ -288,18 +288,9 @@ window.addEventListener("beforeinstallprompt", (event) => {
   syncInstallControl();
 });
 
-// V91: lifecycle recovery must work in every browser, not only browsers that
-// emit beforeinstallprompt. These refreshes are intentionally silent.
-window.addEventListener("online", () => {
-  if (!state.loading) loadNews(false, true, true);
-});
-window.addEventListener("pageshow", () => {
-  if (!state.items.length) restoreLocalLastGood();
-  if (!state.loading) loadNews(false, true, true);
-});
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && !state.loading) loadNews(false, true, true);
-});
+// V111: lifecycle refresh is handled once, inside bindEvents(), by the
+// deduplicated instant-resume controller. Duplicate pageshow/focus/visibility
+// requests used to compete with each other after a suspended tab resumed.
 
 window.addEventListener("appinstalled", () => {
   localStorage.setItem("hadashota.appInstalled", "1");
@@ -401,14 +392,47 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V110 · API ${apiVersion}` : "גרסה V110 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V111 · API ${apiVersion}` : "גרסה V111 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V110 · API לא מחובר";
+    marker.textContent = "גרסה V111 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
   }
 }
+
+let resumeRefreshTimer = null;
+let resumeRefreshReason = "";
+let resumeRefreshRequestedAt = 0;
+
+function scheduleInstantResumeRefresh(reason = "resume", delayMs = 140) {
+  if (document.hidden) return;
+  resumeRefreshReason = reason;
+  resumeRefreshRequestedAt = Date.now();
+
+  clearTimeout(resumeRefreshTimer);
+  resumeRefreshTimer = setTimeout(async () => {
+    if (document.hidden) return;
+
+    // The old content is never cleared or replaced with a loading screen.
+    // If another fetch is still finishing, wait briefly instead of launching
+    // competing lifecycle refreshes.
+    if (state.loading) {
+      scheduleInstantResumeRefresh(resumeRefreshReason, 220);
+      return;
+    }
+
+    try {
+      state.lastForegroundRefreshAt = Date.now();
+      await loadNews(true, true, true);
+    } catch (error) {
+      console.warn(`Resume refresh (${resumeRefreshReason}) failed`, error);
+    } finally {
+      if (state.autoRefresh) restartAutoRefresh();
+    }
+  }, Math.max(60, delayMs));
+}
+
 function bindEvents() {
   el.timeFilters.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-hours]");
@@ -650,18 +674,14 @@ function bindEvents() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       state.lastHiddenAt = Date.now();
-    } else {
-      const hiddenFor = state.lastHiddenAt ? Date.now() - state.lastHiddenAt : 0;
-      // iOS Home Screen web apps can resume the exact suspended page process.
-      // In standalone mode a real page reload is the most reliable way to guarantee
-      // a fresh app shell + forced news fetch instead of a frozen in-memory snapshot.
-      if (hiddenFor >= 3000 && hardRefreshStandalone("visibility")) return;
-      loadUtilities();
-      if (hiddenFor >= 3000) state.lastForegroundRefreshAt = 0;
-      refreshNewsOnForeground("visibility");
+      return;
     }
-    scheduleAlertPoll(250);
-    if (state.autoRefresh) restartAutoRefresh();
+
+    // Paint is already on screen. Refresh only after the browser has had a
+    // moment to resume rendering/input; focus/pageshow are deduplicated below.
+    loadUtilities();
+    scheduleAlertPoll(100);
+    scheduleInstantResumeRefresh("visibility", 120);
   });
 
   window.addEventListener("pagehide", () => {
@@ -669,22 +689,17 @@ function bindEvents() {
   });
 
   window.addEventListener("focus", () => {
-    if (isStandaloneMode() && state.lastHiddenAt && Date.now() - state.lastHiddenAt >= 3000) {
-      if (hardRefreshStandalone("focus")) return;
-    }
-    refreshNewsOnForeground("focus");
+    scheduleInstantResumeRefresh("focus", 140);
   });
 
   window.addEventListener("pageshow", (event) => {
-    if (event.persisted && hardRefreshStandalone("pageshow-bfcache")) return;
-    state.lastForegroundRefreshAt = 0;
-    refreshNewsOnForeground(event.persisted ? "pageshow-bfcache" : "pageshow");
+    if (!state.items.length) restoreLocalLastGood();
+    scheduleInstantResumeRefresh(event.persisted ? "pageshow-bfcache" : "pageshow", 110);
   });
 
   window.addEventListener("online", () => {
-    state.lastForegroundRefreshAt = 0;
     loadUtilities();
-    refreshNewsOnForeground("online");
+    scheduleInstantResumeRefresh("online", 80);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -733,21 +748,11 @@ function isStandaloneMode() {
 }
 
 function hardRefreshStandalone(reason = "resume") {
-  if (!isStandaloneMode()) return false;
-  try {
-    const now = Date.now();
-    const last = Number(sessionStorage.getItem("hadashota.pwaHardRefreshAt") || 0);
-    // Prevent a reload loop if iOS emits more than one resume lifecycle event.
-    if (now - last < 4500) return false;
-    sessionStorage.setItem("hadashota.pwaHardRefreshAt", String(now));
-    const url = new URL(location.href);
-    url.searchParams.set("_pwa", String(now));
-    location.replace(url.pathname + url.search + url.hash);
-    return true;
-  } catch {
-    location.reload();
-    return true;
-  }
+  // V111: never reload the whole document just because a suspended tab/PWA
+  // resumed. The existing newsroom remains instantly visible while a forced,
+  // silent source refresh runs in the background.
+  scheduleInstantResumeRefresh(reason, 120);
+  return false;
 }
 
 function isIOSDevice() {
@@ -1950,6 +1955,11 @@ function mediaEnglishContextQueries(item, displayTitle = "") {
     push("missile interception Israel");
     push("Home Front Command Israel");
   }
+  if (contexts.has("law_enforcement")) {
+    push("Israel Prison Service");
+    push("Israel police officer");
+    push("police investigation Israel");
+  }
   if (contexts.has("medical")) {
     push("Magen David Adom ambulance");
     push("ambulance Israel emergency");
@@ -1970,7 +1980,9 @@ function mediaEnglishContextQueries(item, displayTitle = "") {
     [/כנסת/i, "Knesset"],
     [/בנק ישראל/i, "Bank of Israel"],
     [/צה["״']?ל/i, "Israel Defense Forces"],
-    [/מד["״']?א/i, "Magen David Adom"]
+    [/מד["״']?א/i, "Magen David Adom"],
+    [/שב["״']?ס|שירות בתי הסוהר/i, "Israel Prison Service"],
+    [/משטרת ישראל|משטרה/i, "Israel Police"]
   ];
   for (const [rx, q] of entityMap) if (rx.test(text)) push(q);
   return queries.slice(0, 6);
@@ -2108,21 +2120,38 @@ function mediaEventContext(text = "") {
   const t = cleanDisplayText(text).toLowerCase();
   const contexts = new Set();
   const rules = [
-    ["sea_rescue", /ים|חוף|טביעה|טבעה|נמש(?:ה|תה)|מציל|מצילים|שחייה|סירה|חילוץ ימי/],
-    ["road", /כביש|רכב|מכונית|אוטובוס|משאית|אופנוע|רוכב|דריסה|תאונת דרכים|התנגשות/],
-    ["fire", /שריפה|אש|עשן|כבאות|כבאים|נשרף/],
-    ["security", /ירי|רקטה|טיל|כטב|פיגוע|מחבל|צה"ל|צבא|חייל|תקיפה|יירוט|אזעקה/],
-    ["medical", /בית חולים|רופא|רופאה|מד"א|אמבולנס|מחוסר(?:ת)? הכרה|פצוע|פצועה/],
-    ["politics", /כנסת|ממשלה|שר |שרה |ראש הממשלה|קבינט|בחירות|מפלגה/]
+    ["sea_rescue", /ים|חוף|טביעה|טבעה|נמש(?:ה|תה)|מציל|מצילים|שחייה|סירה|חילוץ ימי|lifeguard|sea rescue|drowning/],
+    ["road", /כביש|רכב|מכונית|אוטובוס|משאית|אופנוע|רוכב|דריסה|תאונת דרכים|התנגשות|motorcycle|traffic|road accident/],
+    ["fire", /שריפה|אש|עשן|כבאות|כבאים|נשרף|firefighter|wildfire|fire rescue/],
+    ["security", /ירי|רקטה|טיל|כטב|פיגוע|מחבל|צה"ל|צבא|חייל|תקיפה|יירוט|אזעקה|missile|military|idf|air strike/],
+    ["law_enforcement", /שב["״']?ס|שירות בתי הסוהר|בית סוהר|כלא|סוהר|סוהרת|קצין|קצינה|שוטר|שוטרת|משטרה|נעצר|נעצרה|מעצר|חקירה|חשוד|חשודה|prison|police|officer|arrest|investigation/],
+    ["medical", /בית חולים|רופא|רופאה|מד"א|אמבולנס|מחוסר(?:ת)? הכרה|פצוע|פצועה|hospital|ambulance|medical/],
+    ["politics", /כנסת|ממשלה|שר |שרה |ראש הממשלה|קבינט|בחירות|מפלגה|knesset|government|election/],
+    ["finance", /בורסה|מניה|מניות|מדד|מדדים|שוק ההון|מסחר|דולר|ריבית|אינפלציה|גרף|גרפים|stock|stocks|market|trading|index|indices|finance|financial|chart|graph|nasdaq|dow jones/]
   ];
   for (const [name, rx] of rules) if (rx.test(t)) contexts.add(name);
   return contexts;
 }
 function mediaContextConflict(storyText, media) {
   const story = mediaEventContext(storyText);
-  const image = mediaEventContext([media?.title||"",media?.description||"",media?.attribution||"",media?.landingUrl||"",media?.query||"",media?.matchedQuery||""].join(" "));
-  const conflicts = [["sea_rescue","road"],["sea_rescue","politics"],["road","sea_rescue"],["road","politics"],["fire","sea_rescue"],["fire","road"],["politics","road"],["politics","sea_rescue"]];
-  return conflicts.some(([needed,wrong]) => story.has(needed) && image.has(wrong) && !image.has(needed));
+  const image = mediaEventContext([
+    media?.candidateTitle||"", media?.candidateDescription||"",
+    media?.title||"", media?.description||"", media?.attribution||"",
+    media?.landingUrl||"", media?.query||"", media?.matchedQuery||""
+  ].join(" "));
+
+  const conflicts = [
+    ["sea_rescue","road"], ["sea_rescue","politics"], ["sea_rescue","finance"],
+    ["road","sea_rescue"], ["road","politics"], ["road","finance"],
+    ["fire","sea_rescue"], ["fire","road"], ["fire","finance"],
+    ["politics","road"], ["politics","sea_rescue"],
+    ["law_enforcement","finance"], ["law_enforcement","sea_rescue"],
+    ["finance","law_enforcement"], ["finance","sea_rescue"],
+    ["security","finance"]
+  ];
+  return conflicts.some(([needed, wrong]) =>
+    story.has(needed) && image.has(wrong) && !image.has(needed)
+  );
 }
 function mediaMatchesStoryStrictly(media, item, displayTitle = "", { lead = false } = {}) {
   if (!media) return false;
@@ -2138,14 +2167,14 @@ function mediaMatchesStoryStrictly(media, item, displayTitle = "", { lead = fals
   ].join(" ");
   const image = mediaEventContext(imageText);
 
-  const highRisk = ["sea_rescue","road","fire","security"];
+  const highRisk = ["sea_rescue","road","fire","security","law_enforcement","finance"];
   const storyContexts = highRisk.filter((c) => story.has(c));
   const contextMatch = storyContexts.some((c) => image.has(c));
 
   // Exact/strong semantic match.
   if (openMediaPassesEditorialGate(media, { lead })) {
-    if (!storyContexts.length || contextMatch || !image.size) {
-      media._contextualIllustration = storyContexts.length > 0 && !contextMatch;
+    if (!storyContexts.length || contextMatch) {
+      media._contextualIllustration = false;
       return true;
     }
   }
@@ -2221,6 +2250,7 @@ function originalFeedSourceImage(item) {
   for (const report of reports) {
     const raw = String(report?.imageUrl || report?.image || report?.thumbnailUrl || report?.thumbnail || report?.enclosure?.url || "").trim();
     if (!raw || !sourceImageLooksEditorial(raw)) continue;
+    if (sourceImageConflictsWithStory(item, report, raw)) continue;
     const sourceName = cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה");
     const photographer = cleanDisplayText(report?.imageCredit || report?.imageCreator || report?.photoCredit || "");
     return {
@@ -2234,12 +2264,25 @@ function originalFeedSourceImage(item) {
   return null;
 }
 
+
+function sourceImageConflictsWithStory(item, report, rawUrl = "") {
+  const storyText = `${item?.title || ""} ${item?.preview || ""} ${report?.title || ""} ${report?.preview || ""}`;
+  const media = {
+    title: report?.imageAlt || report?.imageTitle || "",
+    description: report?.imageCaption || report?.imageDescription || "",
+    attribution: report?.imageCredit || report?.imageCreator || "",
+    landingUrl: rawUrl
+  };
+  return mediaContextConflict(storyText, media);
+}
+
 function preferredSourceImage(item) {
   const reports = normalizeClusterReports(item || {});
   const candidates = [item, ...reports].filter(Boolean);
   for (const report of candidates) {
     const raw = report?.imageUrl;
     if (!sourceImageLooksEditorial(raw)) continue;
+    if (sourceImageConflictsWithStory(item, report, raw)) continue;
     const rights = reusableSourceImageLicense(report);
     if (!rights) continue;
     return {
@@ -3417,7 +3460,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=110.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=111.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
