@@ -6793,3 +6793,54 @@ html[data-theme="dark"] .feed-column .section-head{
     line-height: 1.19 !important;
   }
 }
+
+/* =========================================================
+   HADASHOTA V118 — remove residual lead-story stripe/line artifact
+   ========================================================= */
+/* The featured headline must never render with decorative bars/lines around or
+   through it. Older visual layers are explicitly neutralized here so legacy
+   rules cannot revive them after headline rotation or responsive changes. */
+.hero-news-grid .lead-story {
+  border-top: 1px solid #e3e6eb !important;
+}
+.hero-news-grid .lead-story::before,
+.hero-news-grid .lead-story::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.hero-news-grid .lead-story h2,
+.hero-news-grid .lead-story h2 a,
+.hero-news-grid .lead-story #leadStoryTitle {
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  text-decoration-style: solid !important;
+  text-decoration-color: transparent !important;
+  border: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+.hero-news-grid .lead-story h2::before,
+.hero-news-grid .lead-story h2::after,
+.hero-news-grid .lead-story h2 a::before,
+.hero-news-grid .lead-story h2 a::after,
+.hero-news-grid .lead-story #leadStoryTitle::before,
+.hero-news-grid .lead-story #leadStoryTitle::after {
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] .hero-news-grid .lead-story {
+  border-top-color: #2f3742 !important;
+}
