@@ -397,9 +397,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V116 · API ${apiVersion}` : "גרסה V116 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V118 · API ${apiVersion}` : "גרסה V118 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V116 · API לא מחובר";
+    marker.textContent = "גרסה V118 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
