@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "113.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v113-1";
+const KOTERET_CLIENT_BUILD = "114.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v114-1";
 
 (function healOldClientState() {
   try {
@@ -397,9 +397,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V113 · API ${apiVersion}` : "גרסה V113 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V114 · API ${apiVersion}` : "גרסה V114 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V113 · API לא מחובר";
+    marker.textContent = "גרסה V114 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2177,6 +2177,20 @@ function mediaQueryForItem(item, editorial = "") {
 }
 
 const SAFE_MEDIA_CACHE = new Map();
+
+const ORIGINAL_ARTICLE_IMAGE_CACHE = new Map();
+async function fetchOriginalArticleImage(articleUrl) {
+  const clean = String(articleUrl || "").trim();
+  if (!/^https?:\/\//i.test(clean)) return null;
+  if (ORIGINAL_ARTICLE_IMAGE_CACHE.has(clean)) return ORIGINAL_ARTICLE_IMAGE_CACHE.get(clean);
+  const promise = fetch(`/api/source-image?url=${encodeURIComponent(clean)}`, { cache: "no-store" })
+    .then((response) => response.ok ? response.json() : null)
+    .then((data) => data?.image?.url ? data.image : null)
+    .catch(() => null);
+  ORIGINAL_ARTICLE_IMAGE_CACHE.set(clean, promise);
+  return promise;
+}
+
 let safeMediaRequests = 0;
 async function fetchSafeMedia(query, category = "other") {
   const normalized = String(query || "").trim().slice(0, 260);
@@ -2423,9 +2437,11 @@ async function hydrateLeadOpenMediaFallback(winner, leadTitle) {
 
 async function hydrateLeadSafeMedia(winner, leadTitle) {
   if (!el.leadStoryImage || !el.leadStoryMedia) return;
-  const direct = preferredSourceImage(winner?.item);
-  if (direct?.url) {
-    const currentFingerprint = leadFingerprint(winner);
+  const item = winner?.item;
+  const currentFingerprint = leadFingerprint(winner);
+
+  const applyOriginal = (direct) => {
+    if (!direct?.url) return false;
     el.leadStoryImage.onerror = async () => {
       if (currentFingerprint !== state.displayedLeadFingerprint) return;
       el.leadStoryImage.removeAttribute("src");
@@ -2436,12 +2452,28 @@ async function hydrateLeadSafeMedia(winner, leadTitle) {
     el.leadStoryImage.referrerPolicy = "no-referrer";
     el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
     delete el.leadStoryMedia.dataset.fallbackLabel;
-    el.leadStoryMedia.dataset.mediaCredit = direct.credit;
-    el.leadStoryMedia.dataset.mediaLanding = direct.landingUrl || "";
+    el.leadStoryMedia.dataset.mediaCredit = direct.credit || `מקור תמונה: ${cleanDisplayText(item?.sourceName || "המקור")}`;
+    el.leadStoryMedia.dataset.mediaLanding = direct.sourceUrl || direct.landingUrl || item?.url || "";
     el.leadStoryMedia.dataset.mediaLicense = direct.licenseUrl || "";
-    el.leadStoryMedia.title = `${direct.credit}${direct.license ? ` · ${direct.license}` : ""}`;
-    return;
+    el.leadStoryMedia.title = direct.credit || "תמונה מהידיעה המקורית";
+    return true;
+  };
+
+  // Priority 1: image already supplied by this exact source report/RSS item.
+  const embeddedOriginal = originalFeedSourceImage(item) || preferredSourceImage(item);
+  if (applyOriginal(embeddedOriginal)) return;
+
+  // Priority 2: inspect the exact original article page for og:image/JSON-LD.
+  const reports = normalizeClusterReports(item || {});
+  const articleTarget = [item, ...reports].find((row) => row?.url && row?.sourceKind !== "telegram")
+    || [item, ...reports].find((row) => row?.url);
+  if (articleTarget?.url) {
+    const articleOriginal = await fetchOriginalArticleImage(articleTarget.url);
+    if (currentFingerprint !== state.displayedLeadFingerprint) return;
+    if (articleOriginal?.url && sourceImageLooksEditorial(articleOriginal.url) && applyOriginal(articleOriginal)) return;
   }
+
+  // Priority 3 only: a strictly matched reusable illustration.
   await hydrateLeadOpenMediaFallback(winner, leadTitle);
 }
 
@@ -2469,7 +2501,8 @@ async function hydrateSafeMediaSlot(slot) {
   const a = slot.closest('a.news-image');
   const directUrl = a?.dataset?.sourceImage || "";
   const directCredit = a?.dataset?.sourceCredit || "";
-  const showDirect = (url) => {
+  const articleUrl = a?.dataset?.sourceUrl || "";
+  const showDirect = (url, creditText = directCredit) => {
     const img = document.createElement('img');
     img.src = url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
     img.addEventListener('error', () => {
@@ -2485,10 +2518,11 @@ async function hydrateSafeMediaSlot(slot) {
       hydrateSafeMediaSlot(replacement);
     }, { once:true });
     slot.replaceWith(img);
-    if (a && directCredit) {
+    if (a && creditText) {
+      a.querySelector('.media-credit')?.remove();
       const credit = document.createElement('span');
       credit.className = 'media-credit';
-      credit.textContent = directCredit;
+      credit.textContent = creditText;
       a.appendChild(credit);
     }
   };
@@ -2496,6 +2530,17 @@ async function hydrateSafeMediaSlot(slot) {
   if (directUrl && /^https?:\/\//i.test(directUrl)) {
     showDirect(directUrl);
     return;
+  }
+
+  // V114: before guessing an illustration, inspect the original article itself
+  // for og:image / Twitter image / JSON-LD image. This is the preferred fallback.
+  if (articleUrl && /^https?:\/\//i.test(articleUrl)) {
+    const original = await fetchOriginalArticleImage(articleUrl);
+    if (!slot.isConnected) return;
+    if (original?.url && sourceImageLooksEditorial(original.url)) {
+      showDirect(original.url, original.credit || `מקור תמונה: ${a?.dataset?.sourceName || "המקור"}`);
+      return;
+    }
   }
 
   const mediaQueries = String(slot.dataset.mediaQuery || "").split("|").map((q) => q.trim()).filter(Boolean);
@@ -2886,7 +2931,7 @@ function newsCardHtml(item) {
   const mediaQuery = escapeHtml(licensedMediaQueryVariantsForItem(item, safeTitle).join(" | "));
   const preferredImage = originalFeedSourceImage(item) || preferredSourceImage(item);
   const imageHtml = state.showImages
-    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit)}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="${escapeHtml(newsPreviewText(item, reportCount))}" aria-hidden="true"></span></a>`
+    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה" data-source-url="${storyUrl}" data-source-name="${escapeHtml(cleanDisplayText(item.sourceName || ""))}"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit)}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="${escapeHtml(newsPreviewText(item, reportCount))}" aria-hidden="true"></span></a>`
     : "";
   const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeTitle)}</a>`;
   const relatedHtml = related.length ? `
@@ -3557,7 +3602,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=113.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=114.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);

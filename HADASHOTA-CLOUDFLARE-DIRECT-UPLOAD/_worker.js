@@ -124,6 +124,12 @@ export default {
       return handleOpenMedia(url, ctx);
     }
 
+    if (url.pathname === "/api/source-image") {
+      if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handleSourceArticleImage(url, ctx);
+    }
+
     if (url.pathname === "/api/utilities") {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
@@ -163,7 +169,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "113.0.0",
+          version: "114.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -176,7 +182,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "113.0.0",
+        version: "114.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -338,7 +344,7 @@ function escapeXml(value) {
 async function handleEmergencyAlerts(ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
-  const cacheKey = new Request("https://hadashota.internal/v113/oref-current", { method: "GET" });
+  const cacheKey = new Request("https://hadashota.internal/v114/oref-current", { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -717,12 +723,160 @@ async function findOpenverseMedia(query, specificity = 1) {
   return null;
 }
 
+
+const ARTICLE_IMAGE_TIMEOUT_MS = 5200;
+const ARTICLE_IMAGE_CACHE_TTL_SECONDS = 3600;
+const ARTICLE_IMAGE_NEGATIVE_TTL_SECONDS = 420;
+
+function normalizedHostname(value) {
+  try { return new URL(String(value || "")).hostname.toLowerCase().replace(/^www\./, ""); }
+  catch { return ""; }
+}
+
+const ARTICLE_SOURCE_HOSTS = new Set(SOURCES.flatMap((source) => [source.home, source.url])
+  .map(normalizedHostname).filter(Boolean));
+
+function articleSourceForUrl(rawUrl) {
+  let target;
+  try { target = new URL(String(rawUrl || "")); } catch { return null; }
+  if (!/^https?:$/.test(target.protocol) || target.username || target.password) return null;
+  const host = target.hostname.toLowerCase().replace(/^www\./, "");
+  const allowed = [...ARTICLE_SOURCE_HOSTS].some((known) => host === known || host.endsWith(`.${known}`) || known.endsWith(`.${host}`));
+  if (!allowed) return null;
+  return SOURCES.find((source) => {
+    const hosts = [source.home, source.url].map(normalizedHostname).filter(Boolean);
+    return hosts.some((known) => host === known || host.endsWith(`.${known}`) || known.endsWith(`.${host}`));
+  }) || { name: host };
+}
+
+function metaContent(html, keys = []) {
+  const source = String(html || "");
+  for (const key of keys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patterns = [
+      new RegExp(`<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content=["']([^"']+)["'][^>]*>`, "i"),
+      new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`, "i")
+    ];
+    for (const rx of patterns) {
+      const match = source.match(rx);
+      if (match?.[1]) return decodeEntities(match[1]);
+    }
+  }
+  return "";
+}
+
+function articleJsonLdImage(html, base) {
+  const scripts = [...String(html || "").matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  const scan = (node) => {
+    if (!node) return "";
+    if (Array.isArray(node)) {
+      for (const child of node) { const found = scan(child); if (found) return found; }
+      return "";
+    }
+    if (typeof node !== "object") return "";
+    const type = String(node['@type'] || "").toLowerCase();
+    if (/newsarticle|article|reportage|liveblogposting|imageobject/.test(type) || node.headline) {
+      const raw = jsonLdImage(node.image || node.thumbnailUrl || node.associatedMedia, base);
+      if (raw) return raw;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") { const found = scan(value); if (found) return found; }
+    }
+    return "";
+  };
+  for (const match of scripts) {
+    try { const found = scan(JSON.parse(decodeEntities(match[1].trim()))); if (found) return found; } catch {}
+  }
+  return "";
+}
+
+function articleBodyImage(html, base) {
+  const source = String(html || "");
+  const scopes = [
+    source.match(/<article\b[\s\S]{0,180000}?<\/article>/i)?.[0] || "",
+    source.match(/<main\b[\s\S]{0,180000}?<\/main>/i)?.[0] || "",
+    source.slice(0,180000)
+  ];
+  for (const scope of scopes) {
+    for (const match of scope.matchAll(/<img\b[^>]*(?:src|data-src|data-original)=["']([^"']+)["'][^>]*>/gi)) {
+      const raw = absoluteUrl(decodeEntities(match[1]), base);
+      const clean = sanitizeSourceImageUrl(raw);
+      if (clean) return clean;
+    }
+  }
+  return "";
+}
+
+function extractArticlePrimaryImage(html, articleUrl) {
+  const meta = metaContent(html, ["og:image:secure_url","og:image","twitter:image","twitter:image:src","image"]);
+  const metaUrl = sanitizeSourceImageUrl(absoluteUrl(meta, articleUrl));
+  if (metaUrl) return metaUrl;
+  const jsonLd = sanitizeSourceImageUrl(articleJsonLdImage(html, articleUrl));
+  if (jsonLd) return jsonLd;
+  return articleBodyImage(html, articleUrl) || null;
+}
+
+async function handleSourceArticleImage(url, ctx) {
+  const articleUrl = String(url.searchParams.get("url") || "").trim().slice(0, 1800);
+  const source = articleSourceForUrl(articleUrl);
+  if (!source) return cors(json({ image: null, error: "source_not_allowed" }, 400, { "Cache-Control":"no-store" }));
+
+  const cache = caches.default;
+  const cacheKey = new Request(`https://hadashota.source-image.local/v114?u=${encodeURIComponent(articleUrl)}`);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cors(cached);
+
+  let payload = { image: null };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort("article_image_timeout"), ARTICLE_IMAGE_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(articleUrl, {
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "Accept": "text/html,application/xhtml+xml",
+          "User-Agent": "Mozilla/5.0 (compatible; KoteretPlus/114; +https://koteretplus.co.il/)"
+        }
+      });
+    } finally { clearTimeout(timer); }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (response.ok && /text\/html|application\/xhtml\+xml/i.test(contentType)) {
+      const html = (await response.text()).slice(0, 650000);
+      const imageUrl = extractArticlePrimaryImage(html, articleUrl);
+      if (imageUrl) {
+        const sourceName = cleanText(source?.name || source?.publisher || normalizedHostname(articleUrl));
+        const photoCredit = extractPhotoCredit(html, imageUrl);
+        const imageCaption = metaContent(html, ["og:image:alt","twitter:image:alt"]);
+        payload = {
+          image: {
+            url: imageUrl,
+            sourceUrl: articleUrl,
+            sourceName,
+            photographer: photoCredit || "",
+            credit: photoCredit ? `צילום: ${photoCredit} / ${sourceName}` : `מקור תמונה: ${sourceName}`,
+            caption: cleanText(imageCaption || "").slice(0,180),
+            provider: "original-article"
+          }
+        };
+      }
+    }
+  } catch {}
+
+  const ttl = payload.image ? ARTICLE_IMAGE_CACHE_TTL_SECONDS : ARTICLE_IMAGE_NEGATIVE_TTL_SECONDS;
+  const response = json(payload, 200, { "Cache-Control": `public, max-age=0, s-maxage=${ttl}` });
+  ctx?.waitUntil(cache.put(cacheKey, response.clone()));
+  return cors(response);
+}
+
 async function handleOpenMedia(url, ctx) {
   const raw = cleanText(url.searchParams.get("q") || "").slice(0, 280);
   const category = cleanText(url.searchParams.get("category") || "other");
   const queries = mediaQueryVariants(raw, category);
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.media.local/v113-live-lead?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
+  const cacheKey = new Request(`https://hadashota.media.local/v114-original-first?q=${encodeURIComponent(raw)}&c=${encodeURIComponent(category)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1077,12 +1231,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=113`;
+  cacheUrl.search = `?shard=${shard}&v=114`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=113`;
+  lastGoodUrl.search = `?shard=${shard}&v=114`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1097,7 +1251,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "113.0.0",
+          "X-Hadashota-Version": "114.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1220,13 +1374,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "113.0.0",
+      "X-Hadashota-Version": "114.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "113.0.0",
+      "X-Hadashota-Version": "114.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1260,7 +1414,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "113.0.0"
+        "X-Hadashota-Version": "114.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1282,7 +1436,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "113.0.0"
+    "X-Hadashota-Version": "114.0.0"
   });
 }
 
