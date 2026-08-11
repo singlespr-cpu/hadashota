@@ -6351,3 +6351,353 @@ html[data-theme="dark"] .lead-story-media {
     font-size: 9.8px !important;
   }
 }
+
+
+/* =========================================================
+   V116 — Premium Newsroom
+   Restores comfortable white story cards and elevates the
+   overall portal hierarchy without changing functionality.
+   ========================================================= */
+
+:root{
+  --v116-ink:#111827;
+  --v116-muted:#697386;
+  --v116-line:#e8ebef;
+  --v116-soft:#f5f6f8;
+  --v116-card:#ffffff;
+  --v116-accent:#df3b32;
+  --v116-shadow:0 8px 24px rgba(15,23,42,.045);
+  --v116-shadow-hover:0 12px 30px rgba(15,23,42,.075);
+}
+
+/* Overall page rhythm: premium news portal rather than dashboard tiles. */
+body{
+  background:
+    linear-gradient(180deg,#fff 0,#fafbfc 420px,#f5f6f8 100%) !important;
+}
+.site-shell,
+.page-shell,
+main{
+  position:relative;
+}
+
+/* Header / portal strips: crisp and newsroom-like. */
+.portal-strip{
+  border-radius:12px !important;
+  box-shadow:none !important;
+  border-color:#e4e7eb !important;
+  background:rgba(255,255,255,.98) !important;
+}
+.now-status-strip{
+  border-radius:12px !important;
+  border:1px solid #e5e8ec !important;
+  background:#fff !important;
+  box-shadow:0 3px 14px rgba(15,23,42,.035) !important;
+}
+.now-topic-chip{
+  background:#f7f8fa !important;
+  border-color:#eceef2 !important;
+  border-radius:8px !important;
+}
+.now-status-strip__actions button{
+  border-radius:8px !important;
+}
+
+/* Main editorial hero: cleaner and more authoritative. */
+.lead-story{
+  border-radius:16px !important;
+  border:1px solid #e1e5ea !important;
+  border-top:4px solid var(--v116-accent) !important;
+  background:#fff !important;
+  box-shadow:0 14px 36px rgba(15,23,42,.065) !important;
+}
+.lead-story-media{
+  border-radius:11px !important;
+}
+.lead-story h2,
+.lead-story h2 a{
+  color:var(--v116-ink) !important;
+  letter-spacing:-.038em !important;
+}
+.lead-story-copy > p{
+  color:#626d7c !important;
+}
+.lead-story-sources a,
+.lead-story-sources span{
+  background:#f7f8fa !important;
+  border-color:#e8ebef !important;
+}
+.lead-story-cta{
+  border-radius:9px !important;
+  background:#171b22 !important;
+  border-color:#171b22 !important;
+}
+
+/* Editorial column surface — gives "all updates" a real section. */
+.feed-column{
+  position:relative;
+}
+.feed-column .section-head{
+  margin-bottom:12px !important;
+  padding:4px 2px 12px !important;
+  border-bottom:2px solid #1f252d !important;
+}
+.feed-column .section-head h2{
+  color:#171c24 !important;
+  font-size:29px !important;
+}
+.feed-column .section-head > div:first-child{
+  border-inline-start:4px solid var(--v116-accent) !important;
+}
+
+/* IMPORTANT: restore the white background on every update card. */
+.feed{
+  display:grid !important;
+  gap:10px !important;
+}
+.news-card{
+  margin:0 !important;
+  padding:14px 15px !important;
+  border:1px solid #e5e8ec !important;
+  border-radius:13px !important;
+  background:var(--v116-card) !important;
+  box-shadow:0 3px 12px rgba(15,23,42,.028) !important;
+  overflow:hidden !important;
+  transition:
+    border-color .16s ease,
+    box-shadow .16s ease,
+    transform .16s ease,
+    background .16s ease !important;
+  contain-intrinsic-size:142px !important;
+}
+.news-card::before{
+  top:14px !important;
+  right:0 !important;
+  height:44px !important;
+  width:3px !important;
+  border-radius:3px 0 0 3px !important;
+}
+.news-card:hover{
+  transform:translateY(-1px) !important;
+  border-color:#d9dde3 !important;
+  background:#fff !important;
+  box-shadow:var(--v116-shadow-hover) !important;
+}
+.news-main{
+  gap:15px !important;
+}
+.news-card.has-image .news-main{
+  grid-template-columns:158px minmax(0,1fr) auto !important;
+  gap:15px !important;
+}
+.news-image{
+  width:158px !important;
+  height:104px !important;
+  min-height:104px !important;
+  max-height:104px !important;
+  border-radius:9px !important;
+  background:#eef1f4 !important;
+}
+.news-title,
+.news-title a{
+  font-size:18.5px !important;
+  line-height:1.31 !important;
+  color:#171c24 !important;
+  font-weight:790 !important;
+}
+.news-meta{
+  color:#7a8491 !important;
+  font-size:11px !important;
+}
+.source-name{
+  color:#39424f !important;
+}
+.news-preview{
+  display:-webkit-box !important;
+  -webkit-box-orient:vertical !important;
+  -webkit-line-clamp:1 !important;
+  overflow:hidden !important;
+  margin-top:7px !important;
+  color:#7b8490 !important;
+  font-size:11.5px !important;
+  line-height:1.45 !important;
+}
+.category-badge{
+  border-radius:6px !important;
+}
+.related-wrap{
+  border-top:1px solid #eff1f3 !important;
+}
+
+/* Give the side column a calmer hierarchy, like a secondary newsroom rail. */
+.sidebar,
+.side-column{
+  gap:12px !important;
+}
+.sidebar-card,
+.source-card,
+.sidebar > section,
+.side-column > section{
+  border-radius:13px !important;
+  border-color:#e5e8ec !important;
+  box-shadow:0 4px 16px rgba(15,23,42,.03) !important;
+}
+.sidebar-card h3,
+.source-card h3,
+.sidebar h2,
+.side-column h2{
+  letter-spacing:-.015em;
+}
+
+/* Filters: visually subordinate to the news itself. */
+.control-panel{
+  border-radius:12px !important;
+  background:#fff !important;
+  border-color:#e5e8ec !important;
+  box-shadow:0 2px 10px rgba(15,23,42,.025) !important;
+}
+.control-panel button,
+.control-panel select,
+.control-panel input{
+  border-radius:8px !important;
+}
+
+/* A slightly stronger brand rhythm in section headings. */
+.section-kicker{
+  letter-spacing:.025em !important;
+  font-weight:850 !important;
+}
+
+/* Desktop: make the main content feel broader and less boxed-in. */
+@media(min-width:1101px){
+  .news-layout,
+  .content-grid,
+  .main-grid{
+    column-gap:22px !important;
+  }
+}
+
+/* Tablet */
+@media(max-width:1100px){
+  .news-card.has-image .news-main{
+    grid-template-columns:142px minmax(0,1fr) auto !important;
+  }
+  .news-image{
+    width:142px !important;
+    height:96px !important;
+    min-height:96px !important;
+    max-height:96px !important;
+  }
+}
+
+/* Mobile: retain white cards but avoid the "floating bubble" look. */
+@media(max-width:700px){
+  body{
+    background:#f4f5f7 !important;
+  }
+  .feed{
+    gap:7px !important;
+  }
+  .news-card{
+    padding:11px 10px !important;
+    border-radius:10px !important;
+    border-color:#e3e6ea !important;
+    box-shadow:0 2px 8px rgba(15,23,42,.025) !important;
+    contain-intrinsic-size:108px !important;
+  }
+  .news-card:hover{
+    transform:none !important;
+    box-shadow:0 2px 8px rgba(15,23,42,.025) !important;
+  }
+  .news-card::before{
+    top:12px !important;
+    height:32px !important;
+  }
+  .news-card.has-image .news-main{
+    grid-template-columns:105px minmax(0,1fr) !important;
+    gap:10px !important;
+  }
+  .news-image{
+    width:105px !important;
+    height:74px !important;
+    min-height:74px !important;
+    max-height:74px !important;
+    border-radius:7px !important;
+  }
+  .news-title,
+  .news-title a{
+    font-size:16px !important;
+    line-height:1.28 !important;
+  }
+  .news-preview{
+    display:none !important;
+  }
+  .news-meta{
+    font-size:10px !important;
+    margin-bottom:4px !important;
+  }
+  .feed-column .section-head{
+    margin-bottom:8px !important;
+  }
+  .feed-column .section-head h2{
+    font-size:23px !important;
+  }
+}
+
+/* Very small screens */
+@media(max-width:430px){
+  .news-card{
+    padding:10px 9px !important;
+  }
+  .news-card.has-image .news-main{
+    grid-template-columns:94px minmax(0,1fr) !important;
+    gap:9px !important;
+  }
+  .news-image{
+    width:94px !important;
+    height:68px !important;
+    min-height:68px !important;
+    max-height:68px !important;
+  }
+  .news-title,
+  .news-title a{
+    font-size:15.2px !important;
+  }
+}
+
+/* Dark mode */
+html[data-theme="dark"] body{
+  background:#0c1118 !important;
+}
+html[data-theme="dark"] .portal-strip,
+html[data-theme="dark"] .now-status-strip,
+html[data-theme="dark"] .control-panel,
+html[data-theme="dark"] .lead-story,
+html[data-theme="dark"] .news-card{
+  background:#111720 !important;
+  border-color:#29313c !important;
+}
+html[data-theme="dark"] .news-card:hover{
+  background:#141b25 !important;
+  border-color:#384250 !important;
+}
+html[data-theme="dark"] .news-title,
+html[data-theme="dark"] .news-title a,
+html[data-theme="dark"] .lead-story h2,
+html[data-theme="dark"] .lead-story h2 a{
+  color:#f3f5f7 !important;
+}
+html[data-theme="dark"] .source-name{
+  color:#d9dee5 !important;
+}
+html[data-theme="dark"] .news-meta,
+html[data-theme="dark"] .news-preview{
+  color:#929dab !important;
+}
+html[data-theme="dark"] .now-topic-chip{
+  background:#171e28 !important;
+  border-color:#303947 !important;
+}
+html[data-theme="dark"] .feed-column .section-head{
+  border-bottom-color:#485463 !important;
+}
