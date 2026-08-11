@@ -2593,6 +2593,17 @@ function hydrateSafeMediaSlots() {
   if (!slots.length) return;
 
   if ("IntersectionObserver" in window) {
+    // The first feed items are visible newsroom content, not a decorative lazy
+    // enhancement. Resolve their original-article images immediately so users
+    // do not see a row of empty white image wells while the page is idle.
+    const immediate = slots.slice(0, 12);
+    immediate.forEach((slot) => {
+      slot.dataset.mediaObserved = "1";
+      hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error));
+    });
+
+    const deferred = slots.slice(12);
+    if (!deferred.length) return;
     if (!safeMediaObserver) {
       safeMediaObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
@@ -2600,9 +2611,9 @@ function hydrateSafeMediaSlots() {
           safeMediaObserver.unobserve(entry.target);
           hydrateSafeMediaSlot(entry.target).catch((error) => console.warn("Media hydration failed", error));
         }
-      }, { rootMargin: "500px 0px", threshold: 0.01 });
+      }, { rootMargin: "700px 0px", threshold: 0.01 });
     }
-    for (const slot of slots) {
+    for (const slot of deferred) {
       slot.dataset.mediaObserved = "1";
       safeMediaObserver.observe(slot);
     }
@@ -3085,6 +3096,36 @@ function leadQualificationAt(reports) {
   return times.length >= 3 ? new Date(times[2]).toISOString() : null;
 }
 
+function applyLeadTitleSizing(title = "") {
+  if (!el.leadStory || !el.leadStoryTitle) return;
+  const clean = cleanDisplayText(title);
+  const chars = clean.length;
+  const words = clean.split(/\s+/).filter(Boolean).length;
+  let size = "normal";
+
+  // Editorial sizing is intentionally based on both character and word count.
+  // Hebrew headlines with many short words otherwise look much taller than an
+  // equally long Latin/number-heavy headline.
+  if (chars > 145 || words > 24) size = "xlong";
+  else if (chars > 108 || words > 18) size = "long";
+  else if (chars > 72 || words > 13) size = "medium";
+  el.leadStory.dataset.titleSize = size;
+
+  // After layout, protect against unusually tall headlines caused by narrow
+  // columns/font metrics. Step down one tier at a time rather than clipping.
+  requestAnimationFrame(() => {
+    const link = el.leadStoryTitle.closest("a");
+    if (!link || !link.isConnected) return;
+    const lineHeight = parseFloat(getComputedStyle(link).lineHeight) || 1;
+    const lines = Math.round(link.getBoundingClientRect().height / lineHeight);
+    const maxLines = window.matchMedia("(max-width:700px)").matches ? 4 : 3;
+    if (lines <= maxLines) return;
+    const order = ["normal", "medium", "long", "xlong"];
+    const index = Math.min(order.length - 1, Math.max(0, order.indexOf(el.leadStory.dataset.titleSize)) + 1);
+    el.leadStory.dataset.titleSize = order[index];
+  });
+}
+
 function renderLeadStory() {
   // Use the server snapshot clock so every device evaluates freshness at the same moment.
   const serverNow = Date.parse(state.lastDataGeneratedAt || "");
@@ -3243,7 +3284,7 @@ function renderLeadStory() {
   const leadTitle = editorialHeadlineForItem(item);
 
   el.leadStoryTitle.textContent = leadTitle;
-  el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
+  applyLeadTitleSizing(leadTitle);
   el.leadStoryPreview.textContent = editorialDeckForItem(item, Math.max(1, Number(winner.uniqueSources) || sources.length));
   el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName || "כותרת פלוס";
   el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
