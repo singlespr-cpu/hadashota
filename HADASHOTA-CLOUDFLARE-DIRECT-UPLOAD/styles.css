@@ -6795,7 +6795,7 @@ html[data-theme="dark"] .feed-column .section-head{
 }
 
 /* =========================================================
-   HADASHOTA V118 — remove residual lead-story stripe/line artifact
+   HADASHOTA V120 — remove residual lead-story stripe/line artifact
    ========================================================= */
 /* The featured headline must never render with decorative bars/lines around or
    through it. Older visual layers are explicitly neutralized here so legacy
@@ -6844,3 +6844,29 @@ html[data-theme="dark"] .feed-column .section-head{
 html[data-theme="dark"] .hero-news-grid .lead-story {
   border-top-color: #2f3742 !important;
 }
+
+
+/* V120 — launch polish: subtle depth without changing layout */
+.news-card {
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+@media (hover:hover) and (pointer:fine) {
+  .news-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgba(16,24,40,.075);
+  }
+}
+.news-image img, .lead-story-media img {
+  transition: opacity .18s ease, transform .28s ease;
+}
+@media (hover:hover) and (pointer:fine) {
+  .news-card:hover .news-image img { transform: scale(1.015); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .news-card, .news-image img, .lead-story-media img { transition: none !important; transform: none !important; }
+}
+
+/* V120 — native site sharing */
+.share-site-button svg { stroke-linecap: round; stroke-linejoin: round; }
+.share-site-button:hover { border-color: rgba(255,59,48,.28); }
+html[data-theme="dark"] .share-site-button:hover { border-color: rgba(255,107,99,.34); }

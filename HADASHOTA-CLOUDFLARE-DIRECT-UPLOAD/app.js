@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "116.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v114-1";
+const KOTERET_CLIENT_BUILD = "120.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
   try {
@@ -236,6 +236,7 @@ const el = {
   dataStatus: document.querySelector("#dataStatus"),
   dataStatusText: document.querySelector("#dataStatusText"),
   notificationsBtn: document.querySelector("#notificationsBtn"),
+  shareSiteBtn: document.querySelector("#shareSiteBtn"),
   aboutBtn: document.querySelector("#aboutBtn"),
   contactBtn: document.querySelector("#contactBtn"),
   aboutModal: document.querySelector("#aboutModal"),
@@ -397,9 +398,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V118 · API ${apiVersion}` : "גרסה V118 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V120 · API ${apiVersion}` : "גרסה V120 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V118 · API לא מחובר";
+    marker.textContent = "גרסה V120 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -651,6 +652,7 @@ function bindEvents() {
   el.autoRefreshPill?.addEventListener("click", toggleAutoRefresh);
   el.quickAutoRefresh?.addEventListener("click", toggleAutoRefresh);
   el.notificationsBtn?.addEventListener("click", toggleHeadlineNotifications);
+  el.shareSiteBtn?.addEventListener("click", shareKoteretPlus);
   el.quickNotifications?.addEventListener("click", toggleHeadlineNotifications);
   el.quickFilters?.addEventListener("click", () => {
     el.quickMenu.classList.add("hidden");
@@ -2504,7 +2506,7 @@ async function hydrateSafeMediaSlot(slot) {
   const articleUrl = a?.dataset?.sourceUrl || "";
   const showDirect = (url, creditText = directCredit) => {
     const img = document.createElement('img');
-    img.src = url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+    img.src = url; img.alt = ""; img.loading = "eager"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
     img.addEventListener('error', () => {
       if (!img.isConnected) return;
       const replacement = document.createElement("span");
@@ -2562,7 +2564,7 @@ async function hydrateSafeMediaSlot(slot) {
     return;
   }
   const img = document.createElement('img');
-  img.src = media.url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+  img.src = media.url; img.alt = ""; img.loading = "eager"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
   img.addEventListener('error', () => {
     const replacement = document.createElement("span");
     replacement.className = "safe-media-slot contextual-media-fallback";
@@ -2596,13 +2598,24 @@ function hydrateSafeMediaSlots() {
     // The first feed items are visible newsroom content, not a decorative lazy
     // enhancement. Resolve their original-article images immediately so users
     // do not see a row of empty white image wells while the page is idle.
-    const immediate = slots.slice(0, 12);
+    // V120: every image already supplied by the original feed/article metadata
+    // starts immediately. These require no media-search request and are the most
+    // relevant images available. For cards without a supplied image, resolve the
+    // first screen immediately and prefetch the rest before they enter view.
+    const direct = slots.filter((slot) => slot.closest("a.news-image")?.dataset?.sourceImage);
+    const unresolved = slots.filter((slot) => !slot.closest("a.news-image")?.dataset?.sourceImage);
+    direct.forEach((slot) => {
+      slot.dataset.mediaObserved = "1";
+      hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error));
+    });
+
+    const immediate = unresolved.slice(0, 14);
     immediate.forEach((slot) => {
       slot.dataset.mediaObserved = "1";
       hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error));
     });
 
-    const deferred = slots.slice(12);
+    const deferred = unresolved.slice(14);
     if (!deferred.length) return;
     if (!safeMediaObserver) {
       safeMediaObserver = new IntersectionObserver((entries) => {
@@ -3643,7 +3656,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=118.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=120.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -5096,6 +5109,39 @@ function safeUrl(value) {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
+}
+
+
+async function shareKoteretPlus() {
+  const shareData = {
+    title: "כותרת פלוס",
+    text: "כל החדשות. כל המקורות. במקום אחד.",
+    url: location.origin + "/"
+  };
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      return;
+    }
+    await navigator.clipboard.writeText(shareData.url);
+    showToast("הקישור לכותרת פלוס הועתק");
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    try {
+      const box = document.createElement("textarea");
+      box.value = shareData.url;
+      box.setAttribute("readonly", "");
+      box.style.position = "fixed";
+      box.style.opacity = "0";
+      document.body.appendChild(box);
+      box.select();
+      document.execCommand("copy");
+      box.remove();
+      showToast("הקישור לכותרת פלוס הועתק");
+    } catch {
+      showToast("אפשר להעתיק את כתובת האתר משורת הכתובת");
+    }
+  }
 }
 
 let toastTimer;
