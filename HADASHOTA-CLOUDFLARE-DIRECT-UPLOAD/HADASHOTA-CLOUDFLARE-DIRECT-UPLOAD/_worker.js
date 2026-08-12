@@ -194,7 +194,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "123.0.0",
+          version: "125.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -207,7 +207,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "123.0.0",
+        version: "125.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1278,7 +1278,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "123.0.0",
+          "X-Hadashota-Version": "125.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1401,13 +1401,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "123.0.0",
+      "X-Hadashota-Version": "125.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "123.0.0",
+      "X-Hadashota-Version": "125.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1441,7 +1441,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "123.0.0"
+        "X-Hadashota-Version": "125.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1463,7 +1463,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "123.0.0"
+    "X-Hadashota-Version": "125.0.0"
   });
 }
 
@@ -2626,6 +2626,39 @@ async function sendEmptyWebPush(subscription,keys) {
   return {ok:response.ok,status:response.status};
 }
 
+function pushPlatformFromUserAgent(value="") {
+  const ua=String(value||"").toLowerCase();
+  if(/iphone|ipad|ipod/.test(ua))return "ios";
+  if(/android/.test(ua))return "android";
+  if(/windows/.test(ua))return "windows";
+  if(/macintosh|mac os x/.test(ua))return "mac";
+  if(/linux/.test(ua))return "linux";
+  return "other";
+}
+async function ensurePushStats(storage) {
+  let stats=await storage.get("subscription.stats");
+  if(stats&&Number.isFinite(Number(stats.count)))return stats;
+  const rows=await storage.list({prefix:"sub:"});
+  const platforms={ios:0,android:0,windows:0,mac:0,linux:0,other:0};
+  for(const row of rows.values()){
+    const p=String(row?.platform||pushPlatformFromUserAgent(row?.userAgent)||"other");
+    platforms[p]=(platforms[p]||0)+1;
+  }
+  stats={count:rows.size,platforms,updatedAt:new Date().toISOString()};
+  await storage.put("subscription.stats",stats);
+  return stats;
+}
+async function updatePushStats(storage,delta,platform="other") {
+  const current=await ensurePushStats(storage);
+  const stats={...current,platforms:{...(current.platforms||{})}};
+  stats.count=Math.max(0,Number(stats.count||0)+Number(delta||0));
+  const p=String(platform||"other");
+  stats.platforms[p]=Math.max(0,Number(stats.platforms[p]||0)+Number(delta||0));
+  stats.updatedAt=new Date().toISOString();
+  await storage.put("subscription.stats",stats);
+  return stats;
+}
+
 export class PushHub {
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
 
@@ -2635,8 +2668,8 @@ export class PushHub {
 
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
-      const subscriptions=await storage.list({prefix:"sub:"});
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:subscriptions.size,mode:"true-web-push",version:"123.0.0"},200,{"Cache-Control":"no-store"});
+      const stats=await ensurePushStats(storage);
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"125.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -2646,15 +2679,30 @@ export class PushHub {
       if(!/^https:\/\//i.test(endpoint))return json({error:"Invalid push subscription"},400);
       await ensureVapidKeys(storage);
       const id=await sha256Base64Url(endpoint);
-      await storage.put(`sub:${id}`,{subscription,userAgent:String(data?.userAgent||"").slice(0,240),createdAt:new Date().toISOString(),lastSeenAt:new Date().toISOString()});
-      return json({ok:true,id},200,{"Cache-Control":"no-store"});
+      const key=`sub:${id}`;
+      const existing=await storage.get(key);
+      const userAgent=String(data?.userAgent||"").slice(0,240);
+      const platform=pushPlatformFromUserAgent(userAgent);
+      const now=new Date().toISOString();
+      await storage.put(key,{subscription,deviceId:String(data?.deviceId||"").slice(0,100),platform,userAgent,createdAt:existing?.createdAt||now,lastSeenAt:now});
+      let stats=await ensurePushStats(storage);
+      if(!existing)stats=await updatePushStats(storage,1,platform);
+      return json({ok:true,id,subscriptions:Number(stats.count||0),platform},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/unsubscribe"&&request.method==="POST"){
       const data=await request.json().catch(()=>({}));
       const endpoint=String(data?.endpoint||"");
-      if(endpoint){const id=await sha256Base64Url(endpoint);await storage.delete(`sub:${id}`);}
-      return json({ok:true},200,{"Cache-Control":"no-store"});
+      let stats=await ensurePushStats(storage);
+      if(endpoint){
+        const id=await sha256Base64Url(endpoint), key=`sub:${id}`;
+        const existing=await storage.get(key);
+        if(existing){
+          await storage.delete(key);
+          stats=await updatePushStats(storage,-1,existing?.platform||pushPlatformFromUserAgent(existing?.userAgent));
+        }
+      }
+      return json({ok:true,subscriptions:Number(stats.count||0)},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/latest"){
@@ -2665,8 +2713,10 @@ export class PushHub {
     if(url.pathname==="/status"){
       const latest=await storage.get("lead.latest");
       const previous=await storage.get("lead.lastPushedFingerprint");
-      const subscriptions=await storage.list({prefix:"sub:"});
-      return json({enabled:true,subscriptions:subscriptions.size,lastPushedFingerprint:previous||null,latest:latest||null,version:"123.0.0"},200,{"Cache-Control":"no-store"});
+      const stats=await ensurePushStats(storage);
+      const lastResult=await storage.get("push.lastResult");
+      const activeJob=await storage.get("push.job");
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"125.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/lead"&&request.method==="POST"){
@@ -2674,40 +2724,67 @@ export class PushHub {
       if(!payload?.fingerprint||!payload?.title)return json({error:"Invalid lead"},400);
       await storage.put("lead.latest",payload);
       const last=await storage.get("lead.lastPushedFingerprint");
-      if(!last){
-        await storage.put("lead.lastPushedFingerprint",payload.fingerprint);
-        return json({ok:true,primed:true,pushed:0});
-      }
+      if(!last){await storage.put("lead.lastPushedFingerprint",payload.fingerprint);return json({ok:true,primed:true,pushed:0});}
       if(last===payload.fingerprint)return json({ok:true,changed:false,pushed:0});
-
-      // Commit before fan-out so a retry of the same Cron run cannot duplicate alerts.
       await storage.put("lead.lastPushedFingerprint",payload.fingerprint);
-      const keys=await ensureVapidKeys(storage);
-      const entries=await storage.list({prefix:"sub:"});
-      const rows=[...entries.entries()];
-      let pushed=0,removed=0,failed=0;
-
-      // Keep concurrency modest: every push endpoint is an outgoing connection.
-      for(let i=0;i<rows.length;i+=5){
-        const batch=rows.slice(i,i+5);
-        const results=await Promise.all(batch.map(async([key,row])=>{
-          try{
-            const result=await sendEmptyWebPush(row?.subscription,keys);
-            if(result.ok)return {key,ok:true};
-            if([404,410].includes(result.status))return {key,remove:true,status:result.status};
-            return {key,ok:false,status:result.status};
-          }catch(error){return {key,ok:false,error:String(error?.message||error)};}
-        }));
-        for(const result of results){
-          if(result.ok)pushed+=1;
-          else if(result.remove){await storage.delete(result.key);removed+=1;}
-          else failed+=1;
-        }
-      }
-      await storage.put("push.lastResult",{at:new Date().toISOString(),fingerprint:payload.fingerprint,pushed,removed,failed});
-      return json({ok:true,changed:true,pushed,removed,failed});
+      const stats=await ensurePushStats(storage);
+      await storage.put("push.job",{fingerprint:payload.fingerprint,startedAt:new Date().toISOString(),cursor:"",processed:0,pushed:0,removed:0,failed:0,expected:Number(stats.count||0)});
+      await storage.setAlarm(Date.now()+100);
+      return json({ok:true,changed:true,queued:true,subscriptions:Number(stats.count||0)});
     }
 
     return json({error:"Not found"},404);
+  }
+
+  async alarm(){
+    const storage=this.ctx.storage;
+    const job=await storage.get("push.job");
+    if(!job)return;
+    const keys=await ensureVapidKeys(storage);
+    const options={prefix:"sub:",limit:40};
+    if(job.cursor)options.startAfter=job.cursor;
+    const entries=await storage.list(options);
+    const rows=[...entries.entries()];
+
+    if(!rows.length){
+      const result={...job,finishedAt:new Date().toISOString(),active:false};
+      delete result.cursor;
+      await storage.put("push.lastResult",result);
+      await storage.delete("push.job");
+      return;
+    }
+
+    for(let i=0;i<rows.length;i+=5){
+      const batch=rows.slice(i,i+5);
+      const results=await Promise.all(batch.map(async([key,row])=>{
+        try{
+          const result=await sendEmptyWebPush(row?.subscription,keys);
+          if(result.ok)return {key,ok:true};
+          if([404,410].includes(result.status))return {key,remove:true,row};
+          return {key,ok:false,status:result.status};
+        }catch(error){return {key,ok:false,error:String(error?.message||error)};}
+      }));
+      for(const result of results){
+        job.processed+=1;
+        if(result.ok)job.pushed+=1;
+        else if(result.remove){
+          await storage.delete(result.key);
+          await updatePushStats(storage,-1,result.row?.platform||pushPlatformFromUserAgent(result.row?.userAgent));
+          job.removed+=1;
+        } else job.failed+=1;
+      }
+    }
+
+    job.cursor=rows[rows.length-1][0];
+    job.updatedAt=new Date().toISOString();
+    await storage.put("push.job",job);
+    if(rows.length<40){
+      const result={...job,finishedAt:new Date().toISOString(),active:false};
+      delete result.cursor;
+      await storage.put("push.lastResult",result);
+      await storage.delete("push.job");
+      return;
+    }
+    await storage.setAlarm(Date.now()+250);
   }
 }
