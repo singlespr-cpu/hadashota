@@ -6702,18 +6702,175 @@ html[data-theme="dark"] .feed-column .section-head{
   border-bottom-color:#485463 !important;
 }
 
+/* =========================================================
+   V117 — lead headline polish + image-first feed
+   ========================================================= */
+/* Hard reset for the intermittent line/strike artifact seen across rotating
+   lead headlines. Keep every title layer paint-only: no decoration, border,
+   pseudo content or inherited background can cross the glyphs. */
+.hero-news-grid .lead-story h2,
+.hero-news-grid .lead-story h2 a,
+.hero-news-grid .lead-story #leadStoryTitle {
+  position: relative !important;
+  z-index: 5 !important;
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+.hero-news-grid .lead-story h2::before,
+.hero-news-grid .lead-story h2::after,
+.hero-news-grid .lead-story h2 a::before,
+.hero-news-grid .lead-story h2 a::after,
+.hero-news-grid .lead-story #leadStoryTitle::before,
+.hero-news-grid .lead-story #leadStoryTitle::after {
+  content: none !important;
+  display: none !important;
+}
 
-/* V117 — visible editorial/SEO context */
-.seo-editorial-about{margin:34px auto 8px;padding:0 18px}
-.seo-editorial-inner{max-width:1180px;margin:0 auto;padding:22px 24px;border-top:1px solid #dde2e8;border-bottom:1px solid #e7eaee;background:rgba(255,255,255,.55)}
-.seo-editorial-kicker{display:block;margin-bottom:5px;color:#d43931;font-size:10px;font-weight:900;letter-spacing:.04em}
-.seo-editorial-about h2{margin:0;color:#1a2029;font-size:20px;line-height:1.25;font-weight:850}
-.seo-editorial-about p{max-width:920px;margin:10px 0 13px;color:#687383;font-size:12px;line-height:1.7}
-.seo-editorial-links{display:flex;flex-wrap:wrap;gap:7px 15px}
-.seo-editorial-links a{color:#3f4a58;font-size:11px;font-weight:750;text-decoration:none}
-.seo-editorial-links a:hover{color:#cf352d;text-decoration:underline}
-html[data-theme="dark"] .seo-editorial-inner{border-color:#29333f;background:rgba(17,23,32,.55)}
-html[data-theme="dark"] .seo-editorial-about h2{color:#f1f3f6}
-html[data-theme="dark"] .seo-editorial-about p{color:#99a4b2}
-html[data-theme="dark"] .seo-editorial-links a{color:#c5ccd5}
-@media(max-width:700px){.seo-editorial-about{margin-top:24px;padding:0 10px}.seo-editorial-inner{padding:17px 12px}.seo-editorial-about h2{font-size:17px}.seo-editorial-about p{font-size:11px;line-height:1.65}}
+/* More controlled headline ladder. JS chooses by chars + words and performs
+   one post-layout safety step when a headline becomes unusually tall. */
+.hero-news-grid .lead-story[data-title-size="xlong"] h2,
+.hero-news-grid .lead-story[data-title-size="xlong"] h2 a {
+  font-size: clamp(25px, 2.05vw, 32px) !important;
+  line-height: 1.16 !important;
+  letter-spacing: -.03em !important;
+}
+
+/* Slightly more breathable hero rhythm without making the module taller. */
+.hero-news-grid .lead-story-copy {
+  min-width: 0 !important;
+  align-self: center !important;
+}
+.hero-news-grid .lead-story-copy > p {
+  margin-top: 10px !important;
+  margin-bottom: 9px !important;
+}
+.hero-news-grid .lead-intelligence {
+  margin-top: 8px !important;
+}
+.hero-news-grid .lead-story-cta {
+  min-height: 36px !important;
+  padding-inline: 14px !important;
+}
+
+/* Feed images are part of the editorial card. Give the loading state a visible
+   neutral surface, then let the actual article image take over immediately. */
+.news-image.safe-news-image {
+  position: relative !important;
+  overflow: hidden !important;
+  background: linear-gradient(135deg,#eef1f4,#f7f8fa) !important;
+}
+.news-image .safe-media-slot {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+}
+.news-image > img {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  object-fit: cover !important;
+}
+
+/* A little more editorial separation inside All updates. */
+.feed-column .section-head {
+  padding-inline: 4px !important;
+}
+.news-card .news-meta {
+  margin-bottom: 5px !important;
+}
+.news-card .news-preview {
+  margin-top: 6px !important;
+}
+
+@media (max-width:700px) {
+  .hero-news-grid .lead-story[data-title-size="xlong"] h2,
+  .hero-news-grid .lead-story[data-title-size="xlong"] h2 a {
+    font-size: 20.5px !important;
+    line-height: 1.19 !important;
+  }
+}
+
+/* =========================================================
+   HADASHOTA V120 — remove residual lead-story stripe/line artifact
+   ========================================================= */
+/* The featured headline must never render with decorative bars/lines around or
+   through it. Older visual layers are explicitly neutralized here so legacy
+   rules cannot revive them after headline rotation or responsive changes. */
+.hero-news-grid .lead-story {
+  border-top: 1px solid #e3e6eb !important;
+}
+.hero-news-grid .lead-story::before,
+.hero-news-grid .lead-story::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.hero-news-grid .lead-story h2,
+.hero-news-grid .lead-story h2 a,
+.hero-news-grid .lead-story #leadStoryTitle {
+  text-decoration: none !important;
+  text-decoration-line: none !important;
+  text-decoration-style: solid !important;
+  text-decoration-color: transparent !important;
+  border: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+.hero-news-grid .lead-story h2::before,
+.hero-news-grid .lead-story h2::after,
+.hero-news-grid .lead-story h2 a::before,
+.hero-news-grid .lead-story h2 a::after,
+.hero-news-grid .lead-story #leadStoryTitle::before,
+.hero-news-grid .lead-story #leadStoryTitle::after {
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] .hero-news-grid .lead-story {
+  border-top-color: #2f3742 !important;
+}
+
+
+/* V120 — launch polish: subtle depth without changing layout */
+.news-card {
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+@media (hover:hover) and (pointer:fine) {
+  .news-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgba(16,24,40,.075);
+  }
+}
+.news-image img, .lead-story-media img {
+  transition: opacity .18s ease, transform .28s ease;
+}
+@media (hover:hover) and (pointer:fine) {
+  .news-card:hover .news-image img { transform: scale(1.015); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .news-card, .news-image img, .lead-story-media img { transition: none !important; transform: none !important; }
+}
+
+/* V120 — native site sharing */
+.share-site-button svg { stroke-linecap: round; stroke-linejoin: round; }
+.share-site-button:hover { border-color: rgba(255,59,48,.28); }
+html[data-theme="dark"] .share-site-button:hover { border-color: rgba(255,107,99,.34); }
+
+
+/* V121 SEO editorial context */
+.seo-editorial-about{margin:32px auto 8px;padding:0 18px}.seo-editorial-inner{max-width:1180px;margin:0 auto;padding:20px 22px;border-top:1px solid #dde2e8;border-bottom:1px solid #e7eaee;background:rgba(255,255,255,.5)}.seo-editorial-kicker{display:block;margin-bottom:5px;color:#d43931;font-size:10px;font-weight:900}.seo-editorial-about h2{margin:0;color:#1a2029;font-size:20px;line-height:1.25;font-weight:850}.seo-editorial-about p{max-width:930px;margin:10px 0 13px;color:#687383;font-size:12px;line-height:1.7}.seo-editorial-links{display:flex;flex-wrap:wrap;gap:7px 15px}.seo-editorial-links a{color:#3f4a58;font-size:11px;font-weight:750;text-decoration:none}.seo-editorial-links a:hover{color:#cf352d;text-decoration:underline}html[data-theme="dark"] .seo-editorial-inner{border-color:#29333f;background:rgba(17,23,32,.52)}html[data-theme="dark"] .seo-editorial-about h2{color:#f1f3f6}html[data-theme="dark"] .seo-editorial-about p{color:#99a4b2}html[data-theme="dark"] .seo-editorial-links a{color:#c5ccd5}@media(max-width:700px){.seo-editorial-about{margin-top:24px;padding:0 10px}.seo-editorial-inner{padding:16px 12px}.seo-editorial-about h2{font-size:17px}.seo-editorial-about p{font-size:11px;line-height:1.65}}
