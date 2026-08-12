@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "117.0.0";
-const KOTERET_CACHE_SCHEMA = "self-heal-v114-1";
+const KOTERET_CLIENT_BUILD = "121.0.0";
+const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
   try {
@@ -236,6 +236,7 @@ const el = {
   dataStatus: document.querySelector("#dataStatus"),
   dataStatusText: document.querySelector("#dataStatusText"),
   notificationsBtn: document.querySelector("#notificationsBtn"),
+  shareSiteBtn: document.querySelector("#shareSiteBtn"),
   aboutBtn: document.querySelector("#aboutBtn"),
   contactBtn: document.querySelector("#contactBtn"),
   aboutModal: document.querySelector("#aboutModal"),
@@ -397,9 +398,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V117 · API ${apiVersion}` : "גרסה V117 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V121 · API ${apiVersion}` : "גרסה V121 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V117 · API לא מחובר";
+    marker.textContent = "גרסה V121 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -651,6 +652,7 @@ function bindEvents() {
   el.autoRefreshPill?.addEventListener("click", toggleAutoRefresh);
   el.quickAutoRefresh?.addEventListener("click", toggleAutoRefresh);
   el.notificationsBtn?.addEventListener("click", toggleHeadlineNotifications);
+  el.shareSiteBtn?.addEventListener("click", shareKoteretPlus);
   el.quickNotifications?.addEventListener("click", toggleHeadlineNotifications);
   el.quickFilters?.addEventListener("click", () => {
     el.quickMenu.classList.add("hidden");
@@ -2504,7 +2506,7 @@ async function hydrateSafeMediaSlot(slot) {
   const articleUrl = a?.dataset?.sourceUrl || "";
   const showDirect = (url, creditText = directCredit) => {
     const img = document.createElement('img');
-    img.src = url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+    img.src = url; img.alt = ""; img.loading = "eager"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
     img.addEventListener('error', () => {
       if (!img.isConnected) return;
       const replacement = document.createElement("span");
@@ -2562,7 +2564,7 @@ async function hydrateSafeMediaSlot(slot) {
     return;
   }
   const img = document.createElement('img');
-  img.src = media.url; img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+  img.src = media.url; img.alt = ""; img.loading = "eager"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
   img.addEventListener('error', () => {
     const replacement = document.createElement("span");
     replacement.className = "safe-media-slot contextual-media-fallback";
@@ -2593,6 +2595,28 @@ function hydrateSafeMediaSlots() {
   if (!slots.length) return;
 
   if ("IntersectionObserver" in window) {
+    // The first feed items are visible newsroom content, not a decorative lazy
+    // enhancement. Resolve their original-article images immediately so users
+    // do not see a row of empty white image wells while the page is idle.
+    // V120: every image already supplied by the original feed/article metadata
+    // starts immediately. These require no media-search request and are the most
+    // relevant images available. For cards without a supplied image, resolve the
+    // first screen immediately and prefetch the rest before they enter view.
+    const direct = slots.filter((slot) => slot.closest("a.news-image")?.dataset?.sourceImage);
+    const unresolved = slots.filter((slot) => !slot.closest("a.news-image")?.dataset?.sourceImage);
+    direct.forEach((slot) => {
+      slot.dataset.mediaObserved = "1";
+      hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error));
+    });
+
+    const immediate = unresolved.slice(0, 14);
+    immediate.forEach((slot) => {
+      slot.dataset.mediaObserved = "1";
+      hydrateSafeMediaSlot(slot).catch((error) => console.warn("Media hydration failed", error));
+    });
+
+    const deferred = unresolved.slice(14);
+    if (!deferred.length) return;
     if (!safeMediaObserver) {
       safeMediaObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
@@ -2600,9 +2624,9 @@ function hydrateSafeMediaSlots() {
           safeMediaObserver.unobserve(entry.target);
           hydrateSafeMediaSlot(entry.target).catch((error) => console.warn("Media hydration failed", error));
         }
-      }, { rootMargin: "500px 0px", threshold: 0.01 });
+      }, { rootMargin: "700px 0px", threshold: 0.01 });
     }
-    for (const slot of slots) {
+    for (const slot of deferred) {
       slot.dataset.mediaObserved = "1";
       safeMediaObserver.observe(slot);
     }
@@ -3085,6 +3109,36 @@ function leadQualificationAt(reports) {
   return times.length >= 3 ? new Date(times[2]).toISOString() : null;
 }
 
+function applyLeadTitleSizing(title = "") {
+  if (!el.leadStory || !el.leadStoryTitle) return;
+  const clean = cleanDisplayText(title);
+  const chars = clean.length;
+  const words = clean.split(/\s+/).filter(Boolean).length;
+  let size = "normal";
+
+  // Editorial sizing is intentionally based on both character and word count.
+  // Hebrew headlines with many short words otherwise look much taller than an
+  // equally long Latin/number-heavy headline.
+  if (chars > 145 || words > 24) size = "xlong";
+  else if (chars > 108 || words > 18) size = "long";
+  else if (chars > 72 || words > 13) size = "medium";
+  el.leadStory.dataset.titleSize = size;
+
+  // After layout, protect against unusually tall headlines caused by narrow
+  // columns/font metrics. Step down one tier at a time rather than clipping.
+  requestAnimationFrame(() => {
+    const link = el.leadStoryTitle.closest("a");
+    if (!link || !link.isConnected) return;
+    const lineHeight = parseFloat(getComputedStyle(link).lineHeight) || 1;
+    const lines = Math.round(link.getBoundingClientRect().height / lineHeight);
+    const maxLines = window.matchMedia("(max-width:700px)").matches ? 4 : 3;
+    if (lines <= maxLines) return;
+    const order = ["normal", "medium", "long", "xlong"];
+    const index = Math.min(order.length - 1, Math.max(0, order.indexOf(el.leadStory.dataset.titleSize)) + 1);
+    el.leadStory.dataset.titleSize = order[index];
+  });
+}
+
 function renderLeadStory() {
   // Use the server snapshot clock so every device evaluates freshness at the same moment.
   const serverNow = Date.parse(state.lastDataGeneratedAt || "");
@@ -3243,7 +3297,7 @@ function renderLeadStory() {
   const leadTitle = editorialHeadlineForItem(item);
 
   el.leadStoryTitle.textContent = leadTitle;
-  el.leadStory.dataset.titleSize = leadTitle.length > 120 ? "long" : leadTitle.length > 78 ? "medium" : "normal";
+  applyLeadTitleSizing(leadTitle);
   el.leadStoryPreview.textContent = editorialDeckForItem(item, Math.max(1, Number(winner.uniqueSources) || sources.length));
   el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName || "כותרת פלוס";
   el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
@@ -3602,7 +3656,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=117.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=121.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -5055,6 +5109,39 @@ function safeUrl(value) {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
+}
+
+
+async function shareKoteretPlus() {
+  const shareData = {
+    title: "כותרת פלוס",
+    text: "כל החדשות. כל המקורות. במקום אחד.",
+    url: location.origin + "/"
+  };
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      return;
+    }
+    await navigator.clipboard.writeText(shareData.url);
+    showToast("הקישור לכותרת פלוס הועתק");
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    try {
+      const box = document.createElement("textarea");
+      box.value = shareData.url;
+      box.setAttribute("readonly", "");
+      box.style.position = "fixed";
+      box.style.opacity = "0";
+      document.body.appendChild(box);
+      box.select();
+      document.execCommand("copy");
+      box.remove();
+      showToast("הקישור לכותרת פלוס הועתק");
+    } catch {
+      showToast("אפשר להעתיק את כתובת האתר משורת הכתובת");
+    }
+  }
 }
 
 let toastTimer;
