@@ -7024,3 +7024,60 @@ html[data-theme="dark"] .homepage-url code{color:#cbd3dd}
     margin-top:8px !important;
   }
 }
+
+
+/* V129 — Home Front alert polish */
+.alert-primary-wrap{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  min-width:0;
+  flex:1 1 auto;
+}
+.alert-primary-wrap .alert-status-group{
+  flex:0 0 auto !important;
+}
+.alert-primary-wrap .alert-disclaimer{
+  margin:2px 0 0 48px !important;
+  color:#98a2b3 !important;
+  font-size:7.6px !important;
+  line-height:1.35 !important;
+  text-align:right !important;
+  max-width:720px;
+}
+.alert-center-eyebrow b{
+  font-size:11px !important;
+  font-weight:850 !important;
+}
+.alert-sound-quick,
+.alert-settings-button{
+  height:31px !important;
+  padding:0 8px !important;
+  gap:5px !important;
+  font-size:8.8px !important;
+  border-radius:9px !important;
+}
+.alert-sound-quick svg,
+.alert-settings-button svg{
+  width:13px !important;
+  height:13px !important;
+}
+
+@media(max-width:1000px){
+  .alert-primary-wrap{
+    flex:1 1 100%;
+  }
+}
+@media(max-width:700px){
+  .alert-primary-wrap .alert-disclaimer{
+    margin:3px 0 0 0 !important;
+    font-size:7px !important;
+    text-align:right !important;
+  }
+  .alert-sound-quick,
+  .alert-settings-button{
+    height:30px !important;
+    padding:0 7px !important;
+    font-size:8.4px !important;
+  }
+}
