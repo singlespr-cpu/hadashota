@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "122.0.0";
+const KOTERET_CLIENT_BUILD = "123.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -398,9 +398,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V122 · API ${apiVersion}` : "גרסה V122 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V123 · API ${apiVersion}` : "גרסה V123 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V122 · API לא מחובר";
+    marker.textContent = "גרסה V123 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3656,15 +3656,78 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=122.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=123.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
     for (const registration of registrations) {
       try { await registration.update(); } catch {}
     }
+
+    // V123: users who opted in on older versions are upgraded to a real
+    // server-side PushSubscription without asking for permission again.
+    if (state.notificationsEnabled && Notification.permission === "granted") {
+      window.setTimeout(() => ensureServerPushSubscription().catch((error) => {
+        console.warn("Background push subscription repair failed", error);
+      }), 350);
+    }
   } catch (error) {
     console.warn("Service worker registration failed", error);
+  }
+}
+
+async function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+async function ensureServerPushSubscription() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    throw new Error("push_not_supported");
+  }
+
+  let registration = state.serviceWorkerRegistration;
+  if (!registration) registration = await navigator.serviceWorker.ready;
+  state.serviceWorkerRegistration = registration;
+
+  const configResponse = await fetch("/api/push/config", { cache: "no-store", headers: { "Accept": "application/json" } });
+  if (!configResponse.ok) throw new Error(`push_config_${configResponse.status}`);
+  const config = await configResponse.json();
+  if (!config?.enabled || !config?.publicKey) throw new Error("push_server_not_ready");
+
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: await urlBase64ToUint8Array(config.publicKey)
+    });
+  }
+
+  const response = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify({ subscription: subscription.toJSON(), userAgent: navigator.userAgent.slice(0, 220) })
+  });
+  if (!response.ok) throw new Error(`push_subscribe_${response.status}`);
+  return subscription;
+}
+
+async function removeServerPushSubscription() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const registration = state.serviceWorkerRegistration || await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager?.getSubscription?.();
+    if (!subscription) return;
+    await fetch("/api/push/unsubscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription.endpoint })
+    }).catch(() => {});
+    await subscription.unsubscribe().catch(() => {});
+  } catch (error) {
+    console.warn("Push unsubscribe failed", error);
   }
 }
 
@@ -3673,16 +3736,25 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
   if (!enabled) {
     state.notificationsEnabled = false;
     localStorage.setItem("hadashota.headlineNotifications", "0");
+    await removeServerPushSubscription();
     syncControlsFromState();
     showToast("התראות דפדפן כבויות");
     return;
   }
 
-  // A deliberate opt-in from the welcome offer or any notification control is remembered.
   localStorage.setItem("hadashota.notificationPromptChoice", "accepted");
 
   if (!("Notification" in window)) {
     showToast("הדפדפן לא תומך בהתראות");
+    return;
+  }
+
+  if (isIOSDevice() && !isStandaloneMode()) {
+    state.notificationsEnabled = false;
+    localStorage.setItem("hadashota.headlineNotifications", "0");
+    syncControlsFromState();
+    showToast("באייפון: הוסיפו קודם את כותרת פלוס למסך הבית ואז הפעילו התראות");
+    openInstallOffer?.();
     return;
   }
 
@@ -3696,11 +3768,22 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
     return;
   }
 
+  try {
+    await ensureServerPushSubscription();
+  } catch (error) {
+    console.warn("True Web Push subscription failed", error);
+    state.notificationsEnabled = false;
+    localStorage.setItem("hadashota.headlineNotifications", "0");
+    syncControlsFromState();
+    showToast("לא הצלחנו לחבר Push ברקע — נסו שוב בעוד רגע");
+    return;
+  }
+
   state.notificationsEnabled = true;
   state.leadNotificationPrimed = true;
   localStorage.setItem("hadashota.headlineNotifications", "1");
   syncControlsFromState();
-  showToast("התראות הופעלו — תישלח התראה כשהכותרת הראשית תתחלף");
+  showToast("Push אמיתי הופעל — תקבלו התראה גם כשהאתר לא פתוח");
 }
 
 function leadFingerprint(entry) {
@@ -3810,14 +3893,12 @@ function updateLeadHeadlineTracking(entry) {
   // the new lead, so the next complete 30-second pass can still alert.
   if (state.dataDelayed) return;
 
-  // Commit only after the notification attempt. This avoids silently swallowing
-  // a headline change when the Service Worker is still becoming ready.
-  Promise.resolve(notifyHeadlineChange(entry)).then((sent) => {
-    if (!sent) return;
-    state.currentLeadFingerprint = fingerprint;
-    localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
-    recordLeadHistory(entry, fingerprint);
-  }).catch((error) => console.warn("Headline notification tracking failed", error));
+  // V123: true Web Push is initiated by the Cloudflare scheduled Worker. The
+  // page only tracks the local baseline here; otherwise an open tab would show a
+  // second duplicate notification for the same lead.
+  state.currentLeadFingerprint = fingerprint;
+  localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
+  recordLeadHistory(entry, fingerprint);
 }
 
 function locateNearestCity() {
