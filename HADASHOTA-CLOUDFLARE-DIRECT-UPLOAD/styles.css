@@ -7318,3 +7318,182 @@ html[data-theme="dark"] .homepage-url code{color:#cbd3dd}
     white-space:normal !important;
   }
 }
+
+
+/* =========================================================
+   V132 — refined compact alert bar
+   Right: Home Front Command + settings
+   Left: homepage button + Google search
+   ========================================================= */
+.alert-center-card{
+  display:flex !important;
+  flex-direction:row-reverse !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:16px !important;
+  min-height:0 !important;
+  height:auto !important;
+  padding:10px 14px !important;
+  overflow:hidden !important;
+}
+.alert-primary-wrap{
+  flex:1 1 auto !important;
+  min-width:340px !important;
+  max-width:none !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:flex-end !important;
+  justify-content:center !important;
+  gap:6px !important;
+}
+.alert-primary-wrap .alert-status-group{
+  width:100% !important;
+  display:grid !important;
+  grid-template-columns:42px minmax(0,1fr) auto !important;
+  grid-template-areas:
+    "icon copy copy"
+    "icon actions actions" !important;
+  align-items:center !important;
+  column-gap:10px !important;
+  row-gap:6px !important;
+  min-height:0 !important;
+}
+.alert-primary-wrap .alert-status-icon{
+  grid-area:icon !important;
+  width:34px !important;
+  height:34px !important;
+  flex:0 0 34px !important;
+  align-self:start !important;
+}
+.alert-primary-wrap .alert-center-copy{
+  grid-area:copy !important;
+  min-width:0 !important;
+  width:100% !important;
+  text-align:right !important;
+}
+.alert-primary-wrap .alert-center-eyebrow{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:7px !important;
+  flex-wrap:wrap !important;
+  margin:0 !important;
+}
+.alert-center-copy > strong,
+#alertStateLabel{
+  font-size:16px !important;
+  line-height:1.2 !important;
+}
+#alertLastCheck{
+  font-size:12px !important;
+}
+.alert-primary-wrap .alert-center-actions{
+  grid-area:actions !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:8px !important;
+  margin:0 !important;
+}
+.alert-sound-quick,
+.alert-settings-button{
+  height:32px !important;
+  padding:0 11px !important;
+  font-size:12px !important;
+  transform:none !important;
+}
+.alert-primary-wrap .alert-disclaimer{
+  display:none !important;
+}
+.start-hub-tools{
+  flex:0 0 420px !important;
+  min-width:300px !important;
+  max-width:420px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:10px !important;
+  margin:0 !important;
+  align-self:center !important;
+}
+.homepage-button{
+  order:1 !important;
+  flex:0 0 auto !important;
+  height:34px !important;
+  white-space:nowrap !important;
+}
+.google-search-form{
+  order:2 !important;
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  height:34px !important;
+}
+.google-search-form input{
+  min-width:0 !important;
+}
+@media(max-width:1100px){
+  .start-hub-tools{
+    flex-basis:360px !important;
+    min-width:260px !important;
+    max-width:360px !important;
+  }
+  .homepage-button b{
+    display:none !important;
+  }
+  .homepage-button{
+    width:40px !important;
+    padding:0 !important;
+    justify-content:center !important;
+  }
+}
+@media(max-width:820px){
+  .alert-center-card{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    gap:8px !important;
+    padding:10px !important;
+  }
+  .alert-primary-wrap{
+    min-width:0 !important;
+    width:100% !important;
+    align-items:stretch !important;
+  }
+  .alert-primary-wrap .alert-status-group{
+    grid-template-columns:38px minmax(0,1fr) !important;
+    grid-template-areas:
+      "icon copy"
+      "actions actions" !important;
+  }
+  .alert-primary-wrap .alert-status-icon{
+    align-self:start !important;
+  }
+  .alert-primary-wrap .alert-center-actions{
+    justify-content:flex-start !important;
+    flex-wrap:wrap !important;
+  }
+  .start-hub-tools{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    justify-content:space-between !important;
+  }
+}
+@media(max-width:560px){
+  .start-hub-tools{
+    display:grid !important;
+    grid-template-columns:auto minmax(0,1fr) !important;
+    gap:8px !important;
+  }
+  .homepage-button{
+    order:1 !important;
+    width:auto !important;
+    padding:0 10px !important;
+  }
+  .homepage-button b{
+    display:inline !important;
+  }
+  .google-search-form{
+    order:2 !important;
+    width:100% !important;
+  }
+}
