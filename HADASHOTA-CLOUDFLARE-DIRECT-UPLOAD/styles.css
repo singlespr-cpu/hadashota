@@ -6890,3 +6890,46 @@ html[data-theme="dark"] .share-site-button:hover { border-color: rgba(255,107,99
     left:auto !important;
   }
 }
+
+/* V125 — Start hub */
+.alert-center-card{gap:10px !important}
+.alert-center-actions{order:0}
+.alert-status-icon{order:1}
+.alert-center-copy{order:2}
+.start-hub-tools{order:3;margin-inline-start:auto;display:flex;align-items:center;gap:7px;flex:0 1 430px;min-width:260px;direction:ltr}
+.google-search-form{height:36px;min-width:210px;flex:1 1 300px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;border:1px solid #dfe4ea;border-radius:11px;background:#fff;box-shadow:0 2px 8px rgba(15,23,42,.025)}
+.google-word{direction:ltr;color:#667085;font-size:11px;font-weight:850;letter-spacing:-.02em}
+.google-search-form input{min-width:0;flex:1;height:100%;border:0;outline:0;background:transparent;color:#101828;font:inherit;font-size:11px;direction:rtl}
+.google-search-form input::placeholder{color:#98a2b3}
+.google-search-form button{width:27px;height:27px;display:grid;place-items:center;border:0;border-radius:8px;background:#f3f5f7;color:#344054;font-size:17px;cursor:pointer}
+.homepage-button{height:36px;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border:1px solid #dfe4ea;border-radius:10px;background:#fff;color:#475467;font:inherit;font-size:9.5px;font-weight:850;cursor:pointer;direction:rtl}
+.homepage-button span{font-size:14px}
+.homepage-button:hover,.google-search-form:focus-within{border-color:#cbd2db;box-shadow:0 4px 14px rgba(15,23,42,.06)}
+.homepage-modal-card{max-width:560px !important}
+.homepage-modal-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#f2f4f7;color:#101828;font-size:22px;margin-bottom:8px}
+.homepage-instructions{display:grid;gap:8px;margin-top:14px}
+.homepage-step{display:grid;grid-template-columns:26px minmax(0,1fr);align-items:start;gap:9px;padding:9px 10px;border:1px solid #e5e9ef;border-radius:11px;background:#fbfcfd;color:#475467;font-size:11px;line-height:1.5}
+.homepage-step>b{width:24px;height:24px;display:grid;place-items:center;border-radius:8px;background:#101828;color:#fff;font-size:10px}
+.homepage-url{padding:9px 10px;border-radius:10px;background:#f4f6f8;border:1px solid #e4e8ed;direction:ltr;text-align:left;overflow:auto}
+.homepage-url code{font-size:10px;color:#344054}
+.homepage-note{display:block;margin-top:11px;color:#98a2b3;font-size:9px}
+.alert-center-card.alert-active .google-search-form,.alert-center-card.alert-active .homepage-button{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.30);color:#fff}
+.alert-center-card.alert-active .google-search-form input,.alert-center-card.alert-active .google-word{color:#fff}
+.alert-center-card.alert-active .google-search-form input::placeholder{color:rgba(255,255,255,.72)}
+.alert-center-card.alert-active .google-search-form button{background:rgba(255,255,255,.16);color:#fff}
+html[data-theme="dark"] .google-search-form,html[data-theme="dark"] .homepage-button{background:#151c25;border-color:#303946;color:#d6dce4}
+html[data-theme="dark"] .google-search-form input{color:#f2f4f7}
+html[data-theme="dark"] .google-search-form button{background:#202936;color:#d6dce4}
+html[data-theme="dark"] .homepage-step{background:#151c25;border-color:#303946;color:#c1c9d4}
+html[data-theme="dark"] .homepage-url{background:#111720;border-color:#303946}
+html[data-theme="dark"] .homepage-url code{color:#cbd3dd}
+@media(max-width:1000px){.alert-center-card{flex-wrap:wrap}.alert-center-copy{flex:1 1 45%}.start-hub-tools{flex:1 1 100%;min-width:0;margin-inline-start:0}}
+@media(max-width:700px){
+  .alert-center-card{display:grid !important;grid-template-columns:auto auto minmax(0,1fr);gap:7px !important}
+  .alert-center-actions{grid-column:1 / span 2;grid-row:1;justify-self:start}
+  .alert-status-icon{grid-column:3;grid-row:1;justify-self:end}
+  .alert-center-copy{grid-column:1 / -1;grid-row:2}
+  .start-hub-tools{grid-column:1 / -1;grid-row:3;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto}
+  .google-search-form{min-width:0;width:100%}
+  .homepage-button b{display:none}.homepage-button{width:38px;padding:0;justify-content:center}
+}

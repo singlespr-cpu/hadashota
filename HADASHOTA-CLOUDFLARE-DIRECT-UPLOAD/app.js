@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "124.0.0";
+const KOTERET_CLIENT_BUILD = "125.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -251,6 +251,9 @@ const el = {
   alertSoundQuick: document.querySelector("#alertSoundQuick"),
   alertSoundQuickLabel: document.querySelector("#alertSoundQuickLabel"),
   alertSettingsBtn: document.querySelector("#alertSettingsBtn"),
+  homepageBtn: document.querySelector("#homepageBtn"),
+  homepageModal: document.querySelector("#homepageModal"),
+  homepageInstructions: document.querySelector("#homepageInstructions"),
   alertSettingsModal: document.querySelector("#alertSettingsModal"),
   alertAllIsrael: document.querySelector("#alertAllIsrael"),
   alertCityPicker: document.querySelector("#alertCityPicker"),
@@ -398,9 +401,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V124 · API ${apiVersion}` : "גרסה V124 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V125 · API ${apiVersion}` : "גרסה V125 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V124 · API לא מחובר";
+    marker.textContent = "גרסה V125 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -516,6 +519,7 @@ function bindEvents() {
   el.installAppBtn?.addEventListener("click", () => maybeShowInstallOffer("manual"));
   el.backToTop?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   el.alertSettingsBtn?.addEventListener("click", () => openSiteModal(el.alertSettingsModal, el.alertSettingsBtn));
+  el.homepageBtn?.addEventListener("click", openHomepageGuide);
   el.alertSoundQuick?.addEventListener("click", () => setAlertSound(!state.alertSound, true));
   el.alertSoundToggle?.addEventListener("change", () => setAlertSound(el.alertSoundToggle.checked, true));
   el.alertDesktopToggle?.addEventListener("change", () => setAlertDesktop(el.alertDesktopToggle.checked));
@@ -3656,7 +3660,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=124.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=125.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3681,6 +3685,42 @@ async function urlBase64ToUint8Array(base64String) {
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+function getPushDeviceId() {
+  let id=localStorage.getItem("hadashota.pushDeviceId");
+  if(id)return id;
+  try{id=crypto.randomUUID();}catch{id=`kp-${Date.now()}-${Math.random().toString(36).slice(2)}`;}
+  localStorage.setItem("hadashota.pushDeviceId",id);
+  return id;
+}
+
+function homepageInstructionsMarkup() {
+  const url=location.origin+"/";
+  if (isIOSDevice()) {
+    return `<div class="homepage-step"><b>1</b><span>באייפון אין הגדרת “דף בית” כמו במחשב. לחצו <strong>שיתוף ↥</strong>.</span></div>
+      <div class="homepage-step"><b>2</b><span>בחרו <strong>הוסף למסך הבית</strong>.</span></div>
+      <div class="homepage-step"><b>3</b><span>פתחו מהאייקון החדש — כך גם Web Push מלא נתמך.</span></div>`;
+  }
+  if (/edg/i.test(navigator.userAgent)) {
+    return `<div class="homepage-step"><b>1</b><span>ב־Edge: <strong>הגדרות → התחלה, בית וכרטיסיות חדשות</strong>.</span></div>
+      <div class="homepage-step"><b>2</b><span>תחת “בעת הפעלת Edge” בחרו <strong>פתיחת דפים אלה</strong>.</span></div>
+      <div class="homepage-url"><code>${escapeHtml(url)}</code></div>`;
+  }
+  if (/firefox/i.test(navigator.userAgent)) {
+    return `<div class="homepage-step"><b>1</b><span>ב־Firefox: <strong>הגדרות → בית</strong>.</span></div>
+      <div class="homepage-step"><b>2</b><span>בחרו כתובות מותאמות אישית והכניסו:</span></div>
+      <div class="homepage-url"><code>${escapeHtml(url)}</code></div>`;
+  }
+  return `<div class="homepage-step"><b>1</b><span>ב־Chrome: <strong>הגדרות → בעת ההפעלה</strong>.</span></div>
+    <div class="homepage-step"><b>2</b><span>בחרו <strong>פתיחת דף מסוים או קבוצת דפים</strong>.</span></div>
+    <div class="homepage-step"><b>3</b><span>הוסיפו את הכתובת:</span></div>
+    <div class="homepage-url"><code>${escapeHtml(url)}</code></div>`;
+}
+function openHomepageGuide() {
+  if (!el.homepageModal) return;
+  if (el.homepageInstructions) el.homepageInstructions.innerHTML=homepageInstructionsMarkup();
+  openSiteModal(el.homepageModal,el.homepageBtn);
 }
 
 async function ensureServerPushSubscription() {
@@ -3708,7 +3748,11 @@ async function ensureServerPushSubscription() {
   const response = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify({ subscription: subscription.toJSON(), userAgent: navigator.userAgent.slice(0, 220) })
+    body: JSON.stringify({
+      subscription: subscription.toJSON(),
+      userAgent: navigator.userAgent.slice(0, 220),
+      deviceId: getPushDeviceId()
+    })
   });
   if (!response.ok) throw new Error(`push_subscribe_${response.status}`);
   return subscription;
