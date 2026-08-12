@@ -8099,3 +8099,84 @@ html[data-theme="dark"] .homepage-url code{color:#cbd3dd}
     padding-inline: 9px !important;
   }
 }
+
+/* =========================================================
+   V139 — MOBILE ONLY: remove homepage button + slimmer Home Front strip
+   User request: on mobile only, hide “הפוך לדף הבית” and reduce the
+   overall height / visual density of the alert strip.
+   ========================================================= */
+@media (max-width: 700px) {
+  /* Remove the homepage button on mobile. */
+  .alert-center .homepage-button {
+    display: none !important;
+  }
+
+  /* The utility area is no longer needed on mobile once Google and
+     homepage are removed. */
+  .alert-center .start-hub-tools {
+    display: none !important;
+  }
+
+  /* Make the Home Front strip slimmer and tighter. */
+  .alert-center {
+    margin-top: 8px !important;
+  }
+  .alert-center-card {
+    min-height: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    padding: 6px 8px !important;
+    gap: 4px !important;
+    border-radius: 16px !important;
+  }
+  .alert-primary-wrap {
+    gap: 0 !important;
+    min-width: 0 !important;
+  }
+  .alert-status-group {
+    gap: 8px !important;
+    align-items: center !important;
+  }
+  .alert-status-icon {
+    width: 28px !important;
+    height: 28px !important;
+    flex: 0 0 28px !important;
+  }
+  .alert-status-icon svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  .alert-primary-textblock {
+    gap: 4px !important;
+  }
+  .alert-center-eyebrow {
+    gap: 5px !important;
+    align-items: center !important;
+    white-space: normal !important;
+    line-height: 1.2 !important;
+  }
+  #alertStateLabel {
+    font-size: 15px !important;
+    line-height: 1.1 !important;
+  }
+  #alertLastCheck {
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+  }
+  .alert-center-actions {
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+  .alert-sound-quick,
+  .alert-settings-button {
+    height: 28px !important;
+    min-height: 28px !important;
+    padding-inline: 8px !important;
+    font-size: 9.5px !important;
+    border-radius: 9px !important;
+  }
+  .alert-sound-quick span,
+  .alert-settings-button span {
+    line-height: 1 !important;
+  }
+}
