@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "126.0.0";
+const KOTERET_CLIENT_BUILD = "128.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -254,6 +254,8 @@ const el = {
   homepageBtn: document.querySelector("#homepageBtn"),
   homepageModal: document.querySelector("#homepageModal"),
   homepageInstructions: document.querySelector("#homepageInstructions"),
+  googleSearchForm: document.querySelector(".google-search-form"),
+  googleSearchInput: document.querySelector(".google-search-form input[name='q']"),
   alertSettingsModal: document.querySelector("#alertSettingsModal"),
   alertAllIsrael: document.querySelector("#alertAllIsrael"),
   alertCityPicker: document.querySelector("#alertCityPicker"),
@@ -401,9 +403,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V126 · API ${apiVersion}` : "גרסה V126 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V128 · API ${apiVersion}` : "גרסה V128 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V126 · API לא מחובר";
+    marker.textContent = "גרסה V128 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -520,6 +522,28 @@ function bindEvents() {
   el.backToTop?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   el.alertSettingsBtn?.addEventListener("click", () => openSiteModal(el.alertSettingsModal, el.alertSettingsBtn));
   el.homepageBtn?.addEventListener("click", openHomepageGuide);
+  el.googleSearchForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const query = String(el.googleSearchInput?.value || "").trim();
+    if (!query) {
+      el.googleSearchInput?.focus();
+      return;
+    }
+
+    // V127: search is intentionally isolated from the 30-second news refresh.
+    // Snapshot the query now, so any DOM render happening in the same moment
+    // cannot alter or interrupt the outgoing Google search.
+    const target = new URL("https://www.google.com/search");
+    target.searchParams.set("q", query);
+    const opened = window.open(target.toString(), "_blank", "noopener,noreferrer");
+    if (!opened) {
+      // Popup blockers may reject window.open when a browser policy is strict.
+      // Native form submission remains a user-initiated fallback and still
+      // opens in a new tab because target=_blank.
+      HTMLFormElement.prototype.submit.call(el.googleSearchForm);
+    }
+  });
+
   el.alertSoundQuick?.addEventListener("click", () => setAlertSound(!state.alertSound, true));
   el.alertSoundToggle?.addEventListener("change", () => setAlertSound(el.alertSoundToggle.checked, true));
   el.alertDesktopToggle?.addEventListener("change", () => setAlertDesktop(el.alertDesktopToggle.checked));
@@ -735,7 +759,8 @@ function bindEvents() {
         return;
       }
     }
-    if (event.key === "/" && document.activeElement !== el.searchInput && !document.querySelector(".site-modal:not(.hidden)")) {
+    const googleSearchFocused = document.activeElement === el.googleSearchInput;
+    if (event.key === "/" && !googleSearchFocused && document.activeElement !== el.searchInput && !document.querySelector(".site-modal:not(.hidden)")) {
       event.preventDefault();
       el.searchInput.focus();
     }
@@ -744,6 +769,9 @@ function bindEvents() {
       state.query = "";
       el.searchInput.blur();
       render();
+    }
+    if (event.key === "Escape" && googleSearchFocused) {
+      el.googleSearchInput.blur();
     }
   });
 }
@@ -3660,7 +3688,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=126.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=128.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
