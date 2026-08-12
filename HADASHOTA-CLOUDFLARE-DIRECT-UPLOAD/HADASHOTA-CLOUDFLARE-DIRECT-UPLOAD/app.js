@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "130.0.0";
+const KOTERET_CLIENT_BUILD = "131.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -403,9 +403,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V130 · API ${apiVersion}` : "גרסה V130 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V131 · API ${apiVersion}` : "גרסה V131 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V130 · API לא מחובר";
+    marker.textContent = "גרסה V131 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3688,7 +3688,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=130.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=131.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
