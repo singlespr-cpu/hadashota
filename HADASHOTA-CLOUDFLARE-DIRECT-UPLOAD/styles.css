@@ -7244,3 +7244,77 @@ html[data-theme="dark"] .homepage-url code{color:#cbd3dd}
     margin:2px 0 0 0 !important;
   }
 }
+
+
+/* =========================================================
+   V131 — alert bar layout correction
+   Left: Google + homepage | Right: Home Front + actions
+   ========================================================= */
+.alert-center-card{
+  display:grid !important;
+  grid-template-columns:minmax(320px,430px) minmax(0,1fr) !important;
+  grid-template-areas:"tools main" !important;
+  align-items:center !important;
+  column-gap:12px !important;
+}
+.start-hub-tools{
+  grid-area:tools !important;
+  order:0 !important;
+  margin:0 !important;
+  min-width:300px !important;
+  max-width:430px !important;
+  justify-self:start !important;
+  align-self:center !important;
+}
+.alert-primary-wrap{
+  grid-area:main !important;
+  order:0 !important;
+  min-width:0 !important;
+  justify-self:stretch !important;
+}
+.alert-primary-wrap .alert-status-group{
+  width:100% !important;
+}
+.alert-primary-wrap .alert-disclaimer{
+  margin:3px 0 0 46px !important;
+  max-width:720px !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+.alert-center-copy > strong,
+#alertStateLabel{
+  font-size:15px !important;
+}
+.alert-sound-quick,
+.alert-settings-button{
+  transform:scale(.96);
+  transform-origin:center;
+}
+@media(max-width:1100px){
+  .alert-center-card{
+    grid-template-columns:minmax(260px,380px) minmax(0,1fr) !important;
+  }
+  .start-hub-tools{
+    min-width:250px !important;
+    max-width:360px !important;
+  }
+}
+@media(max-width:820px){
+  .alert-center-card{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-areas:"main" "tools" !important;
+    gap:7px !important;
+  }
+  .start-hub-tools{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    justify-self:stretch !important;
+  }
+  .alert-primary-wrap .alert-disclaimer{
+    margin:2px 0 0 0 !important;
+    white-space:normal !important;
+  }
+}
