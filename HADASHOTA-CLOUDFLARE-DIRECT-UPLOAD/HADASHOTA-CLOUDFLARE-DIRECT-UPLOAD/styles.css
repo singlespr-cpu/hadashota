@@ -6933,3 +6933,18 @@ html[data-theme="dark"] .homepage-url code{color:#cbd3dd}
   .google-search-form{min-width:0;width:100%}
   .homepage-button b{display:none}.homepage-button{width:38px;padding:0;justify-content:center}
 }
+
+
+/* V126 — Google search interaction fix */
+.google-search-form button{
+  order:-1 !important;
+  margin-left:0 !important;
+  margin-right:2px !important;
+  flex:0 0 27px !important;
+}
+.google-search-form input{
+  order:1 !important;
+}
+.google-search-form .google-word{
+  order:2 !important;
+}
