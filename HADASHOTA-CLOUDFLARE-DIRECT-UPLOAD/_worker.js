@@ -89,6 +89,10 @@ const CITIES = {
 };
 
 export default {
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(runBackgroundPushMonitor(env, ctx));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
@@ -110,6 +114,27 @@ export default {
     }
     if (url.pathname === PROMO_ADMIN_PATH) {
       return serveHtmlAsset(request, env, url.origin, "/admin.html");
+    }
+
+    if (url.pathname === "/api/push/config") {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handlePushHubRequest(env, "/config", request);
+    }
+    if (url.pathname === "/api/push/subscribe") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return handlePushHubRequest(env, "/subscribe", request);
+    }
+    if (url.pathname === "/api/push/unsubscribe") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return handlePushHubRequest(env, "/unsubscribe", request);
+    }
+    if (url.pathname === "/api/push/latest") {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handlePushHubRequest(env, "/latest", request);
+    }
+    if (url.pathname === "/api/push/status") {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handlePushHubRequest(env, "/status", request);
     }
 
     if (url.pathname === "/api/news") {
@@ -169,7 +194,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "122.0.0",
+          version: "123.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -182,7 +207,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "122.0.0",
+        version: "123.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1253,7 +1278,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "122.0.0",
+          "X-Hadashota-Version": "123.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1376,13 +1401,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "122.0.0",
+      "X-Hadashota-Version": "123.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "122.0.0",
+      "X-Hadashota-Version": "123.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1416,7 +1441,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "122.0.0"
+        "X-Hadashota-Version": "123.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1438,7 +1463,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "122.0.0"
+    "X-Hadashota-Version": "123.0.0"
   });
 }
 
@@ -2365,4 +2390,324 @@ function cors(response) {
   headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+
+/* =========================================================
+   V123 — TRUE WEB PUSH BACKEND
+   Cloudflare-only: Cron + SQLite-backed Durable Object + VAPID.
+   ========================================================= */
+
+const PUSH_HUB_NAME = "koteret-plus-global-push-v1";
+const PUSH_VAPID_SUBJECT = "mailto:singles.pr@gmail.com";
+
+function pushHubStub(env) {
+  if (!env?.PUSH_HUB) return null;
+  return env.PUSH_HUB.getByName(PUSH_HUB_NAME);
+}
+
+async function handlePushHubRequest(env, path, request) {
+  const stub = pushHubStub(env);
+  if (!stub) return json({ error: "Push infrastructure is not bound", enabled: false }, 503, { "Cache-Control": "no-store" });
+  const init = { method: request.method, headers: new Headers(request.headers) };
+  if (request.method !== "GET" && request.method !== "HEAD") init.body = await request.arrayBuffer();
+  return stub.fetch(new Request(`https://push.internal${path}`, init));
+}
+
+function serverClusterReports(item) {
+  const rows = [{
+    sourceId:item?.sourceId, publisher:item?.publisher, sourceName:item?.sourceName, sourceKind:item?.sourceKind,
+    verified:!!item?.verified, official:!!item?.official, independent:!!item?.independent,
+    url:item?.url, publishedAt:item?.publishedAt, title:item?.title || "", category:item?.category || null
+  }, ...(Array.isArray(item?.related) ? item.related : [])];
+  const byPublisher = new Map();
+  for (const row of rows) {
+    const key = row?.publisher || row?.sourceId;
+    if (!key) continue;
+    const current = byPublisher.get(key);
+    if (!current || Date.parse(row.publishedAt || 0) > Date.parse(current.publishedAt || 0)) byPublisher.set(key,row);
+  }
+  return [...byPublisher.values()].sort((a,b)=>Date.parse(b.publishedAt||0)-Date.parse(a.publishedAt||0));
+}
+
+function serverClusterLatestAt(item) {
+  const times = [item?.latestReportAt,item?.publishedAt,...(item?.related||[]).map((r)=>r?.publishedAt)]
+    .map((v)=>Date.parse(v||0)).filter(Number.isFinite);
+  return times.length ? new Date(Math.max(...times)).toISOString() : new Date(0).toISOString();
+}
+
+function serverClusterFirstAt(item) {
+  const times = [item?.firstReportAt,item?.publishedAt,...(item?.related||[]).map((r)=>r?.publishedAt)]
+    .map((v)=>Date.parse(v||0)).filter(Number.isFinite);
+  return times.length ? new Date(Math.min(...times)).toISOString() : new Date(0).toISOString();
+}
+
+function serverStoryHotScore(item, now=Date.now()) {
+  const reports=serverClusterReports(item);
+  const latestMs=Date.parse(serverClusterLatestAt(item));
+  const age=Number.isFinite(latestMs)?Math.max(0,(now-latestMs)/60000):999;
+  const recent=reports.filter((r)=>Math.abs(latestMs-Date.parse(r.publishedAt||0))<=120*60000);
+  const count=recent.length;
+  const times=recent.map((r)=>Date.parse(r.publishedAt||0)).filter(Number.isFinite);
+  const spread=times.length>1?(Math.max(...times)-Math.min(...times))/60000:120;
+  const official=recent.some((r)=>r.official);
+  const verified=recent.filter((r)=>r.verified).length;
+  const kindMix=new Set(recent.map((r)=>r.sourceKind)).size>1;
+  let score=Math.min(42,count*8);
+  score+=age<=5?28:age<=15?23:age<=30?17:age<=60?10:age<=120?4:0;
+  score+=official?12:0;
+  score+=Math.min(8,verified*2);
+  score+=kindMix?5:0;
+  score+=count>=3&&spread<=12?8:count>=3&&spread<=30?4:0;
+  if(age>180)score-=Math.min(35,(age-180)/8);
+  return Math.max(0,Math.min(100,Math.round(score)));
+}
+
+function serverLeadFingerprint(entry) {
+  const item=entry?.item;
+  if(!item)return "";
+  const reports=serverClusterReports(item);
+  const titles=[item.title,...reports.map((r)=>r.title)].filter(Boolean);
+  const sets=titles.map((title)=>titleTokens(title)).filter((set)=>set?.size);
+  const freq=new Map();
+  for(const set of sets)for(const token of set)freq.set(token,(freq.get(token)||0)+1);
+  const threshold=Math.max(1,Math.ceil(sets.length*.45));
+  const common=[...freq.entries()].filter(([,count])=>count>=threshold)
+    .sort((a,b)=>b[1]-a[1]||String(a[0]).localeCompare(String(b[0]),"he"))
+    .slice(0,7).map(([token])=>token);
+  const fallback=[...(titleTokens(item.title)||[])].slice(0,7);
+  const identity=common.length>=2?common:fallback;
+  const firstAt=Date.parse(serverClusterFirstAt(item));
+  const bucket=Number.isFinite(firstAt)?Math.floor(firstAt/(20*60*1000)):0;
+  return [item.category||"other",bucket,...identity].join("|").toLowerCase();
+}
+
+function selectServerPushLead(items, now=Date.now()) {
+  const corroborationWindowMs=150*60*1000;
+  const entries=(items||[]).map((item)=>{
+    const latestAt=serverClusterLatestAt(item);
+    const latestMs=Date.parse(latestAt);
+    const ageMinutes=Number.isFinite(latestMs)?Math.max(0,(now-latestMs)/60000):9999;
+    const reports=serverClusterReports(item);
+    const recentReports=reports.filter((report)=>{
+      const reportMs=Date.parse(report.publishedAt||0);
+      if(!Number.isFinite(reportMs)||!Number.isFinite(latestMs))return false;
+      const delta=latestMs-reportMs;
+      return delta>=-5*60*1000&&delta<=corroborationWindowMs;
+    });
+    const uniqueSources=recentReports.length;
+    const hasOfficial=recentReports.some((r)=>r.official);
+    const hasVerified=recentReports.some((r)=>r.verified);
+    const times=recentReports.map((r)=>Date.parse(r.publishedAt||0)).filter(Number.isFinite);
+    const spreadMinutes=times.length>1?Math.max(0,Math.round((Math.max(...times)-Math.min(...times))/60000)):0;
+    const hotScore=serverStoryHotScore(item,now);
+    const sourceBoost=Math.min(uniqueSources,8)*7;
+    const recencyBoost=ageMinutes<=10?34:ageMinutes<=25?26:ageMinutes<=45?18:ageMinutes<=60?12:ageMinutes<=180?4:0;
+    const authorityBoost=hasOfficial?13:hasVerified?5:0;
+    const velocityBoost=uniqueSources>=3&&spreadMinutes<=20?12:uniqueSources>=2&&spreadMinutes<=35?6:0;
+    const score=hotScore*.75+sourceBoost+recencyBoost+authorityBoost+velocityBoost;
+    return {item,reports,recentReports,uniqueSources,ageMinutes,latestAt,score,hotScore,hasOfficial,spreadMinutes};
+  });
+  const sort=(a,b)=>b.score-a.score||Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||String(a.item?.id||a.item?.url||a.item?.title||"").localeCompare(String(b.item?.id||b.item?.url||b.item?.title||""),"he");
+  const verified=entries.filter((e)=>e.uniqueSources>=3&&e.ageMinutes<=60).sort(sort);
+  let winner=verified[0]||null;
+  const retained=entries.filter((e)=>e.uniqueSources>=3&&e.ageMinutes>60&&e.ageMinutes<=180).sort((a,b)=>Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||sort(a,b));
+  const observed=entries.flatMap((e)=>e.reports||[]).map((r)=>Date.parse(r?.publishedAt||0)).filter(Number.isFinite);
+  const oldest=observed.length?Math.min(...observed):Infinity;
+  if(!winner&&Number.isFinite(oldest)&&oldest<=now-60*60*1000&&verified.length===0){
+    winner=entries.filter((e)=>e.uniqueSources>=2&&e.ageMinutes<=60).sort(sort)[0]
+      ||entries.filter((e)=>e.uniqueSources>=2&&e.ageMinutes>60&&e.ageMinutes<=180).sort((a,b)=>Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||sort(a,b))[0]
+      ||null;
+  }
+  if(!winner)winner=retained[0]||null;
+  if(!winner)return null;
+  winner.fingerprint=serverLeadFingerprint(winner);
+  return winner;
+}
+
+function cleanPushTitle(value) {
+  return String(value||"").replace(/<[^>]*>/g," ").replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/\s+/g," ").trim().slice(0,150);
+}
+
+function serverLeadPayload(entry) {
+  if(!entry?.item||!entry.fingerprint)return null;
+  const item=entry.item;
+  const sources=entry.recentReports?.length?entry.recentReports:serverClusterReports(item);
+  const target=sources.find((s)=>s.sourceKind==="site"&&s.url)||sources.find((s)=>s.url)||item;
+  const hasOfficial=sources.some((s)=>s.official);
+  return {
+    fingerprint:entry.fingerprint,
+    title:cleanPushTitle(item.title)||"סיפור מרכזי חדש בכותרת פלוס",
+    body:`${entry.uniqueSources} מקורות מדווחים${hasOfficial?" · כולל מקור רשמי":""}`,
+    url:target?.url||"/",
+    sources:entry.uniqueSources,
+    official:hasOfficial,
+    at:entry.latestAt||new Date().toISOString(),
+    generatedAt:new Date().toISOString()
+  };
+}
+
+async function collectServerPushLead() {
+  const now=Date.now();
+  const cutoff=now-30*60*60*1000;
+  const retryBudget={remaining:2};
+  const settled=await fetchSourcesWithLimit(SOURCES,4,retryBudget,true);
+  const recent=settled.flatMap((result)=>result.items||[]).filter((item)=>{
+    const t=Date.parse(item.publishedAt||0);
+    return Number.isFinite(t)&&t>=cutoff&&t<=now+10*60*1000;
+  }).map((item)=>({...item,category:classify(item)})).sort((a,b)=>Date.parse(b.publishedAt)-Date.parse(a.publishedAt));
+  if(!recent.length)return null;
+  const clustered=clusterItems(recent);
+  return selectServerPushLead(clustered,now);
+}
+
+async function runBackgroundPushMonitor(env, ctx) {
+  const stub=pushHubStub(env);
+  if(!stub)return;
+  try {
+    const entry=await collectServerPushLead();
+    const payload=serverLeadPayload(entry);
+    if(!payload)return;
+    await stub.fetch("https://push.internal/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  } catch(error) {
+    console.warn("V123 scheduled push monitor failed",error);
+  }
+}
+
+function bytesToBase64Url(bytes) {
+  let binary="";
+  const arr=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
+  for(let i=0;i<arr.length;i++)binary+=String.fromCharCode(arr[i]);
+  return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
+}
+
+function stringToBase64Url(value) {
+  return bytesToBase64Url(new TextEncoder().encode(String(value)));
+}
+
+function base64UrlToBytes(value) {
+  const padded=String(value).replace(/-/g,"+").replace(/_/g,"/")+"=".repeat((4-String(value).length%4)%4);
+  const binary=atob(padded);
+  return Uint8Array.from(binary,(c)=>c.charCodeAt(0));
+}
+
+async function sha256Base64Url(value) {
+  return bytesToBase64Url(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(value))));
+}
+
+async function ensureVapidKeys(storage) {
+  let stored=await storage.get("vapid.keys");
+  if(stored?.privateJwk&&stored?.publicKey)return stored;
+  const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
+  const privateJwk=await crypto.subtle.exportKey("jwk",pair.privateKey);
+  const publicJwk=await crypto.subtle.exportKey("jwk",pair.publicKey);
+  const publicKey=bytesToBase64Url(new Uint8Array([4,...base64UrlToBytes(publicJwk.x),...base64UrlToBytes(publicJwk.y)]));
+  stored={privateJwk,publicKey,createdAt:new Date().toISOString()};
+  await storage.put("vapid.keys",stored);
+  return stored;
+}
+
+async function vapidAuthorization(endpoint,keys) {
+  const audience=new URL(endpoint).origin;
+  const now=Math.floor(Date.now()/1000);
+  const header=stringToBase64Url(JSON.stringify({typ:"JWT",alg:"ES256"}));
+  const payload=stringToBase64Url(JSON.stringify({aud:audience,exp:now+12*60*60,sub:PUSH_VAPID_SUBJECT}));
+  const unsigned=`${header}.${payload}`;
+  const privateKey=await crypto.subtle.importKey("jwk",keys.privateJwk,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
+  const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},privateKey,new TextEncoder().encode(unsigned));
+  return `vapid t=${unsigned}.${bytesToBase64Url(signature)}, k=${keys.publicKey}`;
+}
+
+async function sendEmptyWebPush(subscription,keys) {
+  const endpoint=String(subscription?.endpoint||"");
+  if(!/^https:\/\//i.test(endpoint))return {ok:false,status:400};
+  const authorization=await vapidAuthorization(endpoint,keys);
+  const response=await fetch(endpoint,{method:"POST",headers:{Authorization:authorization,TTL:"120",Urgency:"high"},body:null});
+  return {ok:response.ok,status:response.status};
+}
+
+export class PushHub {
+  constructor(ctx,env){this.ctx=ctx;this.env=env;}
+
+  async fetch(request){
+    const url=new URL(request.url);
+    const storage=this.ctx.storage;
+
+    if(url.pathname==="/config"){
+      const keys=await ensureVapidKeys(storage);
+      const subscriptions=await storage.list({prefix:"sub:"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:subscriptions.size,mode:"true-web-push",version:"123.0.0"},200,{"Cache-Control":"no-store"});
+    }
+
+    if(url.pathname==="/subscribe"&&request.method==="POST"){
+      const data=await request.json().catch(()=>({}));
+      const subscription=data?.subscription;
+      const endpoint=String(subscription?.endpoint||"");
+      if(!/^https:\/\//i.test(endpoint))return json({error:"Invalid push subscription"},400);
+      await ensureVapidKeys(storage);
+      const id=await sha256Base64Url(endpoint);
+      await storage.put(`sub:${id}`,{subscription,userAgent:String(data?.userAgent||"").slice(0,240),createdAt:new Date().toISOString(),lastSeenAt:new Date().toISOString()});
+      return json({ok:true,id},200,{"Cache-Control":"no-store"});
+    }
+
+    if(url.pathname==="/unsubscribe"&&request.method==="POST"){
+      const data=await request.json().catch(()=>({}));
+      const endpoint=String(data?.endpoint||"");
+      if(endpoint){const id=await sha256Base64Url(endpoint);await storage.delete(`sub:${id}`);}
+      return json({ok:true},200,{"Cache-Control":"no-store"});
+    }
+
+    if(url.pathname==="/latest"){
+      const latest=await storage.get("lead.latest");
+      return latest?json(latest,200,{"Cache-Control":"no-store"}):json({error:"No lead yet"},404,{"Cache-Control":"no-store"});
+    }
+
+    if(url.pathname==="/status"){
+      const latest=await storage.get("lead.latest");
+      const previous=await storage.get("lead.lastPushedFingerprint");
+      const subscriptions=await storage.list({prefix:"sub:"});
+      return json({enabled:true,subscriptions:subscriptions.size,lastPushedFingerprint:previous||null,latest:latest||null,version:"123.0.0"},200,{"Cache-Control":"no-store"});
+    }
+
+    if(url.pathname==="/lead"&&request.method==="POST"){
+      const payload=await request.json().catch(()=>null);
+      if(!payload?.fingerprint||!payload?.title)return json({error:"Invalid lead"},400);
+      await storage.put("lead.latest",payload);
+      const last=await storage.get("lead.lastPushedFingerprint");
+      if(!last){
+        await storage.put("lead.lastPushedFingerprint",payload.fingerprint);
+        return json({ok:true,primed:true,pushed:0});
+      }
+      if(last===payload.fingerprint)return json({ok:true,changed:false,pushed:0});
+
+      // Commit before fan-out so a retry of the same Cron run cannot duplicate alerts.
+      await storage.put("lead.lastPushedFingerprint",payload.fingerprint);
+      const keys=await ensureVapidKeys(storage);
+      const entries=await storage.list({prefix:"sub:"});
+      const rows=[...entries.entries()];
+      let pushed=0,removed=0,failed=0;
+
+      // Keep concurrency modest: every push endpoint is an outgoing connection.
+      for(let i=0;i<rows.length;i+=5){
+        const batch=rows.slice(i,i+5);
+        const results=await Promise.all(batch.map(async([key,row])=>{
+          try{
+            const result=await sendEmptyWebPush(row?.subscription,keys);
+            if(result.ok)return {key,ok:true};
+            if([404,410].includes(result.status))return {key,remove:true,status:result.status};
+            return {key,ok:false,status:result.status};
+          }catch(error){return {key,ok:false,error:String(error?.message||error)};}
+        }));
+        for(const result of results){
+          if(result.ok)pushed+=1;
+          else if(result.remove){await storage.delete(result.key);removed+=1;}
+          else failed+=1;
+        }
+      }
+      await storage.put("push.lastResult",{at:new Date().toISOString(),fingerprint:payload.fingerprint,pushed,removed,failed});
+      return json({ok:true,changed:true,pushed,removed,failed});
+    }
+
+    return json({error:"Not found"},404);
+  }
 }
