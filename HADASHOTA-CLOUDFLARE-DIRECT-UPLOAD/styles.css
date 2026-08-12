@@ -6874,3 +6874,19 @@ html[data-theme="dark"] .share-site-button:hover { border-color: rgba(255,107,99
 
 /* V121 SEO editorial context */
 .seo-editorial-about{margin:32px auto 8px;padding:0 18px}.seo-editorial-inner{max-width:1180px;margin:0 auto;padding:20px 22px;border-top:1px solid #dde2e8;border-bottom:1px solid #e7eaee;background:rgba(255,255,255,.5)}.seo-editorial-kicker{display:block;margin-bottom:5px;color:#d43931;font-size:10px;font-weight:900}.seo-editorial-about h2{margin:0;color:#1a2029;font-size:20px;line-height:1.25;font-weight:850}.seo-editorial-about p{max-width:930px;margin:10px 0 13px;color:#687383;font-size:12px;line-height:1.7}.seo-editorial-links{display:flex;flex-wrap:wrap;gap:7px 15px}.seo-editorial-links a{color:#3f4a58;font-size:11px;font-weight:750;text-decoration:none}.seo-editorial-links a:hover{color:#cf352d;text-decoration:underline}html[data-theme="dark"] .seo-editorial-inner{border-color:#29333f;background:rgba(17,23,32,.52)}html[data-theme="dark"] .seo-editorial-about h2{color:#f1f3f6}html[data-theme="dark"] .seo-editorial-about p{color:#99a4b2}html[data-theme="dark"] .seo-editorial-links a{color:#c5ccd5}@media(max-width:700px){.seo-editorial-about{margin-top:24px;padding:0 10px}.seo-editorial-inner{padding:16px 12px}.seo-editorial-about h2{font-size:17px}.seo-editorial-about p{font-size:11px;line-height:1.65}}
+
+
+/* =========================================================
+   V122 — back-to-top placement
+   Requested: right side on desktop and mobile.
+   ========================================================= */
+.back-to-top{
+  right:max(16px, env(safe-area-inset-right)) !important;
+  left:auto !important;
+}
+@media(max-width:700px){
+  .back-to-top{
+    right:max(12px, env(safe-area-inset-right)) !important;
+    left:auto !important;
+  }
+}
