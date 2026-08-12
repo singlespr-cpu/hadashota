@@ -1,17 +1,28 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hadashota",
-  "main": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/_worker.js",
-  "compatibility_date": "2026-07-24",
+  "main": "HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/_worker.js",
+  "compatibility_date": "2026-08-12",
   "assets": {
     "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api/*",
-      "/sw.js",
-      "/robots.txt",
-      "/sitemap.xml",
-      "/manage-kp-7538"
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PUSH_HUB",
+        "class_name": "PushHub"
+      }
     ]
+  },
+  "migrations": [
+    {
+      "tag": "v123-true-web-push-1",
+      "new_sqlite_classes": ["PushHub"]
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
   }
 }
