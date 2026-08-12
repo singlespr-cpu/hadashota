@@ -169,7 +169,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "121.0.0",
+          version: "122.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -182,7 +182,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "121.0.0",
+        version: "122.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1253,7 +1253,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "121.0.0",
+          "X-Hadashota-Version": "122.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1376,13 +1376,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "121.0.0",
+      "X-Hadashota-Version": "122.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "121.0.0",
+      "X-Hadashota-Version": "122.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1416,7 +1416,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "121.0.0"
+        "X-Hadashota-Version": "122.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1438,7 +1438,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "121.0.0"
+    "X-Hadashota-Version": "122.0.0"
   });
 }
 

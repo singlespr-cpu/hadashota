@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "121.0.0";
+const KOTERET_CLIENT_BUILD = "122.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -398,9 +398,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V121 · API ${apiVersion}` : "גרסה V121 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V122 · API ${apiVersion}` : "גרסה V122 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V121 · API לא מחובר";
+    marker.textContent = "גרסה V122 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3656,7 +3656,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=121.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=122.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -3730,7 +3730,7 @@ function leadFingerprint(entry) {
 }
 
 async function notifyHeadlineChange(entry) {
-  if (!state.notificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
+  if (!state.notificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return false;
   const item = entry.item;
   const title = editorialTitle(item);
   const reports = normalizeClusterReports(item);
@@ -3740,41 +3740,84 @@ async function notifyHeadlineChange(entry) {
     body,
     tag: `hadashota-headline-${leadFingerprint(entry)}`,
     renotify: true,
-    data: { url: safeHttpHref(item.url) || "/" },
+    data: { url: safeHttpHref(storyHref(item)) || safeHttpHref(item.url) || "/" },
     icon: "/favicon-32.png",
     badge: "/favicon-32.png"
   };
 
   try {
-    if (state.serviceWorkerRegistration?.showNotification) {
-      await state.serviceWorkerRegistration.showNotification(title, options);
+    // V122: always prefer the active/ready service worker registration. The
+    // registration saved during startup can briefly be null or updating while a
+    // scheduled refresh finishes, which made headline notifications intermittent.
+    let registration = state.serviceWorkerRegistration;
+    if ("serviceWorker" in navigator) {
+      try {
+        registration = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((resolve) => setTimeout(() => resolve(registration), 1600))
+        ]) || registration;
+      } catch {}
+    }
+
+    if (registration?.showNotification) {
+      state.serviceWorkerRegistration = registration;
+      await registration.showNotification(title, options);
     } else {
       const notification = new Notification(title, options);
-      notification.onclick = () => openStorySource(item.url);
+      notification.onclick = () => openStorySource(storyHref(item) || item.url);
     }
+    return true;
   } catch (error) {
     console.warn("Notification failed", error);
+    return false;
   }
 }
 
 function updateLeadHeadlineTracking(entry) {
   const fingerprint = leadFingerprint(entry);
   if (!fingerprint) return;
-  const previous = state.currentLeadFingerprint;
-  state.currentLeadFingerprint = fingerprint;
-  localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
 
-  if (!state.leadNotificationPrimed) {
-    state.leadNotificationPrimed = true;
+  const previous = state.currentLeadFingerprint;
+
+  // Keep the baseline current when notifications are disabled. Enabling alerts
+  // later should wait for the NEXT qualified headline rather than replaying an old one.
+  if (!state.notificationsEnabled) {
+    state.currentLeadFingerprint = fingerprint;
+    localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
+    if (!state.leadNotificationPrimed) state.leadNotificationPrimed = true;
     return;
   }
 
-  if (previous && previous !== fingerprint && !state.dataDelayed) {
+  if (!state.leadNotificationPrimed) {
+    state.leadNotificationPrimed = true;
+    state.currentLeadFingerprint = fingerprint;
+    localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
     recordLeadHistory(entry, fingerprint);
-    notifyHeadlineChange(entry);
-  } else if (!previous) {
-    recordLeadHistory(entry, fingerprint);
+    return;
   }
+
+  if (!previous) {
+    state.currentLeadFingerprint = fingerprint;
+    localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
+    recordLeadHistory(entry, fingerprint);
+    return;
+  }
+
+  if (previous === fingerprint) return;
+
+  // V122 bug fix: a partial/delayed shard used to consume the new fingerprint
+  // without notifying. Keep the old baseline until a healthy refresh confirms
+  // the new lead, so the next complete 30-second pass can still alert.
+  if (state.dataDelayed) return;
+
+  // Commit only after the notification attempt. This avoids silently swallowing
+  // a headline change when the Service Worker is still becoming ready.
+  Promise.resolve(notifyHeadlineChange(entry)).then((sent) => {
+    if (!sent) return;
+    state.currentLeadFingerprint = fingerprint;
+    localStorage.setItem("hadashota.lastLeadFingerprint", fingerprint);
+    recordLeadHistory(entry, fingerprint);
+  }).catch((error) => console.warn("Headline notification tracking failed", error));
 }
 
 function locateNearestCity() {
