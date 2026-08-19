@@ -4888,7 +4888,7 @@ a.media-credit:hover {
   transition:transform .15s ease, background .15s ease, color .15s ease;
 }
 .top-settings-btn:hover { transform:translateY(-1px); background:#fff; color:#0f172a; }
-.top-settings-btn svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.top-settings-btn svg { width:17px; height:17px; fill:currentColor; }
 .settings-custom-dot {
   display:none;
   position:absolute;
@@ -8623,7 +8623,7 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 }
 
 
-/* V157 — responsive Push settings + fast modal interactions */
+/* V154 — responsive Push settings + fast modal interactions */
 .settings-push-group{border:1px solid rgba(17,24,39,.08);border-radius:14px;padding:2px 10px 6px;margin:2px 0 10px;background:rgba(17,24,39,.018)}
 .push-filter-row{margin-inline-start:12px;padding-inline-start:6px;border-top:1px dashed rgba(17,24,39,.08)}
 .push-filter-row input:disabled + i{opacity:.42}
@@ -8633,11 +8633,11 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 @media(max-width:760px){.site-modal .modal-backdrop,.site-modal .site-modal-backdrop{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.settings-push-group{padding-inline:7px}.push-filter-row{margin-inline-start:6px}}
 html[data-theme="dark"] .settings-push-group{border-color:rgba(255,255,255,.09);background:rgba(255,255,255,.025)}
 
-/* V157 contact form */
+/* V154 contact form */
 .contact-inline-form{display:grid;gap:10px;margin:15px 0 8px;text-align:right}.contact-inline-form label{display:grid;gap:5px;font-size:11px;font-weight:800;color:#344054}.contact-inline-form input,.contact-inline-form select,.contact-inline-form textarea{width:100%;border:1px solid #d0d5dd;border-radius:11px;padding:10px 11px;background:#fff;color:#101828;font:inherit;outline:none}.contact-inline-form input:focus,.contact-inline-form select:focus,.contact-inline-form textarea:focus{border-color:#e92d3d;box-shadow:0 0 0 3px rgba(233,45,61,.09)}.contact-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.contact-submit-button{border:0;border-radius:11px;padding:11px 14px;background:#e92d3d;color:#fff;font-weight:900;cursor:pointer;touch-action:manipulation}.contact-submit-button:disabled{opacity:.65}.contact-form-status{min-height:18px;font-size:11px;font-weight:800;color:#087443}.modal-card-contact{width:min(94vw,560px)!important}.modal-card-contact>p{max-width:460px;margin-inline:auto}.modal-card-contact .modal-note{margin-top:10px}@media(max-width:620px){.contact-form-grid{grid-template-columns:1fr}.contact-inline-form{gap:8px}.modal-card-contact{max-height:calc(100dvh - 22px);overflow:auto}}html[data-theme="dark"] .contact-inline-form label{color:#cbd5e1}html[data-theme="dark"] .contact-inline-form input,html[data-theme="dark"] .contact-inline-form select,html[data-theme="dark"] .contact-inline-form textarea{background:#111821;color:#edf2f7;border-color:#344054}
 
 
-/* V157 — responsive modal performance: no heavy glass blur on touch devices */
+/* V154 — responsive modal performance: no heavy glass blur on touch devices */
 .settings-modal__backdrop,.v105-tool-modal__backdrop{backdrop-filter:blur(3px)!important;-webkit-backdrop-filter:blur(3px)!important}
 .settings-modal button,.v105-tool-modal button,.v105-tool-modal a{touch-action:manipulation}
 @media(max-width:760px){
@@ -8645,140 +8645,8 @@ html[data-theme="dark"] .settings-push-group{border-color:rgba(255,255,255,.09);
   .settings-modal__panel,.v105-tool-modal__panel{will-change:transform,opacity}
 }
 
-/* V157 final modal responsiveness: touch devices should react with no transition wait. */
+/* V154 final modal responsiveness: touch devices should react with no transition wait. */
 @media(max-width:760px){
   .settings-modal,.settings-modal__panel,.v105-tool-modal,.v105-tool-modal__panel{transition:none!important}
   .site-modal .modal-card{scroll-behavior:auto!important}
-}
-
-/* =========================================================
-   V157 — advertising CTAs, compact feed window and interaction hardening
-   ========================================================= */
-.hero-news-grid .lead-story-topline{
-  border-bottom:0!important;
-  padding-bottom:0!important;
-}
-
-.promo-card:not(.is-active){
-  background:linear-gradient(135deg,#fff1f2 0%,#fff 48%,#eef4ff 100%)!important;
-  border-color:rgba(232,41,55,.22)!important;
-  box-shadow:0 10px 28px rgba(232,41,55,.08)!important;
-}
-.promo-card:not(.is-active) .promo-card-link{
-  cursor:pointer!important;
-  flex-direction:column!important;
-  align-items:center!important;
-  justify-content:center!important;
-  text-align:center!important;
-  gap:5px!important;
-  padding:13px 12px!important;
-}
-.promo-card:not(.is-active) .promo-card-text{
-  margin:0!important;
-  align-self:auto!important;
-  font-size:18px!important;
-  line-height:1.18!important;
-  color:#c91f31!important;
-  letter-spacing:-.02em!important;
-}
-.promo-card-subtext{
-  position:relative;
-  z-index:2;
-  display:block;
-  color:#667085;
-  font-size:10px;
-  font-weight:800;
-  line-height:1.3;
-}
-.promo-card.is-active .promo-card-subtext{display:none!important}
-.promo-card:not(.is-active) .promo-card-badge{
-  color:#b42318!important;
-  background:rgba(255,255,255,.88)!important;
-  border-color:rgba(232,41,55,.15)!important;
-}
-
-.feed-promo-house{
-  border-color:rgba(232,41,55,.18)!important;
-  background:linear-gradient(135deg,#fff4f5 0%,#fff 52%,#f0f5ff 100%)!important;
-  box-shadow:0 10px 30px rgba(232,41,55,.06)!important;
-}
-.feed-promo-house .feed-promo-contact{
-  width:100%;
-  border:0;
-  background:transparent;
-  cursor:pointer;
-  text-align:right;
-  color:inherit;
-  font:inherit;
-}
-.feed-promo-house .feed-promo-copy{padding:4px 2px}
-.feed-promo-house .feed-promo-copy h3{font-size:18px;color:#c91f31;margin-bottom:5px}
-.feed-promo-house .feed-promo-copy p{color:#667085;font-weight:700}
-.feed-promo-business{font-size:9px;color:#667085;font-weight:800;margin-inline-start:7px}
-.feed-show-more{
-  width:min(360px,100%);
-  min-height:44px;
-  display:block;
-  margin:14px auto 4px;
-  border:1px solid #d9dee6;
-  border-radius:12px;
-  background:#fff;
-  color:#344054;
-  font:inherit;
-  font-size:12px;
-  font-weight:900;
-  cursor:pointer;
-  box-shadow:0 7px 18px rgba(16,24,40,.05);
-  touch-action:manipulation;
-}
-.feed-show-more:hover{border-color:#f2a1aa;color:#c91f31;background:#fffafb}
-.feed-show-more:active{transform:translateY(1px)}
-
-/* Final overlay rules: modal controls must always receive clicks immediately. */
-.site-modal.hidden{display:none!important;pointer-events:none!important}
-.site-modal:not(.hidden){display:grid!important;pointer-events:auto!important}
-.site-modal .modal-backdrop,.site-modal .site-modal-backdrop{pointer-events:auto!important;z-index:1!important}
-.site-modal .modal-card{pointer-events:auto!important;position:relative!important;z-index:2!important;overscroll-behavior:contain}
-.site-modal .modal-close,.site-modal button,.site-modal input,.site-modal select,.site-modal textarea,.settings-modal button,.settings-modal input{touch-action:manipulation}
-.settings-modal:not([hidden]){pointer-events:auto!important}
-.settings-modal__panel{pointer-events:auto!important;overscroll-behavior:contain}
-@media(max-width:760px){
-  .site-modal,.site-modal .modal-card,.settings-modal,.settings-modal__panel{transition:none!important}
-  .site-modal .modal-backdrop,.site-modal .site-modal-backdrop,.settings-modal__backdrop{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
-  .promo-card:not(.is-active) .promo-card-text{font-size:14px!important}
-  .promo-card-subtext{font-size:8px!important}
-  .feed-promo-house .feed-promo-copy h3{font-size:16px}
-}
-
-html[data-theme="dark"] .promo-card:not(.is-active){background:linear-gradient(135deg,#25151a,#171e29)!important;border-color:rgba(255,91,107,.22)!important}
-html[data-theme="dark"] .promo-card:not(.is-active) .promo-card-text{color:#ff8590!important}
-html[data-theme="dark"] .promo-card-subtext{color:#aeb7c4}
-html[data-theme="dark"] .feed-promo-house{background:linear-gradient(135deg,#24161b,#151d28)!important;border-color:rgba(255,91,107,.2)!important}
-html[data-theme="dark"] .feed-promo-house .feed-promo-copy h3{color:#ff8590}
-html[data-theme="dark"] .feed-promo-house .feed-promo-copy p,html[data-theme="dark"] .feed-promo-business{color:#aab4c2}
-html[data-theme="dark"] .feed-show-more{background:#151b24;border-color:#303947;color:#d7dde5}
-
-
-/* V157 launch polish */
-.promo-card:not(.is-active){background:#e32636!important;border-color:#e32636!important}
-.promo-card:not(.is-active) .promo-card-link{color:#fff!important}
-.promo-card:not(.is-active) .promo-card-text{color:#fff!important;font-weight:950!important}
-.promo-card:not(.is-active) .promo-card-subtext{color:rgba(255,255,255,.92)!important}
-.promo-card:not(.is-active) .promo-card-badge{color:#fff!important;background:rgba(255,255,255,.16)!important;border-color:rgba(255,255,255,.28)!important}
-.feed-promo-card.feed-promo-house{min-height:0!important;padding-top:8px!important;padding-bottom:8px!important}
-.feed-promo-card.feed-promo-house .feed-promo-link{min-height:72px!important;padding-block:8px!important}
-.feed-promo-card:not(.feed-promo-house){min-height:var(--news-card-min-height,auto)!important}
-.site-modal button,.site-modal input,.site-modal label,.header-action-button,.alert-settings-button,.alert-sound-quick{touch-action:manipulation}
-.site-modal .modal-card{will-change:auto!important}
-.seo-discovery{margin-top:18px;margin-bottom:20px;padding:18px 20px;border:1px solid rgba(17,24,39,.08);border-radius:16px;background:rgba(255,255,255,.66)}
-.seo-discovery h2{font-size:17px;margin:0 0 8px}.seo-discovery p{font-size:12px;line-height:1.75;color:#667085;margin:6px 0}.seo-discovery a{color:#c91f31;font-weight:800}
-@media(max-width:700px){
-  #alertCenter .kp-oref-box .alert-primary-wrap,#alertCenter .kp-oref-box .alert-status-group,#alertCenter .kp-oref-box .alert-primary-textblock{display:flex!important;flex-direction:row!important;align-items:center!important;gap:6px!important;min-width:0!important}
-  #alertCenter .kp-oref-box .alert-primary-textblock{justify-content:space-between!important;flex:1 1 auto!important}
-  #alertCenter .kp-oref-box .alert-center-copy{flex:1 1 auto!important;min-width:0!important}
-  #alertCenter .kp-oref-box .alert-center-actions{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;gap:4px!important;flex:0 0 auto!important}
-  #alertCenter .kp-oref-box .alert-sound-quick,#alertCenter .kp-oref-box .alert-settings-button{white-space:nowrap!important;padding:5px 6px!important;font-size:8px!important}
-  #alertCenter .kp-oref-box .alert-center-eyebrow{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
-  .feed-promo-card.feed-promo-house .feed-promo-link{min-height:58px!important}
-  .seo-discovery{padding:14px;margin-top:12px}.seo-discovery h2{font-size:15px}.seo-discovery p{font-size:11px}
 }

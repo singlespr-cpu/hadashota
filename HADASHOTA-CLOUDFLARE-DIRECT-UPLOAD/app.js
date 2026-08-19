@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "157.0.0";
+const KOTERET_CLIENT_BUILD = "154.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -81,7 +81,6 @@ const state = {
   notificationsEnabled: localStorage.getItem("hadashota.headlineNotifications") === "1",
   pushNews: localStorage.getItem("hadashota.pushNews") !== "0",
   pushEscalation: localStorage.getItem("hadashota.pushEscalation") !== "0",
-  pushOref: localStorage.getItem("hadashota.pushOref") !== "0",
   currentLeadFingerprint: localStorage.getItem("hadashota.lastLeadFingerprint") || "",
   leadNotificationPrimed: localStorage.getItem("hadashota.lastLeadFingerprint") ? true : false,
   serviceWorkerRegistration: null,
@@ -111,8 +110,7 @@ const state = {
   currentAlerts: [],
   currentMatchingAlerts: [],
   currentLeadEntry: null,
-  forceLeadReevaluation: false,
-  feedVisibleCount: 10
+  forceLeadReevaluation: false
 };
 
 const el = {
@@ -120,7 +118,6 @@ const el = {
   emptyState: document.querySelector("#emptyState"),
   resultsCount: document.querySelector("#resultsCount"),
   feedTitle: document.querySelector("#feedTitle"),
-  feedShowMore: document.querySelector("#feedShowMore"),
   searchInput: document.querySelector("#searchInput"),
   refreshBtn: document.querySelector("#refreshBtn"),
   timeFilters: document.querySelector("#timeFilters"),
@@ -135,7 +132,6 @@ const el = {
   notificationToggle: document.querySelector("#notificationToggle"),
   pushNewsToggle: document.querySelector("#pushNewsToggle"),
   pushEscalationToggle: document.querySelector("#pushEscalationToggle"),
-  pushOrefToggle: document.querySelector("#pushOrefToggle"),
   notificationOfferModal: document.querySelector("#notificationOfferModal"),
   notificationOfferTitle: document.querySelector("#notificationOfferTitle"),
   notificationOfferText: document.querySelector("#notificationOfferText"),
@@ -254,7 +250,6 @@ const el = {
   contactForm: document.querySelector("#contactForm"),
   contactName: document.querySelector("#contactName"),
   contactPhone: document.querySelector("#contactPhone"),
-  contactEmail: document.querySelector("#contactEmail"),
   contactTopic: document.querySelector("#contactTopic"),
   contactMessage: document.querySelector("#contactMessage"),
   contactSubmit: document.querySelector("#contactSubmit"),
@@ -448,7 +443,7 @@ function init() {
   restartAutoRefresh();
   // First-visit Push offer: wait for the first paint/news merge so the dialog is responsive,
   // but still show it automatically on a new visit. App installation itself is never auto-prompted.
-  armNotificationOffer();
+  window.setTimeout(maybeShowNotificationOffer, 1800);
   syncInstallControl();
 }
 
@@ -466,9 +461,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V157 · API ${apiVersion}` : "גרסה V157 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V154 · API ${apiVersion}` : "גרסה V154 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V157 · API לא מחובר";
+    marker.textContent = "גרסה V154 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -513,7 +508,6 @@ function bindEvents() {
     const button = event.target.closest("button[data-hours]");
     if (!button) return;
     state.hours = Number(button.dataset.hours);
-    state.feedVisibleCount = 10;
     localStorage.setItem("hadashota.hours", String(state.hours));
     syncControlsFromState();
     render();
@@ -523,7 +517,6 @@ function bindEvents() {
     const category = event.target.closest("button[data-category]");
     if (category) {
       state.category = category.dataset.category;
-      state.feedVisibleCount = 10;
       localStorage.setItem("hadashota.category", state.category);
       syncControlsFromState();
       render();
@@ -533,7 +526,6 @@ function bindEvents() {
     const kind = event.target.closest("button[data-kind]");
     if (kind) {
       state.kind = kind.dataset.kind;
-      state.feedVisibleCount = 10;
       localStorage.setItem("hadashota.kind", state.kind);
       syncControlsFromState();
       render();
@@ -542,13 +534,7 @@ function bindEvents() {
 
   // Every news item is a link to its exact source, including Telegram messages.
   // Interactive controls inside a card keep their own behavior.
-  document.addEventListener("click", (event) => {
-    const adLink=event.target.closest("[data-ad-id][data-ad-slot]");
-    if(adLink?.dataset.adId)trackAdEvent({id:adLink.dataset.adId},adLink.dataset.adSlot,"click");
-  }, {capture:true});
   el.feed?.addEventListener("click", (event) => {
-    const adContact = event.target.closest("[data-open-ad-contact]");
-    if (adContact) { event.preventDefault(); openContactModal("פרסום", adContact); return; }
     if (event.target.closest("a, button, summary, details, input, select, textarea, label")) return;
     const card = event.target.closest(".news-card[data-story-url]");
     if (!card) return;
@@ -569,7 +555,6 @@ function bindEvents() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       state.query = el.searchInput.value.trim().toLowerCase();
-      state.feedVisibleCount = 10;
       render();
     }, 120);
   });
@@ -624,7 +609,6 @@ function bindEvents() {
     state.alertAllIsrael = el.alertAllIsrael.checked;
     localStorage.setItem("hadashota.alertAllIsrael", state.alertAllIsrael ? "1" : "0");
     syncAlertSettings();
-    syncPushPreferencesToServer();
   });
   el.alertAddCity?.addEventListener("click", addAlertCityFromInput);
   el.alertCityInput?.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); addAlertCityFromInput(); } });
@@ -634,7 +618,6 @@ function bindEvents() {
     state.alertCities = state.alertCities.filter((city) => city !== button.dataset.alertCity);
     localStorage.setItem("hadashota.alertCities", JSON.stringify(state.alertCities));
     syncAlertSettings();
-    syncPushPreferencesToServer();
   });
   el.alertTestBtn?.addEventListener("click", runAlertTest);
   window.addEventListener("scroll", () => {
@@ -662,7 +645,6 @@ function bindEvents() {
   el.resetPreferencesBtn?.addEventListener("click", resetDisplayPreferences);
   el.importantOnlyBtn?.addEventListener("click", () => {
     state.importantOnly = !state.importantOnly;
-    state.feedVisibleCount = 10;
     if (state.importantOnly) state.hotOnly = false;
     localStorage.setItem("hadashota.importantOnly", state.importantOnly ? "1" : "0");
     render();
@@ -679,7 +661,6 @@ function bindEvents() {
   });
   el.hotNowFilterBtn?.addEventListener("click", () => {
     state.hotOnly = !state.hotOnly;
-    state.feedVisibleCount = 10;
     if (state.hotOnly) state.importantOnly = false;
     el.hotNowFilterBtn.classList.toggle("active", state.hotOnly);
     render();
@@ -706,13 +687,6 @@ function bindEvents() {
     state.pushEscalation = el.pushEscalationToggle.checked;
     localStorage.setItem("hadashota.pushEscalation", state.pushEscalation ? "1" : "0");
     await syncPushPreferencesToServer();
-    syncControlsFromState();
-  });
-  el.pushOrefToggle?.addEventListener("change", async () => {
-    state.pushOref = el.pushOrefToggle.checked;
-    localStorage.setItem("hadashota.pushOref", state.pushOref ? "1" : "0");
-    if (state.pushOref && !state.notificationsEnabled) await toggleHeadlineNotifications(true);
-    else await syncPushPreferencesToServer();
     syncControlsFromState();
   });
 
@@ -770,7 +744,6 @@ function bindEvents() {
   });
 
   el.resetFilters.addEventListener("click", resetFilters);
-  el.feedShowMore?.addEventListener("click", () => { state.feedVisibleCount += 10; renderFeed(); });
   el.filtersToggle.addEventListener("click", () => {
     const opening = el.quickMenu.classList.contains("hidden");
     el.quickMenu.classList.toggle("hidden");
@@ -828,17 +801,17 @@ function bindEvents() {
   });
   el.notificationOfferDecline?.addEventListener("click", () => {
     localStorage.setItem("hadashota.notificationPromptChoice", "later");
-    localStorage.setItem("hadashota.notificationSnoozeUntil", String(Date.now() + 24 * 60 * 60 * 1000));
+    localStorage.setItem("hadashota.notificationSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
     closeSiteModal(el.notificationOfferModal, false);
     showToast("בסדר — נזכיר שוב בעוד כשבועיים");
   });
 
   el.aboutBtn?.addEventListener("click", () => openSiteModal(el.aboutModal, el.aboutBtn));
-  el.contactBtn?.addEventListener("click", () => openContactModal("", el.contactBtn));
+  el.contactBtn?.addEventListener("click", () => openSiteModal(el.contactModal, el.contactBtn));
   document.querySelectorAll('a[data-open-contact]').forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      openContactModal(link.dataset.contactTopic || "", link);
+      openSiteModal(el.contactModal, link);
     });
   });
   el.contactForm?.addEventListener("submit", submitContactForm);
@@ -912,27 +885,6 @@ function bindEvents() {
 }
 
 let notificationOfferShownThisSession = false;
-let notificationOfferTimer = null;
-let notificationOfferArmed = false;
-
-function armNotificationOffer() {
-  if (notificationOfferArmed) return;
-  notificationOfferArmed = true;
-  const trigger = () => {
-    if (notificationOfferTimer) { clearTimeout(notificationOfferTimer); notificationOfferTimer = null; }
-    window.removeEventListener("scroll", onScroll);
-    document.removeEventListener("visibilitychange", onVisibility);
-    document.removeEventListener("click", onNavClick, true);
-    window.setTimeout(maybeShowNotificationOffer, 120);
-  };
-  const onScroll = () => { if (window.scrollY > 160) trigger(); };
-  const onVisibility = () => { if (!document.hidden) trigger(); };
-  const onNavClick = (event) => { if (event.target.closest(".news-nav, [data-quick-category], [data-quick-kind]")) trigger(); };
-  window.addEventListener("scroll", onScroll, { passive:true });
-  document.addEventListener("visibilitychange", onVisibility);
-  document.addEventListener("click", onNavClick, true);
-  notificationOfferTimer = window.setTimeout(trigger, 5000);
-}
 
 function maybeShowNotificationOffer() {
   if (notificationOfferShownThisSession || !el.notificationOfferModal) return;
@@ -962,7 +914,7 @@ function maybeShowNotificationOffer() {
   }
   if (Notification.permission === "denied") return;
   if(choice==="accepted"&&Notification.permission==="granted")return;
-  if(choice==="declined"&&!snoozeUntil){localStorage.setItem("hadashota.notificationPromptChoice","later");localStorage.setItem("hadashota.notificationSnoozeUntil",String(Date.now()+24*60*60*1000));return;}
+  if(choice==="declined"&&!snoozeUntil){localStorage.setItem("hadashota.notificationPromptChoice","later");localStorage.setItem("hadashota.notificationSnoozeUntil",String(Date.now()+14*24*60*60*1000));return;}
   if(el.notificationOfferTitle)el.notificationOfferTitle.textContent="לקבל Push כשהכותרת החמה מתחלפת?";
   if(el.notificationOfferText)el.notificationOfferText.innerHTML="כותרת פלוס שולחת <strong>Push אמיתי גם כשהאתר סגור</strong>, אחרי שהסיפור המרכזי אומת במספר מקורות ונשאר מוביל מספיק זמן כדי למנוע התראות כפולות.";
   if(el.notificationOfferAccept){delete el.notificationOfferAccept.dataset.stage;el.notificationOfferAccept.textContent="הפעלת התראות";}
@@ -1114,7 +1066,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V157: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V154: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -3093,25 +3045,19 @@ function renderStats(data = null) {
 }
 
 function renderFeed() {
-  const allItems = filteredItems();
-  const items = allItems.slice(0, Math.max(10, Number(state.feedVisibleCount || 10)));
-  el.resultsCount.textContent = `${allItems.length} עדכונים`;
+  const items = filteredItems();
+  el.resultsCount.textContent = `${items.length} עדכונים`;
   const timeLabel = state.hours === 1 ? "השעה האחרונה" : state.hours === 3 ? "3 השעות האחרונות" : "24 השעות האחרונות";
   el.feedTitle.textContent = `${currentFeedLabel()} · ${timeLabel}`;
-  el.emptyState.classList.toggle("hidden", allItems.length > 0);
-  el.feed.classList.toggle("hidden", allItems.length === 0);
-  if (el.feedShowMore) {
-    const remaining = Math.max(0, allItems.length - items.length);
-    el.feedShowMore.classList.toggle("hidden", remaining === 0);
-    el.feedShowMore.textContent = remaining ? `הצג עוד ${Math.min(10, remaining)} עדכונים` : "עוד עדכונים";
-  }
+  el.emptyState.classList.toggle("hidden", items.length > 0);
+  el.feed.classList.toggle("hidden", items.length === 0);
 
-  if (!allItems.length) {
+  if (!items.length) {
     el.feed.innerHTML = "";
     return;
   }
 
-  const feedPromoHtml = feedPromoCardHtml(feedPromoData);
+  const feedPromoHtml = feedPromoData ? feedPromoCardHtml(feedPromoData) : "";
   // Preserve already loaded source images before the 30-second refresh rebuilds
   // the feed DOM, then restore them immediately into the new cards.
   captureVisibleFeedImages();
@@ -3750,7 +3696,6 @@ function renderLeadStory() {
     fingerprint:winnerFingerprint,
     title:leadTitle,
     sources:count,
-    official:!!winner.hasOfficial,
     at:winner.latestAt||item.latestReportAt||item.publishedAt||new Date().toISOString(),
     savedAt:Date.now()
   };
@@ -4134,7 +4079,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=157.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=154.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4204,7 +4149,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=157.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=154.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4253,7 +4198,7 @@ async function ensureServerPushSubscription() {
       subscription: subscription.toJSON(),
       userAgent: navigator.userAgent.slice(0, 220),
       deviceId: getPushDeviceId(),
-      preferences: { news: state.pushNews !== false, escalation: state.pushEscalation !== false, alerts: state.pushOref !== false && state.alertDesktop !== false, alertAllIsrael: state.alertAllIsrael !== false, alertCities: state.alertCities || [] }
+      preferences: { news: state.pushNews !== false, escalation: state.pushEscalation !== false }
     })
   });
   if (!response.ok) throw new Error(`push_subscribe_${response.status}`);
@@ -4344,12 +4289,8 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
   if (!localStorage.getItem("hadashota.pushPreferencesInitialized")) {
     state.pushNews = true;
     state.pushEscalation = true;
-    state.pushOref = true;
-    state.alertDesktop = true;
     localStorage.setItem("hadashota.pushNews", "1");
     localStorage.setItem("hadashota.pushEscalation", "1");
-    localStorage.setItem("hadashota.pushOref", "1");
-    localStorage.setItem("hadashota.alertDesktop", "1");
     localStorage.setItem("hadashota.pushPreferencesInitialized", "1");
   }
 
@@ -4550,7 +4491,6 @@ function syncControlsFromState() {
   if (el.notificationToggle) el.notificationToggle.checked = state.notificationsEnabled;
   if (el.pushNewsToggle) { el.pushNewsToggle.checked = state.pushNews; el.pushNewsToggle.disabled = !state.notificationsEnabled; }
   if (el.pushEscalationToggle) { el.pushEscalationToggle.checked = state.pushEscalation; el.pushEscalationToggle.disabled = !state.notificationsEnabled; }
-  if (el.pushOrefToggle) { el.pushOrefToggle.checked = state.pushOref && state.alertDesktop; el.pushOrefToggle.disabled = !state.notificationsEnabled; }
   if (el.citySelect) el.citySelect.value = state.city;
   document.querySelectorAll("[data-quick-category]").forEach((button) => {
     const active = state.kind === "all" && button.dataset.quickCategory === state.category;
@@ -4584,9 +4524,9 @@ function resetDisplayPreferences() {
   state.showImages = true;
   state.cluster = true;
   state.autoRefresh = true;
-  // Reset only display preferences. Push permission/subscription and the user's
-  // news/escalation filters are intentionally preserved so a visual reset can
-  // never make the UI say "כבוי" while the browser is still subscribed.
+  state.notificationsEnabled = false;
+  state.pushNews = true;
+  state.pushEscalation = true;
   [
     ["hadashota.hours", "1"],
     ["hadashota.category", "all"],
@@ -4595,6 +4535,7 @@ function resetDisplayPreferences() {
     ["hadashota.showImages", "1"],
     ["hadashota.cluster", "1"],
     ["hadashota.autoRefresh", "1"],
+    ["hadashota.headlineNotifications", "0"],
     ["hadashota.theme", "light"]
   ].forEach(([key, value]) => localStorage.setItem(key, value));
   delete document.documentElement.dataset.theme;
@@ -4619,7 +4560,6 @@ function resetFilters() {
   state.category = "all";
   state.kind = "all";
   state.query = "";
-  state.feedVisibleCount = 10;
   el.searchInput.value = "";
   localStorage.setItem("hadashota.hours", "1");
   localStorage.setItem("hadashota.category", "all");
@@ -5279,8 +5219,7 @@ function refreshPremiumLayer() {
 
 async function initFeedPromo() {
   const apply = (promo) => {
-    feedPromoData = promo?.active && promo?.text && promo?.url ? promo : { active: false };
-    if(feedPromoData.active) trackAdEvent(feedPromoData,"feed","view");
+    feedPromoData = promo?.active && promo?.text && promo?.url ? promo : null;
     try { renderFeed(); } catch {}
   };
   try {
@@ -5299,35 +5238,13 @@ async function initFeedPromo() {
   }, 60000);
 }
 
-function trackAdEvent(promo, slot, event) {
-  if (!promo?.id || !["view","click"].includes(event)) return;
-  const key=`kp.ad.${event}.${promo.id}.${slot}`;
-  if(event==="view"&&sessionStorage.getItem(key))return;
-  if(event==="view")sessionStorage.setItem(key,"1");
-  const body=JSON.stringify({adId:promo.id,slot,event});
-  try {
-    if(event==="click"&&navigator.sendBeacon){navigator.sendBeacon("/api/ad-event",new Blob([body],{type:"application/json"}));return;}
-    fetch("/api/ad-event",{method:"POST",headers:{"Content-Type":"application/json"},body,keepalive:true}).catch(()=>{});
-  } catch {}
-}
-
 function feedPromoCardHtml(promo) {
-  if (!promo?.active || !promo?.text || !promo?.url) {
-    return `<article class="news-card feed-promo-card feed-promo-house" aria-label="פרסום בכותרת פלוס">
-      <button class="feed-promo-link feed-promo-contact" type="button" data-open-ad-contact>
-        <div class="feed-promo-copy">
-          <div class="feed-promo-meta"><span class="feed-promo-badge">פרסום</span><span class="feed-promo-business">לעסקים ומותגים</span></div>
-          <h3>בעל עסק? פרסם כאן</h3>
-          <p>לחץ להשארת פרטים ונחזור אליך.</p>
-        </div>
-      </button>
-    </article>`;
-  }
+  if (!promo?.active || !promo?.text || !promo?.url) return "";
   const image = promo.imageData
     ? `<img class="feed-promo-image" src="${escapeHtml(promo.imageData)}" alt="" loading="eager">`
     : "";
   return `<article class="news-card feed-promo-card" aria-label="פרסום">
-    <a class="feed-promo-link" data-ad-id="${escapeHtml(promo.id||'')}" data-ad-slot="feed" href="${escapeHtml(promo.url)}" target="_blank" rel="noopener noreferrer sponsored">
+    <a class="feed-promo-link" href="${escapeHtml(promo.url)}" target="_blank" rel="noopener noreferrer sponsored">
       ${image}
       <div class="feed-promo-copy">
         <div class="feed-promo-meta"><span class="feed-promo-badge">פרסום</span></div>
@@ -5344,30 +5261,23 @@ async function initPromoCard() {
   const image = document.querySelector("#promoCardImage");
   const title = document.querySelector("#promoCardText");
   const badge = document.querySelector("#promoCardBadge");
-  const subtext = document.querySelector("#promoCardSubtext");
   if (!card || !link || !image || !title || !badge) return;
 
   const apply = (promo) => {
     const active = Boolean(promo?.active && promo?.text && promo?.url);
-    if(active) trackAdEvent(promo,"top","view");
     card.classList.toggle("is-active", active);
     if (!active) {
-      link.href = "#contact";
+      link.removeAttribute("href");
       link.removeAttribute("target");
       link.removeAttribute("rel");
       image.removeAttribute("src");
       image.classList.add("hidden");
       badge.textContent = "פרסום";
-      title.textContent = "בעל עסק? פרסם כאן";
-      if (subtext) { subtext.textContent = "לחץ להשארת פרטים"; subtext.classList.remove("hidden"); }
-      link.onclick = (event) => { event.preventDefault(); openContactModal("פרסום", link); };
+      title.textContent = "פרסם כאן";
       return;
     }
     title.textContent = String(promo.text || "").slice(0, 120);
-    if (subtext) subtext.classList.add("hidden");
-    link.onclick = null;
     link.href = promo.url;
-    link.dataset.adId = promo.id || ""; link.dataset.adSlot = "top";
     link.target = "_blank";
     link.rel = "noopener noreferrer sponsored";
     badge.textContent = "פרסום";
@@ -5892,21 +5802,14 @@ async function shareKoteretPlus() {
   }
 }
 
-function openContactModal(topic = "", trigger = null) {
-  if (topic && el.contactTopic) el.contactTopic.value = topic;
-  if (el.contactStatus) el.contactStatus.textContent = "";
-  openSiteModal(el.contactModal, trigger || el.contactBtn || document.activeElement);
-}
-
 async function submitContactForm(event) {
   event?.preventDefault?.();
   if(!el.contactForm)return;
-  const name=String(el.contactName?.value||"").trim(),phone=String(el.contactPhone?.value||"").trim(),email=String(el.contactEmail?.value||"").trim(),topic=String(el.contactTopic?.value||"כללי"),message=String(el.contactMessage?.value||"").trim();
-  const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email);
-  if(name.length<2||phone.replace(/\D/g,"").length<7||!emailOk||message.length<5){if(el.contactStatus)el.contactStatus.textContent="מלאו שם, טלפון, אימייל תקין והודעה קצרה.";return;}
+  const name=String(el.contactName?.value||"").trim(),phone=String(el.contactPhone?.value||"").trim(),topic=String(el.contactTopic?.value||"כללי"),message=String(el.contactMessage?.value||"").trim();
+  if(name.length<2||phone.replace(/\D/g,"").length<7||message.length<5){if(el.contactStatus)el.contactStatus.textContent="מלאו שם, טלפון והודעה קצרה.";return;}
   if(el.contactSubmit){el.contactSubmit.disabled=true;el.contactSubmit.textContent="שולח…";}
   if(el.contactStatus)el.contactStatus.textContent="";
-  try{const r=await fetch("/api/contact",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({name,phone,email,topic,message,source:"home-popup"})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"השליחה נכשלה");el.contactForm.reset();if(el.contactStatus)el.contactStatus.textContent="ההודעה נשלחה בהצלחה ✓";showToast("ההודעה נשלחה");window.setTimeout(()=>closeSiteModal(el.contactModal,false),1500)}catch(error){if(el.contactStatus)el.contactStatus.textContent=String(error?.message||error)}finally{if(el.contactSubmit){el.contactSubmit.disabled=false;el.contactSubmit.textContent="שליחת הודעה";}}
+  try{const r=await fetch("/api/contact",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({name,phone,topic,message,source:"home-popup"})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"השליחה נכשלה");el.contactForm.reset();if(el.contactStatus)el.contactStatus.textContent="ההודעה נשלחה בהצלחה ✓";showToast("ההודעה נשלחה");window.setTimeout(()=>closeSiteModal(el.contactModal,false),1500)}catch(error){if(el.contactStatus)el.contactStatus.textContent=String(error?.message||error)}finally{if(el.contactSubmit){el.contactSubmit.disabled=false;el.contactSubmit.textContent="שליחת הודעה";}}
 }
 
 let toastTimer;
@@ -5970,18 +5873,21 @@ async function setAlertSound(enabled, userGesture = false) {
 async function setAlertDesktop(enabled) {
   if (!enabled) {
     state.alertDesktop = false;
-    state.pushOref = false;
+  } else if (isIOSDevice() && !isStandaloneMode()) {
+    state.alertDesktop = false;
+    showToast("באייפון: הוסיפו קודם את כותרת פלוס למסך הבית");
+    maybeShowNotificationOffer();
+  } else if (!("Notification" in window)) {
+    state.alertDesktop = false;
+    showToast("הדפדפן הזה לא תומך בהתראות מערכת");
   } else {
-    const result = await toggleHeadlineNotifications(true, { quiet:true });
-    state.alertDesktop = Boolean(result?.ok);
-    state.pushOref = state.alertDesktop;
-    if (!state.alertDesktop) showToast("לא הצלחנו להפעיל Push — בדקו את הרשאת ההתראות בדפדפן");
+    let permission = Notification.permission;
+    if (permission === "default") permission = await Notification.requestPermission();
+    state.alertDesktop = permission === "granted";
+    if (!state.alertDesktop) showToast("לא ניתנה הרשאה להתראות דפדפן");
   }
   localStorage.setItem("hadashota.alertDesktop", state.alertDesktop ? "1" : "0");
-  localStorage.setItem("hadashota.pushOref", state.pushOref ? "1" : "0");
-  await syncPushPreferencesToServer();
   syncAlertSettings();
-  syncControlsFromState();
 }
 
 function scheduleAlertPoll(delay) {
@@ -6061,7 +5967,7 @@ function renderEmergencyAlerts(alerts, payload = {}) {
     state.lastAlertFingerprint = fingerprint;
     localStorage.setItem("hadashota.lastAlertFingerprint", fingerprint);
     if (state.alertSound) playAlertTone(false);
-    if (state.alertDesktop && !state.notificationsEnabled) showEmergencyNotification(title, allAreas);
+    if (state.alertDesktop) showEmergencyNotification(title, allAreas);
   }
 }
 
