@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "153.0.0";
+const HADASHOTA_SW_VERSION = "154.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -42,8 +42,8 @@ self.addEventListener("push", (event) => {
         tag: `koteret-${payload.kind||"push"}-${payload.fingerprint}`,
         renotify: true,
         requireInteraction: payload.kind === "escalation",
-        icon: "/icon-192.png?v=153.0.0",
-        badge: "/favicon-32.png?v=153.0.0",
+        icon: "/icon-192.png?v=154.0.0",
+        badge: "/favicon-32.png?v=154.0.0",
         data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
         timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
       });

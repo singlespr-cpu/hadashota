@@ -234,7 +234,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "153.0.0",
+          version: "154.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -247,7 +247,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "153.0.0",
+        version: "154.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -257,7 +257,7 @@ export default {
       });
     }
 
-    // V153: the workers.dev hostname is kept only as a technical endpoint.
+    // V154: the workers.dev hostname is kept only as a technical endpoint.
     // Public documents permanently resolve to the official Koteret Plus domain.
     if ((request.method === "GET" || request.method === "HEAD") && (url.hostname === "hadashota.singles-pr.workers.dev" || url.hostname === "www.koteretplus.com")) {
       const publicPaths = new Map([
@@ -878,7 +878,7 @@ async function findOpenverseMedia(query, specificity = 1) {
       const candidateText = `${img?.title || ""} ${img?.creator || ""} ${tagText}`;
       const overlap = mediaOverlapStats(query, candidateText);
       const score = mediaCandidateScore(query, candidateText, specificity);
-      candidates.push({ img, license, mediaUrl, candidateText, overlap, score });
+      candidates.push({ img, license, mediaUrl, candidateText, tagText, overlap, score });
     }
     candidates.sort((a,b) => b.score-a.score);
     const best = candidates[0];
@@ -906,7 +906,7 @@ async function findOpenverseMedia(query, specificity = 1) {
       overlapHits: best.overlap.hits,
       matchedTokens: best.overlap.matched,
       candidateTitle: cleanText(img?.title || ""),
-      candidateDescription: cleanText(tagText || "").slice(0, 260),
+      candidateDescription: cleanText(best.tagText || "").slice(0, 260),
       illustrative: false
     };
   } catch {}
@@ -1441,7 +1441,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "153.0.0",
+          "X-Hadashota-Version": "154.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1564,13 +1564,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "153.0.0",
+      "X-Hadashota-Version": "154.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "153.0.0",
+      "X-Hadashota-Version": "154.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1604,7 +1604,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "153.0.0"
+        "X-Hadashota-Version": "154.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1626,7 +1626,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "153.0.0"
+    "X-Hadashota-Version": "154.0.0"
   });
 }
 
@@ -2883,7 +2883,7 @@ async function collectExternalEscalationSignals(){
   const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
   return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic},experimental:{pizza},updatedAt:new Date().toISOString()};
 }
-// V153 background calibration refresh: split the external OSINT set into three
+// V154 background calibration refresh: split the external OSINT set into three
 // independent five-minute batches. Each signal family still refreshes roughly
 // every 15 minutes, but no scheduled invocation has to perform the whole set.
 async function collectExternalEscalationSignalGroup(groupIndex=0){
@@ -2916,14 +2916,14 @@ async function escalationHubCall(env,path,method="GET",body=null){const stub=pus
 async function handleEscalation(request,env,ctx){
   try{
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"153.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"153.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"153.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"153.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3175,7 +3175,7 @@ async function refreshBackgroundNewsShards(env,ctx,shards=[]){
       if(!response.ok)return;
       const payload=await response.json();
       if(Array.isArray(payload?.items))fresh.set(shard,payload);
-    }catch(error){console.warn(`V153 background shard ${shard} failed`,error);}
+    }catch(error){console.warn(`V154 background shard ${shard} failed`,error);}
   }));
   return fresh;
 }
@@ -3222,7 +3222,7 @@ async function runBackgroundEscalationFromNews(env,recent=[]) {
     const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString(),background:true};
     await escalationHubCall(env,"/escalation/snapshot","POST",payload);
-  }catch(error){console.warn("V153 scheduled escalation monitor failed",error);}
+  }catch(error){console.warn("V154 scheduled escalation monitor failed",error);}
 }
 
 async function runBackgroundPushMonitor(env, ctx) {
@@ -3237,7 +3237,7 @@ async function runBackgroundPushMonitor(env, ctx) {
     if(payload)await stub.fetch("https://push.internal/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     if(minute%5===0)await runBackgroundEscalationFromNews(env,context.recent);
   } catch(error) {
-    console.warn("V153 scheduled push monitor failed",error);
+    console.warn("V154 scheduled push monitor failed",error);
   }
 }
 
@@ -3306,7 +3306,7 @@ async function ensurePushStats(storage) {
   let stats=await storage.get("subscription.stats");
   if(stats?.schema==="v152"&&Number.isFinite(Number(stats.count)))return stats;
   const rows=await storage.list({prefix:"sub:"});
-  // One-time V153 repair: a browser can rotate its PushSubscription endpoint.
+  // One-time V154 repair: a browser can rotate its PushSubscription endpoint.
   // Keep only the newest subscription for the same local device id so the admin
   // count and fanout do not include stale duplicates.
   const byDevice=new Map(),remove=[];
@@ -3470,7 +3470,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"153.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"154.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -3612,7 +3612,7 @@ export class PushHub {
       const contactSummary=await storage.get("contact.summary")||{total:0,newCount:0};const contactRows=[...(await storage.list({prefix:"contact.item:"})).values()].sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0)).slice(0,30);
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"153.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,history:history.slice(-12).reverse()},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"154.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,history:history.slice(-12).reverse()},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -3645,7 +3645,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"153.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"154.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -3687,7 +3687,7 @@ export class PushHub {
     }
 
     if(url.pathname==="/lead"&&request.method==="POST"){
-      const payload=await request.json().catch(()=>null);
+      let payload=await request.json().catch(()=>null);
       if(!payload?.fingerprint||!payload?.title)return json({error:"Invalid lead"},400);
       payload={...payload,receivedAt:new Date().toISOString()};
       await storage.put("lead.latest",payload);

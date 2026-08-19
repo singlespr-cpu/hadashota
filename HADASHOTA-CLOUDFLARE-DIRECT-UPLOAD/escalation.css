@@ -222,14 +222,14 @@ body[data-level="routine"] .z-green,body[data-level="elevated"] .z-yellow,body[d
 }
 @media(prefers-reduced-motion:reduce){.esc-to-top{transition:none!important}}
 
-/* V153 — persistent escalation traffic counter */
+/* V154 — persistent escalation traffic counter */
 .esc-visit-counter{margin-top:22px;display:flex;align-items:center;justify-content:center;gap:9px;color:#697688;font-size:8.5px}.esc-visit-counter strong{min-width:54px;text-align:center;color:#e9eef5;font-size:12px;font-variant-numeric:tabular-nums;padding:5px 9px;border:1px solid #232c38;border-radius:999px;background:#0a0f15}.esc-visit-counter span:before{content:"◉";margin-left:5px;color:#ff5266}@media(max-width:700px){.esc-visit-counter{margin-top:17px;font-size:7.8px}.esc-visit-counter strong{font-size:10.5px}}
 
-/* V153 — Web Push opt-in on the standalone escalation landing page */
+/* V154 — Web Push opt-in on the standalone escalation landing page */
 .esc-push-offer{position:fixed;right:18px;bottom:18px;z-index:95;width:min(430px,calc(100vw - 36px));display:grid;grid-template-columns:42px 1fr;gap:10px 12px;align-items:center;padding:14px 15px;background:rgba(13,18,25,.97);border:1px solid #303a49;border-radius:16px;box-shadow:0 18px 55px rgba(0,0,0,.46);backdrop-filter:blur(14px)}.esc-push-offer[hidden]{display:none}.esc-push-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:rgba(255,73,91,.11);border:1px solid rgba(255,89,105,.17);font-size:19px}.esc-push-copy strong{display:block;color:#f6f9fc;font-size:11.5px}.esc-push-copy span{display:block;color:#8e9bad;font-size:8.7px;line-height:1.55;margin-top:3px}.esc-push-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:7px}.esc-push-actions button{height:35px;border:0;border-radius:9px;font:inherit;font-size:9px;font-weight:900;cursor:pointer}.esc-push-actions button:first-child{background:linear-gradient(135deg,#ff684f,#ff334f);color:#fff}.esc-push-actions button:last-child{background:#1a222d;color:#aeb9c7}.esc-push-close{position:absolute;left:7px;top:5px;border:0;background:transparent;color:#788697;font-size:19px;cursor:pointer}.esc-push-offer.is-success .esc-push-icon{background:rgba(34,214,111,.1);border-color:rgba(34,214,111,.22)}@media(max-width:700px){.esc-push-offer{right:9px;bottom:78px;width:calc(100vw - 18px);padding:12px;grid-template-columns:38px 1fr;border-radius:14px}.esc-push-icon{width:38px;height:38px}.esc-push-copy strong{font-size:10.5px}.esc-push-copy span{font-size:8px}.esc-push-actions button{height:38px;font-size:9.2px}}
 
 
-/* V153 — SEO guide / crawlable FAQ */
+/* V154 — SEO guide / crawlable FAQ */
 .esc-seo-guide{overflow:visible}
 .esc-seo-guide .esc-section-head{margin-bottom:14px}
 .esc-faq-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -238,7 +238,7 @@ body[data-level="routine"] .z-green,body[data-level="elevated"] .z-yellow,body[d
 .esc-faq-grid p{margin:9px 0 0;color:#8f9bad;font-size:9.2px;line-height:1.75}
 @media(max-width:700px){.esc-faq-grid{grid-template-columns:1fr}.esc-faq-grid details{padding:13px}.esc-faq-grid summary{font-size:11px}.esc-faq-grid p{font-size:8.7px}}
 
-/* V153 — keep interactive overlays light on phones */
+/* V154 — keep interactive overlays light on phones */
 .esc-push-offer{backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);will-change:transform,opacity}
 .esc-push-actions button,.esc-push-close,.esc-share,.esc-back,.esc-to-top{touch-action:manipulation}
 @media(max-width:700px){.esc-push-offer{backdrop-filter:none;-webkit-backdrop-filter:none}}
