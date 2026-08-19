@@ -1,4 +1,4 @@
-# V159 — static assets bypass the Worker and can be cached aggressively because
+# V160 — static assets bypass the Worker and can be cached aggressively because
 # JS/CSS URLs are versioned on every release. Worker-generated HTML/API responses
 # keep their own explicit caching/security headers.
 /*.js
