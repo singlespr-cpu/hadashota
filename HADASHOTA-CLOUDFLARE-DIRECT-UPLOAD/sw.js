@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "154.0.0";
+const HADASHOTA_SW_VERSION = "157.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -42,8 +42,8 @@ self.addEventListener("push", (event) => {
         tag: `koteret-${payload.kind||"push"}-${payload.fingerprint}`,
         renotify: true,
         requireInteraction: payload.kind === "escalation",
-        icon: "/icon-192.png?v=154.0.0",
-        badge: "/favicon-32.png?v=154.0.0",
+        icon: "/icon-192.png?v=157.0.0",
+        badge: "/favicon-32.png?v=157.0.0",
         data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
         timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
       });
@@ -75,27 +75,22 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 });
 
 self.addEventListener("notificationclick", (event) => {
+  const meta = event.notification?.data || {};
   event.notification.close();
-  try { self.registration.clearAppBadge?.(); } catch {}
-  const targetUrl = event.notification?.data?.url || "/";
-  event.waitUntil((async () => {
+  event.waitUntil((async()=>{
     try {
-      const absolute=new URL(targetUrl,self.location.origin).href;
-      const windows=await self.clients.matchAll({type:"window",includeUncontrolled:true});
-      for(const client of windows){
-        try{
-          if(new URL(client.url).origin!==self.location.origin)continue;
-          if("navigate" in client)await client.navigate(absolute);
-          await client.focus();
-          return;
-        }catch{}
-      }
-      if (self.clients.openWindow) await self.clients.openWindow(absolute);
-    } catch {
-      if (self.clients.openWindow) await self.clients.openWindow("/");
+      const deviceId = await readPushDeviceId();
+      await fetch("/api/push/click", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({fingerprint:meta.fingerprint||"",kind:meta.kind||"push",deviceId}), keepalive:true });
+    } catch {}
+    const url = meta.url || "/";
+    const allClients = await clients.matchAll({ type:"window", includeUncontrolled:true });
+    for (const client of allClients) {
+      try { if ("focus" in client) { await client.focus(); if ("navigate" in client) await client.navigate(url); return; } } catch {}
     }
+    if (clients.openWindow) await clients.openWindow(url);
   })());
 });
+
 
 
 self.addEventListener("message", (event) => {
