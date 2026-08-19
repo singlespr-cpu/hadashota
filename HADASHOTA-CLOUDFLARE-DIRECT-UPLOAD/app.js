@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "154.0.0";
+const KOTERET_CLIENT_BUILD = "156.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -110,7 +110,8 @@ const state = {
   currentAlerts: [],
   currentMatchingAlerts: [],
   currentLeadEntry: null,
-  forceLeadReevaluation: false
+  forceLeadReevaluation: false,
+  feedVisibleCount: 10
 };
 
 const el = {
@@ -118,6 +119,7 @@ const el = {
   emptyState: document.querySelector("#emptyState"),
   resultsCount: document.querySelector("#resultsCount"),
   feedTitle: document.querySelector("#feedTitle"),
+  feedShowMore: document.querySelector("#feedShowMore"),
   searchInput: document.querySelector("#searchInput"),
   refreshBtn: document.querySelector("#refreshBtn"),
   timeFilters: document.querySelector("#timeFilters"),
@@ -250,6 +252,7 @@ const el = {
   contactForm: document.querySelector("#contactForm"),
   contactName: document.querySelector("#contactName"),
   contactPhone: document.querySelector("#contactPhone"),
+  contactEmail: document.querySelector("#contactEmail"),
   contactTopic: document.querySelector("#contactTopic"),
   contactMessage: document.querySelector("#contactMessage"),
   contactSubmit: document.querySelector("#contactSubmit"),
@@ -461,9 +464,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V154 · API ${apiVersion}` : "גרסה V154 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V156 · API ${apiVersion}` : "גרסה V156 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V154 · API לא מחובר";
+    marker.textContent = "גרסה V156 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -508,6 +511,7 @@ function bindEvents() {
     const button = event.target.closest("button[data-hours]");
     if (!button) return;
     state.hours = Number(button.dataset.hours);
+    state.feedVisibleCount = 10;
     localStorage.setItem("hadashota.hours", String(state.hours));
     syncControlsFromState();
     render();
@@ -517,6 +521,7 @@ function bindEvents() {
     const category = event.target.closest("button[data-category]");
     if (category) {
       state.category = category.dataset.category;
+      state.feedVisibleCount = 10;
       localStorage.setItem("hadashota.category", state.category);
       syncControlsFromState();
       render();
@@ -526,6 +531,7 @@ function bindEvents() {
     const kind = event.target.closest("button[data-kind]");
     if (kind) {
       state.kind = kind.dataset.kind;
+      state.feedVisibleCount = 10;
       localStorage.setItem("hadashota.kind", state.kind);
       syncControlsFromState();
       render();
@@ -535,6 +541,8 @@ function bindEvents() {
   // Every news item is a link to its exact source, including Telegram messages.
   // Interactive controls inside a card keep their own behavior.
   el.feed?.addEventListener("click", (event) => {
+    const adContact = event.target.closest("[data-open-ad-contact]");
+    if (adContact) { event.preventDefault(); openContactModal("פרסום", adContact); return; }
     if (event.target.closest("a, button, summary, details, input, select, textarea, label")) return;
     const card = event.target.closest(".news-card[data-story-url]");
     if (!card) return;
@@ -555,6 +563,7 @@ function bindEvents() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       state.query = el.searchInput.value.trim().toLowerCase();
+      state.feedVisibleCount = 10;
       render();
     }, 120);
   });
@@ -645,6 +654,7 @@ function bindEvents() {
   el.resetPreferencesBtn?.addEventListener("click", resetDisplayPreferences);
   el.importantOnlyBtn?.addEventListener("click", () => {
     state.importantOnly = !state.importantOnly;
+    state.feedVisibleCount = 10;
     if (state.importantOnly) state.hotOnly = false;
     localStorage.setItem("hadashota.importantOnly", state.importantOnly ? "1" : "0");
     render();
@@ -661,6 +671,7 @@ function bindEvents() {
   });
   el.hotNowFilterBtn?.addEventListener("click", () => {
     state.hotOnly = !state.hotOnly;
+    state.feedVisibleCount = 10;
     if (state.hotOnly) state.importantOnly = false;
     el.hotNowFilterBtn.classList.toggle("active", state.hotOnly);
     render();
@@ -744,6 +755,7 @@ function bindEvents() {
   });
 
   el.resetFilters.addEventListener("click", resetFilters);
+  el.feedShowMore?.addEventListener("click", () => { state.feedVisibleCount += 10; renderFeed(); });
   el.filtersToggle.addEventListener("click", () => {
     const opening = el.quickMenu.classList.contains("hidden");
     el.quickMenu.classList.toggle("hidden");
@@ -807,11 +819,11 @@ function bindEvents() {
   });
 
   el.aboutBtn?.addEventListener("click", () => openSiteModal(el.aboutModal, el.aboutBtn));
-  el.contactBtn?.addEventListener("click", () => openSiteModal(el.contactModal, el.contactBtn));
+  el.contactBtn?.addEventListener("click", () => openContactModal("", el.contactBtn));
   document.querySelectorAll('a[data-open-contact]').forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      openSiteModal(el.contactModal, link);
+      openContactModal(link.dataset.contactTopic || "", link);
     });
   });
   el.contactForm?.addEventListener("submit", submitContactForm);
@@ -1066,7 +1078,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V154: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V156: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -3045,19 +3057,25 @@ function renderStats(data = null) {
 }
 
 function renderFeed() {
-  const items = filteredItems();
-  el.resultsCount.textContent = `${items.length} עדכונים`;
+  const allItems = filteredItems();
+  const items = allItems.slice(0, Math.max(10, Number(state.feedVisibleCount || 10)));
+  el.resultsCount.textContent = `${allItems.length} עדכונים`;
   const timeLabel = state.hours === 1 ? "השעה האחרונה" : state.hours === 3 ? "3 השעות האחרונות" : "24 השעות האחרונות";
   el.feedTitle.textContent = `${currentFeedLabel()} · ${timeLabel}`;
-  el.emptyState.classList.toggle("hidden", items.length > 0);
-  el.feed.classList.toggle("hidden", items.length === 0);
+  el.emptyState.classList.toggle("hidden", allItems.length > 0);
+  el.feed.classList.toggle("hidden", allItems.length === 0);
+  if (el.feedShowMore) {
+    const remaining = Math.max(0, allItems.length - items.length);
+    el.feedShowMore.classList.toggle("hidden", remaining === 0);
+    el.feedShowMore.textContent = remaining ? `הצג עוד ${Math.min(10, remaining)} עדכונים` : "עוד עדכונים";
+  }
 
-  if (!items.length) {
+  if (!allItems.length) {
     el.feed.innerHTML = "";
     return;
   }
 
-  const feedPromoHtml = feedPromoData ? feedPromoCardHtml(feedPromoData) : "";
+  const feedPromoHtml = feedPromoCardHtml(feedPromoData);
   // Preserve already loaded source images before the 30-second refresh rebuilds
   // the feed DOM, then restore them immediately into the new cards.
   captureVisibleFeedImages();
@@ -3696,6 +3714,7 @@ function renderLeadStory() {
     fingerprint:winnerFingerprint,
     title:leadTitle,
     sources:count,
+    official:!!winner.hasOfficial,
     at:winner.latestAt||item.latestReportAt||item.publishedAt||new Date().toISOString(),
     savedAt:Date.now()
   };
@@ -4079,7 +4098,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=154.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=156.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4149,7 +4168,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=154.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=156.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4524,9 +4543,9 @@ function resetDisplayPreferences() {
   state.showImages = true;
   state.cluster = true;
   state.autoRefresh = true;
-  state.notificationsEnabled = false;
-  state.pushNews = true;
-  state.pushEscalation = true;
+  // Reset only display preferences. Push permission/subscription and the user's
+  // news/escalation filters are intentionally preserved so a visual reset can
+  // never make the UI say "כבוי" while the browser is still subscribed.
   [
     ["hadashota.hours", "1"],
     ["hadashota.category", "all"],
@@ -4535,7 +4554,6 @@ function resetDisplayPreferences() {
     ["hadashota.showImages", "1"],
     ["hadashota.cluster", "1"],
     ["hadashota.autoRefresh", "1"],
-    ["hadashota.headlineNotifications", "0"],
     ["hadashota.theme", "light"]
   ].forEach(([key, value]) => localStorage.setItem(key, value));
   delete document.documentElement.dataset.theme;
@@ -4560,6 +4578,7 @@ function resetFilters() {
   state.category = "all";
   state.kind = "all";
   state.query = "";
+  state.feedVisibleCount = 10;
   el.searchInput.value = "";
   localStorage.setItem("hadashota.hours", "1");
   localStorage.setItem("hadashota.category", "all");
@@ -5219,7 +5238,7 @@ function refreshPremiumLayer() {
 
 async function initFeedPromo() {
   const apply = (promo) => {
-    feedPromoData = promo?.active && promo?.text && promo?.url ? promo : null;
+    feedPromoData = promo?.active && promo?.text && promo?.url ? promo : { active: false };
     try { renderFeed(); } catch {}
   };
   try {
@@ -5239,7 +5258,17 @@ async function initFeedPromo() {
 }
 
 function feedPromoCardHtml(promo) {
-  if (!promo?.active || !promo?.text || !promo?.url) return "";
+  if (!promo?.active || !promo?.text || !promo?.url) {
+    return `<article class="news-card feed-promo-card feed-promo-house" aria-label="פרסום בכותרת פלוס">
+      <button class="feed-promo-link feed-promo-contact" type="button" data-open-ad-contact>
+        <div class="feed-promo-copy">
+          <div class="feed-promo-meta"><span class="feed-promo-badge">פרסום</span><span class="feed-promo-business">לעסקים ומותגים</span></div>
+          <h3>בעל עסק? פרסם כאן</h3>
+          <p>לחץ להשארת פרטים ונחזור אליך.</p>
+        </div>
+      </button>
+    </article>`;
+  }
   const image = promo.imageData
     ? `<img class="feed-promo-image" src="${escapeHtml(promo.imageData)}" alt="" loading="eager">`
     : "";
@@ -5261,22 +5290,27 @@ async function initPromoCard() {
   const image = document.querySelector("#promoCardImage");
   const title = document.querySelector("#promoCardText");
   const badge = document.querySelector("#promoCardBadge");
+  const subtext = document.querySelector("#promoCardSubtext");
   if (!card || !link || !image || !title || !badge) return;
 
   const apply = (promo) => {
     const active = Boolean(promo?.active && promo?.text && promo?.url);
     card.classList.toggle("is-active", active);
     if (!active) {
-      link.removeAttribute("href");
+      link.href = "#contact";
       link.removeAttribute("target");
       link.removeAttribute("rel");
       image.removeAttribute("src");
       image.classList.add("hidden");
       badge.textContent = "פרסום";
-      title.textContent = "פרסם כאן";
+      title.textContent = "בעל עסק? פרסם כאן";
+      if (subtext) { subtext.textContent = "לחץ להשארת פרטים"; subtext.classList.remove("hidden"); }
+      link.onclick = (event) => { event.preventDefault(); openContactModal("פרסום", link); };
       return;
     }
     title.textContent = String(promo.text || "").slice(0, 120);
+    if (subtext) subtext.classList.add("hidden");
+    link.onclick = null;
     link.href = promo.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer sponsored";
@@ -5802,14 +5836,21 @@ async function shareKoteretPlus() {
   }
 }
 
+function openContactModal(topic = "", trigger = null) {
+  if (topic && el.contactTopic) el.contactTopic.value = topic;
+  if (el.contactStatus) el.contactStatus.textContent = "";
+  openSiteModal(el.contactModal, trigger || el.contactBtn || document.activeElement);
+}
+
 async function submitContactForm(event) {
   event?.preventDefault?.();
   if(!el.contactForm)return;
-  const name=String(el.contactName?.value||"").trim(),phone=String(el.contactPhone?.value||"").trim(),topic=String(el.contactTopic?.value||"כללי"),message=String(el.contactMessage?.value||"").trim();
-  if(name.length<2||phone.replace(/\D/g,"").length<7||message.length<5){if(el.contactStatus)el.contactStatus.textContent="מלאו שם, טלפון והודעה קצרה.";return;}
+  const name=String(el.contactName?.value||"").trim(),phone=String(el.contactPhone?.value||"").trim(),email=String(el.contactEmail?.value||"").trim(),topic=String(el.contactTopic?.value||"כללי"),message=String(el.contactMessage?.value||"").trim();
+  const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email);
+  if(name.length<2||phone.replace(/\D/g,"").length<7||!emailOk||message.length<5){if(el.contactStatus)el.contactStatus.textContent="מלאו שם, טלפון, אימייל תקין והודעה קצרה.";return;}
   if(el.contactSubmit){el.contactSubmit.disabled=true;el.contactSubmit.textContent="שולח…";}
   if(el.contactStatus)el.contactStatus.textContent="";
-  try{const r=await fetch("/api/contact",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({name,phone,topic,message,source:"home-popup"})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"השליחה נכשלה");el.contactForm.reset();if(el.contactStatus)el.contactStatus.textContent="ההודעה נשלחה בהצלחה ✓";showToast("ההודעה נשלחה");window.setTimeout(()=>closeSiteModal(el.contactModal,false),1500)}catch(error){if(el.contactStatus)el.contactStatus.textContent=String(error?.message||error)}finally{if(el.contactSubmit){el.contactSubmit.disabled=false;el.contactSubmit.textContent="שליחת הודעה";}}
+  try{const r=await fetch("/api/contact",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({name,phone,email,topic,message,source:"home-popup"})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"השליחה נכשלה");el.contactForm.reset();if(el.contactStatus)el.contactStatus.textContent="ההודעה נשלחה בהצלחה ✓";showToast("ההודעה נשלחה");window.setTimeout(()=>closeSiteModal(el.contactModal,false),1500)}catch(error){if(el.contactStatus)el.contactStatus.textContent=String(error?.message||error)}finally{if(el.contactSubmit){el.contactSubmit.disabled=false;el.contactSubmit.textContent="שליחת הודעה";}}
 }
 
 let toastTimer;

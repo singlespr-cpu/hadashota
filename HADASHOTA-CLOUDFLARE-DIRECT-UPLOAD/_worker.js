@@ -162,6 +162,10 @@ export default {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return handleAdminDashboard(request, env);
     }
+    if (url.pathname === "/api/admin/register-device") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return handleAdminRegisterDevice(request, env);
+    }
     if (url.pathname === "/api/admin/push") {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return handleAdminPush(request, env);
@@ -234,7 +238,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "154.0.0",
+          version: "156.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -247,7 +251,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "154.0.0",
+        version: "156.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -257,7 +261,7 @@ export default {
       });
     }
 
-    // V154: the workers.dev hostname is kept only as a technical endpoint.
+    // V156: the workers.dev hostname is kept only as a technical endpoint.
     // Public documents permanently resolve to the official Koteret Plus domain.
     if ((request.method === "GET" || request.method === "HEAD") && (url.hostname === "hadashota.singles-pr.workers.dev" || url.hostname === "www.koteretplus.com")) {
       const publicPaths = new Map([
@@ -380,24 +384,38 @@ async function handleHotStorySync(request,env){
   const title=cleanPushTitle(body?.title||"");
   const sources=Math.max(0,Math.min(100,Number(body?.sources)||0));
   let at=String(body?.at||"");if(!Number.isFinite(Date.parse(at)))at=new Date().toISOString();
-  if(!fingerprint||title.length<6)return json({error:"Invalid hot story"},400,{"Cache-Control":"no-store"});
-  return adminHubCall(env,"/hot-story/display",{fingerprint,title,sources,at});
+  if(!fingerprint||title.length<6||sources<2)return json({error:"Invalid hot story"},400,{"Cache-Control":"no-store"});
+  const payload={fingerprint,title,sources,at,official:!!body?.official,generatedAt:new Date().toISOString()};
+  const stub=pushHubStub(env);
+  if(!stub)return json({error:"Push infrastructure is not bound"},503,{"Cache-Control":"no-store"});
+  // The exact headline that the newsroom displays is also fed into the Push
+  // stability gate. Two observations separated by >=45 seconds are required,
+  // so a transient render never sends a notification, while a genuine change
+  // in "הסיפור המרכזי עכשיו" is no longer dependent on a second algorithm.
+  const [displayResponse,leadResponse]=await Promise.all([
+    stub.fetch(new Request("https://push.internal/hot-story/display",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})),
+    stub.fetch(new Request("https://push.internal/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}))
+  ]);
+  const leadResult=await leadResponse.json().catch(()=>({ok:leadResponse.ok}));
+  return json({ok:displayResponse.ok&&leadResponse.ok,displaySynced:displayResponse.ok,pushSync:leadResult},displayResponse.ok&&leadResponse.ok?200:207,{"Cache-Control":"no-store"});
 }
 
 async function handleContactSubmission(request,env){
   let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
   const name=cleanText(String(body?.name||"")).slice(0,80);
   const phone=String(body?.phone||"").replace(/[^0-9+()\-\s]/g,"").trim().slice(0,30);
+  const email=String(body?.email||"").trim().toLowerCase().replace(/[<>\r\n]/g,"").slice(0,160);
   const topic=cleanText(String(body?.topic||"כללי")).slice(0,60)||"כללי";
   const message=cleanText(String(body?.message||"")).slice(0,1200);
   if(name.length<2)return json({error:"יש להזין שם"},400,{"Cache-Control":"no-store"});
   if(phone.replace(/\D/g,"").length<7)return json({error:"יש להזין מספר טלפון תקין"},400,{"Cache-Control":"no-store"});
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email))return json({error:"יש להזין כתובת אימייל תקינה"},400,{"Cache-Control":"no-store"});
   if(message.length<5)return json({error:"יש לכתוב הודעה קצרה"},400,{"Cache-Control":"no-store"});
   const ip=String(request.headers.get("CF-Connecting-IP")||"");
   const ua=String(request.headers.get("User-Agent")||"").slice(0,160);
   const clientKey=(await sha256Base64Url(`${ip}|${ua}`)).slice(0,32);
   const source=String(body?.source||"site").slice(0,30);
-  return adminHubCall(env,"/contact",{name,phone,topic,message,clientKey,source});
+  return adminHubCall(env,"/contact",{name,phone,email,topic,message,clientKey,source});
 }
 async function handleAdminContact(request,env){
   let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
@@ -411,6 +429,14 @@ async function handleAdminDashboard(request,env){
   let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
   if(!(await verifyPromoAdmin(body?.username,body?.password)))return json({error:"שם משתמש או סיסמה שגויים"},401,{"Cache-Control":"no-store"});
   return adminHubCall(env,"/admin/dashboard",{});
+}
+async function handleAdminRegisterDevice(request,env){
+  let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
+  if(!(await verifyPromoAdmin(body?.username,body?.password)))return json({error:"שם משתמש או סיסמה שגויים"},401,{"Cache-Control":"no-store"});
+  const deviceId=String(body?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+  const userAgent=String(body?.userAgent||request.headers.get("User-Agent")||"").slice(0,220);
+  if(!deviceId)return json({error:"מזהה מכשיר חסר"},400,{"Cache-Control":"no-store"});
+  return adminHubCall(env,"/admin/register-device",{deviceId,userAgent});
 }
 async function handleAdminPush(request,env){
   let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
@@ -1027,7 +1053,7 @@ async function handleSourceArticleImage(url, ctx) {
         signal: controller.signal,
         headers: {
           "Accept": "text/html,application/xhtml+xml",
-          "User-Agent": "Mozilla/5.0 (compatible; KoteretPlus/153; +https://koteretplus.com/)"
+          "User-Agent": "Mozilla/5.0 (compatible; KoteretPlus/156; +https://koteretplus.com/)"
         }
       });
     } finally { clearTimeout(timer); }
@@ -1441,7 +1467,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "154.0.0",
+          "X-Hadashota-Version": "156.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1564,13 +1590,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "154.0.0",
+      "X-Hadashota-Version": "156.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "154.0.0",
+      "X-Hadashota-Version": "156.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1604,7 +1630,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "154.0.0"
+        "X-Hadashota-Version": "156.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1626,7 +1652,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "154.0.0"
+    "X-Hadashota-Version": "156.0.0"
   });
 }
 
@@ -2589,7 +2615,7 @@ function escSignal(key,score,available,reason,extra={}){return {key,label:ESCALA
 function escLevel(score){score=Number(score)||0;if(score<30)return {label:"שגרה",key:"routine"};if(score<50)return {label:"מתיחות מוגברת",key:"elevated"};if(score<70)return {label:"מתיחות גבוהה",key:"high"};if(score<85)return {label:"הסלמה משמעותית",key:"significant"};return {label:"מצב חריג",key:"exceptional"};}
 async function escFetch(url,{timeout=6500,type="text",headers={},cf}={}){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort("timeout"),timeout);
-  try{const response=await fetch(url,{signal:controller.signal,redirect:"follow",headers:{"Accept-Language":"he,en-US;q=.8,en;q=.6","User-Agent":"Mozilla/5.0 (compatible; KoteretPlus-Escalation/153.0; +https://koteretplus.com/escalation)",...headers},...(cf?{cf}: {}) });if(!response.ok)throw new Error(`HTTP ${response.status}`);return type==="json"?await response.json():await response.text();}finally{clearTimeout(timer);}
+  try{const response=await fetch(url,{signal:controller.signal,redirect:"follow",headers:{"Accept-Language":"he,en-US;q=.8,en;q=.6","User-Agent":"Mozilla/5.0 (compatible; KoteretPlus-Escalation/156.0; +https://koteretplus.com/escalation)",...headers},...(cf?{cf}: {}) });if(!response.ok)throw new Error(`HTTP ${response.status}`);return type==="json"?await response.json():await response.text();}finally{clearTimeout(timer);}
 }
 async function readEscalationNewsCache(request){
   const cache=caches.default,items=[],sources=[];let freshest=0;
@@ -2883,7 +2909,7 @@ async function collectExternalEscalationSignals(){
   const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
   return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic},experimental:{pizza},updatedAt:new Date().toISOString()};
 }
-// V154 background calibration refresh: split the external OSINT set into three
+// V156 background calibration refresh: split the external OSINT set into three
 // independent five-minute batches. Each signal family still refreshes roughly
 // every 15 minutes, but no scheduled invocation has to perform the whole set.
 async function collectExternalEscalationSignalGroup(groupIndex=0){
@@ -2916,14 +2942,14 @@ async function escalationHubCall(env,path,method="GET",body=null){const stub=pus
 async function handleEscalation(request,env,ctx){
   try{
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"156.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"156.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"154.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"156.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"156.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3099,22 +3125,29 @@ function selectServerPushLead(items, now=Date.now()) {
     return {item,reports,recentReports,uniqueSources,ageMinutes,latestAt,score,hotScore,hasOfficial,spreadMinutes};
   });
   const sort=(a,b)=>b.score-a.score||Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||String(a.item?.id||a.item?.url||a.item?.title||"").localeCompare(String(b.item?.id||b.item?.url||b.item?.title||""),"he");
+
+  // Keep the background Push selector aligned with the visible newsroom hero:
+  // prefer 3+ corroborating sources for the first hour, allow 2 sources only
+  // when the snapshot contains a full hour with no fresh 3-source story, then
+  // retain a 3+ source story for at most three hours.
   const verified=entries.filter((e)=>e.uniqueSources>=3&&e.ageMinutes<=60).sort(sort);
   let winner=verified[0]||null;
-  const retained=entries.filter((e)=>e.uniqueSources>=3&&e.ageMinutes>60&&e.ageMinutes<=180).sort((a,b)=>Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||sort(a,b));
+  const retainedThree=entries.filter((e)=>e.uniqueSources>=3&&e.ageMinutes>60&&e.ageMinutes<=180)
+    .sort((a,b)=>Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||sort(a,b));
   const observed=entries.flatMap((e)=>e.reports||[]).map((r)=>Date.parse(r?.publishedAt||0)).filter(Number.isFinite);
   const oldest=observed.length?Math.min(...observed):Infinity;
-  if(!winner&&Number.isFinite(oldest)&&oldest<=now-60*60*1000&&verified.length===0){
+  const hasFullHour=Number.isFinite(oldest)&&oldest<=now-60*60*1000;
+  if(!winner&&hasFullHour&&verified.length===0){
     winner=entries.filter((e)=>e.uniqueSources>=2&&e.ageMinutes<=60).sort(sort)[0]
-      ||entries.filter((e)=>e.uniqueSources>=2&&e.ageMinutes>60&&e.ageMinutes<=180).sort((a,b)=>Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||sort(a,b))[0]
+      ||entries.filter((e)=>e.uniqueSources>=2&&e.ageMinutes>60&&e.ageMinutes<=180)
+        .sort((a,b)=>Date.parse(b.latestAt||0)-Date.parse(a.latestAt||0)||sort(a,b))[0]
       ||null;
   }
-  if(!winner)winner=retained[0]||null;
+  if(!winner)winner=retainedThree[0]||null;
   if(!winner)return null;
   winner.fingerprint=serverLeadFingerprint(winner);
   return winner;
 }
-
 function cleanPushTitle(value) {
   return String(value||"").replace(/<[^>]*>/g," ").replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/\s+/g," ").trim().slice(0,150);
 }
@@ -3175,7 +3208,7 @@ async function refreshBackgroundNewsShards(env,ctx,shards=[]){
       if(!response.ok)return;
       const payload=await response.json();
       if(Array.isArray(payload?.items))fresh.set(shard,payload);
-    }catch(error){console.warn(`V154 background shard ${shard} failed`,error);}
+    }catch(error){console.warn(`V156 background shard ${shard} failed`,error);}
   }));
   return fresh;
 }
@@ -3222,7 +3255,7 @@ async function runBackgroundEscalationFromNews(env,recent=[]) {
     const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString(),background:true};
     await escalationHubCall(env,"/escalation/snapshot","POST",payload);
-  }catch(error){console.warn("V154 scheduled escalation monitor failed",error);}
+  }catch(error){console.warn("V156 scheduled escalation monitor failed",error);}
 }
 
 async function runBackgroundPushMonitor(env, ctx) {
@@ -3237,7 +3270,7 @@ async function runBackgroundPushMonitor(env, ctx) {
     if(payload)await stub.fetch("https://push.internal/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     if(minute%5===0)await runBackgroundEscalationFromNews(env,context.recent);
   } catch(error) {
-    console.warn("V154 scheduled push monitor failed",error);
+    console.warn("V156 scheduled push monitor failed",error);
   }
 }
 
@@ -3306,7 +3339,7 @@ async function ensurePushStats(storage) {
   let stats=await storage.get("subscription.stats");
   if(stats?.schema==="v152"&&Number.isFinite(Number(stats.count)))return stats;
   const rows=await storage.list({prefix:"sub:"});
-  // One-time V154 repair: a browser can rotate its PushSubscription endpoint.
+  // One-time V156 repair: a browser can rotate its PushSubscription endpoint.
   // Keep only the newest subscription for the same local device id so the admin
   // count and fanout do not include stale duplicates.
   const byDevice=new Map(),remove=[];
@@ -3409,7 +3442,6 @@ async function queuePushJob(storage,notification,targetDeviceId="") {
     sources:Number.isFinite(Number(notification?.sources))?Number(notification.sources):undefined
   };
   await storage.put(`notification:${fingerprint}`,normalized);
-  await storage.put("notification.latest",normalized);
 
   let targetKey="";
   const safeDevice=String(targetDeviceId||"").slice(0,120);
@@ -3421,6 +3453,8 @@ async function queuePushJob(storage,notification,targetDeviceId="") {
     }
     if(!targetKey)return {ok:false,error:"המכשיר הזה עדיין לא רשום לקבלת Push"};
   }
+
+  if(!safeDevice)await storage.put("notification.latest",normalized);
 
   const queued={notificationFingerprint:fingerprint,targetKey,targetDeviceId:safeDevice,queuedAt:now};
   const active=await storage.get("push.job");
@@ -3434,7 +3468,7 @@ async function queuePushJob(storage,notification,targetDeviceId="") {
     await storage.setAlarm(Date.now()+100);
   }
   const history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[];
-  history.push({fingerprint,kind:normalized.kind,title:normalized.title,body:normalized.body,url:normalized.url,queuedAt:now,target:safeDevice?"test-device":"all",status:active?"queued":"sending"});
+  history.push({fingerprint,kind:normalized.kind,title:normalized.title,body:normalized.body,url:normalized.url,queuedAt:now,target:safeDevice?(normalized.kind==="admin-contact"?"admin-device":"device"):"all",status:active?"queued":"sending"});
   await storage.put("push.history",history.slice(-30));
   return {ok:true,queued:true,fingerprint,target:safeDevice?"device":"all"};
 }
@@ -3470,7 +3504,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"154.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"156.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -3569,11 +3603,18 @@ export class PushHub {
         times.push(now);await storage.put(rateKey,{times,updatedAt:new Date(now).toISOString()});
       }
       const id=crypto.randomUUID(),createdAt=new Date(now).toISOString();
-      const item={id,name:cleanText(data?.name||"").slice(0,80),phone:String(data?.phone||"").slice(0,30),topic:cleanText(data?.topic||"כללי").slice(0,60),message:cleanText(data?.message||"").slice(0,1200),source:String(data?.source||"site").slice(0,30),status:"new",createdAt};
-      if(item.name.length<2||item.phone.replace(/\D/g,"").length<7||item.message.length<5)return json({error:"פרטי הפנייה חסרים"},400,{"Cache-Control":"no-store"});
+      const item={id,name:cleanText(data?.name||"").slice(0,80),phone:String(data?.phone||"").slice(0,30),email:String(data?.email||"").trim().toLowerCase().replace(/[<>\r\n]/g,"").slice(0,160),topic:cleanText(data?.topic||"כללי").slice(0,60),message:cleanText(data?.message||"").slice(0,1200),source:String(data?.source||"site").slice(0,30),status:"new",createdAt};
+      if(item.name.length<2||item.phone.replace(/\D/g,"").length<7||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(item.email)||item.message.length<5)return json({error:"פרטי הפנייה חסרים"},400,{"Cache-Control":"no-store"});
       await storage.put(`contact.item:${String(now).padStart(13,"0")}:${id}`,item);
       const summary=await storage.get("contact.summary")||{total:0,newCount:0};summary.total=Number(summary.total||0)+1;summary.newCount=Number(summary.newCount||0)+1;summary.lastAt=createdAt;await storage.put("contact.summary",summary);
-      return json({ok:true,id},200,{"Cache-Control":"no-store"});
+      const adminRows=await storage.list({prefix:"admin.device:",limit:12});let adminPushQueued=0;
+      for(const row of adminRows.values()){
+        const deviceId=String(row?.deviceId||"");if(!deviceId)continue;
+        const mapped=String(await storage.get(`device:${deviceId}`)||"");if(!mapped)continue;
+        const queued=await queuePushJob(storage,{fingerprint:`admin-contact:${id}:${deviceId}`,kind:"admin-contact",title:"✉️ פנייה חדשה בכותרת פלוס",body:`${item.name} · ${item.topic||"כללי"}`,url:"/manage-kp-7538#contactInboxPanel",at:createdAt},deviceId);
+        if(queued.ok)adminPushQueued+=1;
+      }
+      return json({ok:true,id,adminPushQueued},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/analytics/visit"&&request.method==="POST"){
@@ -3603,16 +3644,26 @@ export class PushHub {
       return json({ok:true,total:Number(summary.totalViews||0),pageTotal:Number(summary.pages?.[page]||0),today:Number(day.views||0),pageToday:Number(day.pages?.[page]||0)},200,{"Cache-Control":"no-store"});
     }
 
+    if(url.pathname==="/admin/register-device"&&request.method==="POST"){
+      const data=await request.json().catch(()=>({}));
+      const deviceId=String(data?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+      if(!deviceId)return json({error:"מזהה מכשיר חסר"},400,{"Cache-Control":"no-store"});
+      const key=`admin.device:${deviceId}`,existing=await storage.get(key),now=new Date().toISOString();
+      await storage.put(key,{deviceId,userAgent:String(data?.userAgent||"").slice(0,220),registeredAt:existing?.registeredAt||now,lastSeenAt:now});
+      return json({ok:true,deviceId,pushReady:!!(await storage.get(`device:${deviceId}`))},200,{"Cache-Control":"no-store"});
+    }
+
     if(url.pathname==="/admin/dashboard"&&request.method==="POST"){
       const summary=await storage.get("analytics.summary")||{totalViews:0,pages:{}};
       const dayRows=[...(await storage.list({prefix:"analytics.day:"})).values()].map(stripAnalyticsDay).sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-14);
       const hourRows=[...(await storage.list({prefix:"analytics.hour:"})).values()].sort((a,b)=>`${a.date}-${String(a.hour).padStart(2,"0")}`.localeCompare(`${b.date}-${String(b.hour).padStart(2,"0")}`)).slice(-48);
       const hourOfDay=await storage.get("analytics.hourOfDay")||Array.from({length:24},(_,hour)=>({hour,views:0}));
-      const stats=await ensurePushStats(storage),lastResult=await storage.get("push.lastResult"),activeJob=await storage.get("push.job"),latestNotification=await storage.get("notification.latest"),latestLead=await storage.get("lead.latest"),history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[],escalation=await storage.get("escalation.latest");
+      const stats=await ensurePushStats(storage),lastResult=await storage.get("push.lastResult"),activeJob=await storage.get("push.job"),latestNotification=await storage.get("notification.latest"),latestLead=await storage.get("lead.latest"),leadCandidate=await storage.get("lead.candidate"),lastPushedFingerprint=await storage.get("lead.lastPushedFingerprint"),history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[],escalation=await storage.get("escalation.latest");
       const contactSummary=await storage.get("contact.summary")||{total:0,newCount:0};const contactRows=[...(await storage.list({prefix:"contact.item:"})).values()].sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0)).slice(0,30);
+      const adminDeviceRows=[...(await storage.list({prefix:"admin.device:",limit:20})).values()];let adminPushReady=0;for(const row of adminDeviceRows){if(row?.deviceId&&await storage.get(`device:${row.deviceId}`))adminPushReady+=1;}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"154.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,history:history.slice(-12).reverse()},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"156.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-12).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -3645,7 +3696,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"154.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"156.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -3698,7 +3749,7 @@ export class PushHub {
       if(candidate?.fingerprint===payload.fingerprint){candidate={...candidate,observations:Number(candidate.observations||1)+1,lastSeenAt:new Date().toISOString(),sources:Number(payload.sources||0)};}
       else candidate={fingerprint:payload.fingerprint,observations:1,firstSeenAt:new Date().toISOString(),lastSeenAt:new Date().toISOString(),sources:Number(payload.sources||0)};
       await storage.put("lead.candidate",candidate);
-      const stableMs=now-Date.parse(candidate.firstSeenAt||now),qualified=Number(payload.sources||0)>=3||(payload.official&&Number(payload.sources||0)>=2);
+      const stableMs=now-Date.parse(candidate.firstSeenAt||now),qualified=Number(payload.sources||0)>=2;
       if(!qualified||candidate.observations<2||stableMs<45000)return json({ok:true,changed:true,pending:true,observations:candidate.observations,stableSeconds:Math.round(stableMs/1000),sources:Number(payload.sources||0)});
       const queued=await queuePushJob(storage,{fingerprint:`lead:${payload.fingerprint}`,kind:"hot-story",title:payload.title,body:`🔥 הסיפור המרכזי עכשיו · ${Number(payload.sources||0)} מקורות מדווחים${payload.official?" · כולל מקור רשמי":""}`,url:"/",at:payload.at,sources:Number(payload.sources||0)});
       if(queued.ok){await storage.put("lead.lastPushedFingerprint",payload.fingerprint);await storage.delete("lead.candidate");}
