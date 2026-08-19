@@ -109,3 +109,5 @@ html[data-theme="dark"] .about-process strong,html[data-theme="dark"] .about-fea
 }
 
 .info-contact-form{display:grid;gap:12px;margin-top:22px}.info-contact-form label{display:grid;gap:6px;text-align:right;font-weight:800;font-size:13px}.info-contact-form input,.info-contact-form select,.info-contact-form textarea{width:100%;border:1px solid #d0d5dd;border-radius:12px;padding:12px 13px;font:inherit;background:#fff;color:#111827}.info-contact-form textarea{resize:vertical}.info-contact-form .contact-button{border:0;cursor:pointer;width:100%;justify-content:center}.info-contact-form .contact-button:disabled{opacity:.65}.contact-page-status{min-height:22px;font-size:13px;font-weight:800;color:#087443}
+
+.contact-page-status[data-state="error"]{color:#b42318!important}.contact-page-status[data-state="success"]{color:#087443!important}

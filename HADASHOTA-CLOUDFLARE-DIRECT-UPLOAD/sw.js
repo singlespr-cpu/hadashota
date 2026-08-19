@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "165.0.0";
+const HADASHOTA_SW_VERSION = "167.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -28,6 +28,36 @@ async function writePushDeviceId(deviceId) {
   } catch {}
 }
 
+const PUSH_DISPLAY_DEDUPE_MS=24*60*60*1000;
+const pushDisplayClaims=new Set();
+function pushDisplayCacheRequest(fingerprint){
+  return new Request(`${self.location.origin}/.__kp_push_seen/${encodeURIComponent(String(fingerprint||"").slice(0,220))}`);
+}
+async function claimPushDisplay(fingerprint){
+  const fp=String(fingerprint||"");
+  if(!fp)return true;
+  if(pushDisplayClaims.has(fp))return false;
+  pushDisplayClaims.add(fp);
+  try{
+    const cache=await caches.open("koteret-plus-push-seen-v1");
+    const key=pushDisplayCacheRequest(fp),hit=await cache.match(key);
+    if(hit){
+      const at=Number(await hit.text());
+      if(Number.isFinite(at)&&Date.now()-at<PUSH_DISPLAY_DEDUPE_MS){pushDisplayClaims.delete(fp);return false;}
+    }
+    // Claim before showNotification so two near-simultaneous push events cannot
+    // both pass the check. A failed display rolls the claim back below.
+    await cache.put(key,new Response(String(Date.now()),{headers:{"Content-Type":"text/plain","Cache-Control":"no-store"}}));
+    return true;
+  }catch{return true;}
+}
+async function finishPushDisplayClaim(fingerprint,shown=true){
+  const fp=String(fingerprint||"");
+  if(!fp)return;
+  if(!shown){try{const cache=await caches.open("koteret-plus-push-seen-v1");await cache.delete(pushDisplayCacheRequest(fp));}catch{}}
+  pushDisplayClaims.delete(fp);
+}
+
 self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     try {
@@ -36,18 +66,25 @@ self.addEventListener("push", (event) => {
       if (!response.ok) return;
       const payload = await response.json();
       if (!payload?.fingerprint || !payload?.title) return;
+      if (!(await claimPushDisplay(payload.fingerprint))) return;
 
-      await self.registration.showNotification(payload.title, {
-        body: payload.body || "עדכון חדש מכותרת פלוס",
-        tag: `koteret-${payload.kind||"push"}-${payload.fingerprint}`,
-        renotify: true,
-        requireInteraction: payload.kind === "escalation",
-        icon: "/icon-192.png?v=165.0.0",
-        badge: "/favicon-32.png?v=165.0.0",
-        data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
-        timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
-      });
-      try { await fetch("/api/push/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"display",fingerprint:payload.fingerprint,deviceId})}); } catch {}
+      let shown=false;
+      try {
+        await self.registration.showNotification(payload.title, {
+          body: payload.body || "עדכון חדש מכותרת פלוס",
+          tag: `koteret-${payload.kind||"push"}-${payload.fingerprint}`,
+          renotify: true,
+          requireInteraction: payload.kind === "escalation",
+          icon: "/icon-192.png?v=167.0.0",
+          badge: "/favicon-32.png?v=167.0.0",
+          data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
+          timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
+        });
+        shown=true;
+        try { await fetch("/api/push/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"display",fingerprint:payload.fingerprint,deviceId})}); } catch {}
+      } finally {
+        await finishPushDisplayClaim(payload.fingerprint,shown);
+      }
 
       if (self.registration.setAppBadge) { try { await self.registration.setAppBadge(1); } catch {} }
     } catch (error) { console.warn("Background push display failed", error); }

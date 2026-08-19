@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "165.0.0";
+const KOTERET_CLIENT_BUILD = "167.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -456,9 +456,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V165 · API ${apiVersion}` : "גרסה V165 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V167 · API ${apiVersion}` : "גרסה V167 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V165 · API לא מחובר";
+    marker.textContent = "גרסה V167 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -842,6 +842,8 @@ function bindEvents() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       state.lastHiddenAt = Date.now();
+      clearTimeout(state.alertTimer);
+      state.alertTimer = null;
       return;
     }
 
@@ -1083,7 +1085,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V165: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V167: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -3664,7 +3666,7 @@ function renderLeadStory() {
     el.leadStorySources.innerHTML = "";
     el.leadStoryCta.classList.add("hidden");
     el.leadStoryMedia.classList.add("hidden");
-    el.leadStory.classList.remove("hidden", "has-media");
+    el.leadStory.classList.remove("hidden", "has-media", "is-initializing");
     return;
   }
 
@@ -3795,7 +3797,7 @@ function renderLeadStory() {
     ? `<a href="${escapeHtml(storyHref(source))}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanDisplayText(source.sourceName))}</a>`
     : `<span>${escapeHtml(cleanDisplayText(source.sourceName))}</span>`).join("");
 
-  el.leadStory.classList.remove("hidden");
+  el.leadStory.classList.remove("hidden", "is-initializing");
 
   // Local browser notifications remain strictly 3+ sources.
   if (Number(winner.uniqueSources) >= 3) updateLeadHeadlineTracking(winner);
@@ -4115,7 +4117,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=165.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=167.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4185,7 +4187,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=165.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=167.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -5881,19 +5883,56 @@ async function shareKoteretPlus() {
 
 function openContactModal(topic = "", trigger = null) {
   if (topic && el.contactTopic) el.contactTopic.value = topic;
-  if (el.contactStatus) el.contactStatus.textContent = "";
+  setContactStatus("");
   openSiteModal(el.contactModal, trigger || el.contactBtn || document.activeElement);
+}
+
+function setContactStatus(message, stateName = "") {
+  if (!el.contactStatus) return;
+  el.contactStatus.textContent = message || "";
+  if (stateName) el.contactStatus.dataset.state = stateName;
+  else delete el.contactStatus.dataset.state;
 }
 
 async function submitContactForm(event) {
   event?.preventDefault?.();
-  if(!el.contactForm)return;
-  const name=String(el.contactName?.value||"").trim(),phone=String(el.contactPhone?.value||"").trim(),email=String(el.contactEmail?.value||"").trim(),topic=String(el.contactTopic?.value||"כללי"),message=String(el.contactMessage?.value||"").trim();
-  const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email);
-  if(name.length<2||phone.replace(/\D/g,"").length<7||!emailOk||message.length<5){if(el.contactStatus)el.contactStatus.textContent="מלאו שם, טלפון, אימייל תקין והודעה קצרה.";return;}
-  if(el.contactSubmit){el.contactSubmit.disabled=true;el.contactSubmit.textContent="שולח…";}
-  if(el.contactStatus)el.contactStatus.textContent="";
-  try{const r=await fetch("/api/contact",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({name,phone,email,topic,message,source:"home-popup"})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"השליחה נכשלה");el.contactForm.reset();if(el.contactStatus)el.contactStatus.textContent="הפנייה התקבלה בהצלחה ✓ נחזור אליכם בהקדם.";showToast("הפנייה התקבלה");window.setTimeout(()=>closeSiteModal(el.contactModal,false),1500)}catch(error){if(el.contactStatus)el.contactStatus.textContent=String(error?.message||error)}finally{if(el.contactSubmit){el.contactSubmit.disabled=false;el.contactSubmit.textContent="שליחת הודעה";}}
+  const form = el.contactForm;
+  if (!form) return;
+  setContactStatus("");
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    setContactStatus("נא להשלים את כל שדות החובה ולוודא שכתובת האימייל תקינה.", "error");
+    return;
+  }
+  const data = new FormData(form);
+  const name = String(data.get("name") || "").trim();
+  const phone = String(data.get("phone") || "").trim();
+  const email = String(data.get("email") || "").trim();
+  const topic = String(data.get("topic") || "כללי").trim() || "כללי";
+  const message = String(data.get("message") || "").trim();
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email);
+  if (name.length < 2 || phone.replace(/\D/g, "").length < 5 || !emailOk || message.length < 2) {
+    setContactStatus("נא לבדוק שם, טלפון, אימייל והודעה ולנסות שוב.", "error");
+    return;
+  }
+  if (el.contactSubmit) { el.contactSubmit.disabled = true; el.contactSubmit.textContent = "שולח…"; }
+  try {
+    const r = await fetch("/api/contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ name, phone, email, topic, message, source: "home-popup" })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d?.ok === false) throw new Error(d?.error || "השליחה נכשלה");
+    form.reset();
+    setContactStatus("פנייתך התקבלה בהצלחה ✓", "success");
+    showToast("פנייתך התקבלה");
+    window.setTimeout(() => closeSiteModal(el.contactModal, false), 2000);
+  } catch (error) {
+    setContactStatus(String(error?.message || "השליחה נכשלה. נסו שוב בעוד רגע."), "error");
+  } finally {
+    if (el.contactSubmit) { el.contactSubmit.disabled = false; el.contactSubmit.textContent = "שליחת הודעה"; }
+  }
 }
 
 let toastTimer;
@@ -5923,7 +5962,7 @@ function syncAlertSettings() {
   if (el.alertCityPicker) el.alertCityPicker.classList.toggle("disabled", state.alertAllIsrael);
   if (el.alertSoundToggle) el.alertSoundToggle.checked = state.alertSound;
   if (el.alertDesktopToggle) el.alertDesktopToggle.checked = state.alertDesktop;
-  if (el.pushOrefToggle) el.pushOrefToggle.checked = state.alertDesktop;
+  if (el.pushOrefToggle) { el.pushOrefToggle.checked = state.alertDesktop; el.pushOrefToggle.setAttribute("aria-checked", state.alertDesktop ? "true" : "false"); }
   if (el.pushOrefSummary) el.pushOrefSummary.textContent = state.alertAllIsrael ? "Push לכל הארץ" : (state.alertCities.length ? `Push: ${state.alertCities.join(", ")}` : "בחרו אזורי עניין לקבלת Push");
   if (el.alertSoundQuick) {
     el.alertSoundQuick.setAttribute("aria-pressed", state.alertSound ? "true" : "false");
@@ -5988,7 +6027,9 @@ async function setAlertDesktop(enabled) {
 
 function scheduleAlertPoll(delay) {
   clearTimeout(state.alertTimer);
-  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : (document.hidden ? 15000 : 5000));
+  state.alertTimer = null;
+  if (document.hidden) return;
+  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : 5000);
 }
 
 async function pollEmergencyAlerts() {
@@ -6002,7 +6043,7 @@ async function pollEmergencyAlerts() {
     console.warn("Emergency alerts:", error);
     renderAlertConnectionError();
   } finally {
-    scheduleAlertPoll(document.hidden ? 15000 : 5000);
+    if (!document.hidden) scheduleAlertPoll(5000);
   }
 }
 
