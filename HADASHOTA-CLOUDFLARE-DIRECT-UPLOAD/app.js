@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "158.0.0";
+const KOTERET_CLIENT_BUILD = "159.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -432,7 +432,7 @@ function init() {
   //    localStorage snapshots;
   // 2) as soon as that fast render completes, force one real source collection
   //    and replace the screen again if newer data exists.
-  // V158: browsers only consume the shared edge snapshot. The one-minute Cron
+  // V159: browsers only consume the shared edge snapshot. The one-minute Cron
   // owns source collection, so opening the site never triggers another 45-source
   // collection just because a cached snapshot was returned.
   loadNews(false).catch((error) => console.warn("Initial news load failed", error));
@@ -457,9 +457,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V158 · API ${apiVersion}` : "גרסה V158 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V159 · API ${apiVersion}` : "גרסה V159 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V158 · API לא מחובר";
+    marker.textContent = "גרסה V159 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1110,7 +1110,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V158: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V159: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -1179,7 +1179,7 @@ function refreshNewsOnForeground(reason = "foreground") {
   const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
   const snapshotAge = Number.isFinite(generatedMs) ? now - generatedMs : Infinity;
 
-  // V158: foreground resumes read the shared edge snapshot only. Source collection
+  // V159: foreground resumes read the shared edge snapshot only. Source collection
   // is centralized in Cron; a reader returning to the tab must never fan out to
   // publishers.
   void hiddenFor; void snapshotAge;
@@ -4171,7 +4171,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=158.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=159.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4241,7 +4241,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=158.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=159.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
