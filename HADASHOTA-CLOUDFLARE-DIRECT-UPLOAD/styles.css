@@ -8623,7 +8623,7 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 }
 
 
-/* V162 — responsive Push settings + fast modal interactions */
+/* V163 — responsive Push settings + fast modal interactions */
 .settings-push-group{border:1px solid rgba(17,24,39,.08);border-radius:14px;padding:2px 10px 6px;margin:2px 0 10px;background:rgba(17,24,39,.018)}
 .push-filter-row{margin-inline-start:12px;padding-inline-start:6px;border-top:1px dashed rgba(17,24,39,.08)}
 .push-filter-row input:disabled + i{opacity:.42}
@@ -8633,11 +8633,11 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 @media(max-width:760px){.site-modal .modal-backdrop,.site-modal .site-modal-backdrop{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.settings-push-group{padding-inline:7px}.push-filter-row{margin-inline-start:6px}}
 html[data-theme="dark"] .settings-push-group{border-color:rgba(255,255,255,.09);background:rgba(255,255,255,.025)}
 
-/* V162 contact form */
+/* V163 contact form */
 .contact-inline-form{display:grid;gap:10px;margin:15px 0 8px;text-align:right}.contact-inline-form label{display:grid;gap:5px;font-size:11px;font-weight:800;color:#344054}.contact-inline-form input,.contact-inline-form select,.contact-inline-form textarea{width:100%;border:1px solid #d0d5dd;border-radius:11px;padding:10px 11px;background:#fff;color:#101828;font:inherit;outline:none}.contact-inline-form input:focus,.contact-inline-form select:focus,.contact-inline-form textarea:focus{border-color:#e92d3d;box-shadow:0 0 0 3px rgba(233,45,61,.09)}.contact-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.contact-submit-button{border:0;border-radius:11px;padding:11px 14px;background:#e92d3d;color:#fff;font-weight:900;cursor:pointer;touch-action:manipulation}.contact-submit-button:disabled{opacity:.65}.contact-form-status{min-height:18px;font-size:11px;font-weight:800;color:#087443}.modal-card-contact{width:min(94vw,560px)!important}.modal-card-contact>p{max-width:460px;margin-inline:auto}.modal-card-contact .modal-note{margin-top:10px}@media(max-width:620px){.contact-form-grid{grid-template-columns:1fr}.contact-inline-form{gap:8px}.modal-card-contact{max-height:calc(100dvh - 22px);overflow:auto}}html[data-theme="dark"] .contact-inline-form label{color:#cbd5e1}html[data-theme="dark"] .contact-inline-form input,html[data-theme="dark"] .contact-inline-form select,html[data-theme="dark"] .contact-inline-form textarea{background:#111821;color:#edf2f7;border-color:#344054}
 
 
-/* V162 — responsive modal performance: no heavy glass blur on touch devices */
+/* V163 — responsive modal performance: no heavy glass blur on touch devices */
 .settings-modal__backdrop,.v105-tool-modal__backdrop{backdrop-filter:blur(3px)!important;-webkit-backdrop-filter:blur(3px)!important}
 .settings-modal button,.v105-tool-modal button,.v105-tool-modal a{touch-action:manipulation}
 @media(max-width:760px){
@@ -8645,14 +8645,14 @@ html[data-theme="dark"] .settings-push-group{border-color:rgba(255,255,255,.09);
   .settings-modal__panel,.v105-tool-modal__panel{will-change:transform,opacity}
 }
 
-/* V162 final modal responsiveness: touch devices should react with no transition wait. */
+/* V163 final modal responsiveness: touch devices should react with no transition wait. */
 @media(max-width:760px){
   .settings-modal,.settings-modal__panel,.v105-tool-modal,.v105-tool-modal__panel{transition:none!important}
   .site-modal .modal-card{scroll-behavior:auto!important}
 }
 
 /* =========================================================
-   V162 — advertising CTAs, compact feed window and interaction hardening
+   V163 — advertising CTAs, compact feed window and interaction hardening
    ========================================================= */
 .hero-news-grid .lead-story-topline{
   border-bottom:0!important;
@@ -8759,7 +8759,7 @@ html[data-theme="dark"] .feed-promo-house .feed-promo-copy p,html[data-theme="da
 html[data-theme="dark"] .feed-show-more{background:#151b24;border-color:#303947;color:#d7dde5}
 
 
-/* V162 launch polish */
+/* V163 launch polish */
 .promo-card:not(.is-active){background:#e32636!important;border-color:#e32636!important}
 .promo-card:not(.is-active) .promo-card-link{color:#fff!important}
 .promo-card:not(.is-active) .promo-card-text{color:#fff!important;font-weight:950!important}

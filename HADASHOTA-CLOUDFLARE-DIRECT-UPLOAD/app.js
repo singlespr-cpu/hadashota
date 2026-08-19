@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "162.0.0";
+const KOTERET_CLIENT_BUILD = "163.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -469,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V162 · API ${apiVersion}` : "גרסה V162 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V163 · API ${apiVersion}` : "גרסה V163 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V162 · API לא מחובר";
+    marker.textContent = "גרסה V163 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1122,7 +1122,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V162: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V163: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -4150,7 +4150,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=162.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=163.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4220,7 +4220,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=162.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=163.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 

@@ -248,7 +248,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "162.0.0",
+          version: "163.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -261,7 +261,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "162.0.0",
+        version: "163.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -271,7 +271,7 @@ export default {
       });
     }
 
-    // V162: the workers.dev hostname is kept only as a technical endpoint.
+    // V163: the workers.dev hostname is kept only as a technical endpoint.
     // Public documents permanently resolve to the official Koteret Plus domain.
     if ((request.method === "GET" || request.method === "HEAD") && (url.hostname === "hadashota.singles-pr.workers.dev" || url.hostname === "www.koteretplus.com")) {
       const publicPaths = new Map([
@@ -291,11 +291,17 @@ export default {
       }
     }
 
+    // V163: keep every executable/style asset version-coherent with the HTML.
+    // These files deliberately pass through the Worker with no-cache headers, while
+    // heavy static images/icons continue to bypass the Worker via Static Assets.
     if (url.pathname === "/sw.js") return serveNoCacheAsset(request, env, "/sw.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/app.js") return serveNoCacheAsset(request, env, "/app.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/styles.css") return serveNoCacheAsset(request, env, "/styles.css", "text/css; charset=utf-8");
     if (url.pathname === "/escalation.js") return serveNoCacheAsset(request, env, "/escalation.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/escalation.css") return serveNoCacheAsset(request, env, "/escalation.css", "text/css; charset=utf-8");
+    if (url.pathname === "/contact.js") return serveNoCacheAsset(request, env, "/contact.js", "application/javascript; charset=utf-8");
+    if (url.pathname === "/site-analytics.js") return serveNoCacheAsset(request, env, "/site-analytics.js", "application/javascript; charset=utf-8");
+    if (url.pathname === "/info.css") return serveNoCacheAsset(request, env, "/info.css", "text/css; charset=utf-8");
     if (url.pathname === "/site.webmanifest") return serveNoCacheAsset(request, env, "/site.webmanifest", "application/manifest+json; charset=utf-8");
     if (url.pathname === "/robots.txt") return robotsResponse(PUBLIC_SITE_ORIGIN);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(PUBLIC_SITE_ORIGIN);
@@ -1490,7 +1496,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "162.0.0",
+          "X-Hadashota-Version": "163.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1613,13 +1619,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "162.0.0",
+      "X-Hadashota-Version": "163.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "162.0.0",
+      "X-Hadashota-Version": "163.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1653,7 +1659,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "162.0.0"
+        "X-Hadashota-Version": "163.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1675,7 +1681,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "162.0.0"
+    "X-Hadashota-Version": "163.0.0"
   });
 }
 
@@ -2932,7 +2938,7 @@ async function collectExternalEscalationSignals(){
   const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
   return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic},experimental:{pizza},updatedAt:new Date().toISOString()};
 }
-// V162 background calibration refresh: split the external OSINT set into three
+// V163 background calibration refresh: split the external OSINT set into three
 // independent five-minute batches. Each signal family still refreshes roughly
 // every 15 minutes, but no scheduled invocation has to perform the whole set.
 async function collectExternalEscalationSignalGroup(groupIndex=0){
@@ -2966,14 +2972,14 @@ async function handleEscalation(request,env,ctx){
   maybeTrackOnlinePresenceFromUrl(request,env,ctx,"escalation");
   try{
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"162.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"162.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"162.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"162.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3232,7 +3238,7 @@ async function refreshBackgroundNewsShards(env,ctx,shards=[]){
       if(!response.ok)return;
       const payload=await response.json();
       if(Array.isArray(payload?.items))fresh.set(shard,payload);
-    }catch(error){console.warn(`V162 background shard ${shard} failed`,error);}
+    }catch(error){console.warn(`V163 background shard ${shard} failed`,error);}
   }));
   return fresh;
 }
@@ -3279,7 +3285,7 @@ async function runBackgroundEscalationFromNews(env,recent=[]) {
     const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString(),background:true};
     await escalationHubCall(env,"/escalation/snapshot","POST",payload);
-  }catch(error){console.warn("V162 scheduled escalation monitor failed",error);}
+  }catch(error){console.warn("V163 scheduled escalation monitor failed",error);}
 }
 
 async function runBackgroundPushMonitor(env, ctx) {
@@ -3299,7 +3305,7 @@ async function runBackgroundPushMonitor(env, ctx) {
     } catch(error) { console.warn("OREF background push sync failed",error); }
     if(minute%5===0)await runBackgroundEscalationFromNews(env,context.recent);
   } catch(error) {
-    console.warn("V162 scheduled push monitor failed",error);
+    console.warn("V163 scheduled push monitor failed",error);
   }
 }
 
@@ -3368,7 +3374,7 @@ async function ensurePushStats(storage) {
   let stats=await storage.get("subscription.stats");
   if(stats?.schema==="v152"&&Number.isFinite(Number(stats.count)))return stats;
   const rows=await storage.list({prefix:"sub:"});
-  // One-time V162 repair: a browser can rotate its PushSubscription endpoint.
+  // One-time V163 repair: a browser can rotate its PushSubscription endpoint.
   // Keep only the newest subscription for the same local device id so the admin
   // count and fanout do not include stale duplicates.
   const byDevice=new Map(),remove=[];
@@ -3551,7 +3557,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"162.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"163.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -3735,7 +3741,7 @@ export class PushHub {
         else if(seen<cleanupCutoff)staleOnlineKeys.push(key);
       }
       if(staleOnlineKeys.length)await Promise.all(staleOnlineKeys.map((key)=>storage.delete(key)));
-      return json({ok:true,version:"162.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today,onlineNow,onlinePages,onlineWindowSeconds:150},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows},ads},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"163.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today,onlineNow,onlinePages,onlineWindowSeconds:150},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows},ads},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -3788,7 +3794,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"162.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"163.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
