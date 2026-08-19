@@ -200,7 +200,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "140.0.0",
+          version: "142.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -213,7 +213,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "140.0.0",
+        version: "142.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -377,8 +377,8 @@ async function serveEscalationHtmlAsset(request, env, origin) {
     if (publicData?.latest?.level) level = String(publicData.latest.level);
   } catch {}
   const desc = score === "—"
-    ? "מדד ההסלמה של כותרת פלוס — רמת המתיחות האזורית בזמן אמת על בסיס מקורות פתוחים ורשמיים."
-    : `מדד ההסלמה עומד על ${score}/100 — ${level}. מדד OSINT של כותרת פלוס לרמת המתיחות האזורית בזמן אמת.`;
+    ? "מדד ההסלמה ישראל–איראן של כותרת פלוס — רמת המתיחות האזורית בזמן אמת על בסיס חדשות, מקורות רשמיים, תעופה, הורמוז ומידע OSINT פתוח."
+    : `מדד ההסלמה ישראל–איראן עומד על ${score}/100 — ${level}. תמונת מצב OSINT בזמן אמת מכותרת פלוס, המבוססת על חדשות ומקורות ציבוריים ורשמיים.`;
   const html = (await asset.text())
     .replaceAll("__SITE_URL__", origin)
     .replaceAll("__ESC_SCORE__", score)
@@ -1323,7 +1323,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "140.0.0",
+          "X-Hadashota-Version": "142.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1446,13 +1446,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "140.0.0",
+      "X-Hadashota-Version": "142.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "140.0.0",
+      "X-Hadashota-Version": "142.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1486,7 +1486,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "140.0.0"
+        "X-Hadashota-Version": "142.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1508,7 +1508,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "140.0.0"
+    "X-Hadashota-Version": "142.0.0"
   });
 }
 
@@ -2439,18 +2439,22 @@ function cors(response) {
 
 
 /* =========================================================
-   V140 — KOTERET PLUS ESCALATION INDEX
+   V141 — KOTERET PLUS ESCALATION INDEX
    Multi-signal OSINT situational-awareness index.
    The score is 0–100 intensity, NOT a probability of war.
    ========================================================= */
-const ESCALATION_WEIGHTS = Object.freeze({news:22,official:12,aviation:18,notam:10,oil:12,us:10,maritime:10,market:6});
-const ESCALATION_LABELS = Object.freeze({news:"מודיעין חדשותי",official:"פיקוד העורף + רשמי",aviation:"תעופה מעל איראן",notam:"NOTAM ומרחב אווירי",oil:"Brent",us:"עמדת ארה״ב",maritime:"הורמוז והמפרץ",market:"שוק חיזוי"});
+const ESCALATION_WEIGHTS = Object.freeze({news:18,official:12,aviation:14,military:6,notam:8,airrisk:7,oil:8,us:8,maritime:8,nuclear:4,market:3,diplomatic:4});
+const ESCALATION_LABELS = Object.freeze({news:"מודיעין חדשותי",official:"פיקוד העורף + רשמי",aviation:"תעופה אזרחית מעל איראן",military:"נוכחות צבאית גלויה",notam:"NOTAM ומרחב אווירי",airrisk:"אזהרות תעופה אזוריות",oil:"Brent",us:"עמדת ארה״ב",maritime:"הורמוז והמפרץ",nuclear:"איראן והגרעין",market:"שוק חיזוי",diplomatic:"אזהרות בינלאומיות"});
 const ESCALATION_SOURCE_URLS = Object.freeze({
-  news:"/", official:"https://www.oref.org.il/", aviation:"https://www.adsb.lol/",
+  news:"/", official:"https://www.oref.org.il/", aviation:"https://www.adsb.lol/", military:"https://www.adsb.lol/",
   notam:"https://ext.iaa.gov.il/aeroinfo/AeroInfo.aspx?msgType=Notam",
+  airrisk:"https://www.easa.europa.eu/en/domains/air-operations/czibs",
   oil:"https://fred.stlouisfed.org/series/DCOILBRENTEU",
   us:"https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/",
-  maritime:"https://www.ukmto.org/recent-incidents", market:"https://polymarket.com/"
+  maritime:"https://www.ukmto.org/recent-incidents",
+  nuclear:"https://www-news.iaea.org/EventList.aspx",
+  market:"https://polymarket.com/",
+  diplomatic:"https://www.gov.uk/foreign-travel-advice/israel"
 });
 const ESCALATION_EXTERNAL_TTL_MS = 15*60*1000;
 const ESCALATION_PUBLIC_REFRESH_MS = 55*1000;
@@ -2463,10 +2467,10 @@ const ESCALATION_DEESC_RX = /(?:הפסקת אש|רגיעה|הרגעה|הסכם|�
 function escClamp(value,min=0,max=100){const n=Number(value);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):min;}
 function escMedian(values){const a=values.map(Number).filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;}
 function escSignal(key,score,available,reason,extra={}){return {key,label:ESCALATION_LABELS[key]||key,weight:ESCALATION_WEIGHTS[key]||0,score:escClamp(score),available:available!==false,reason:String(reason||""),source:extra.source||"",sourceUrl:extra.sourceUrl||ESCALATION_SOURCE_URLS[key]||"/",checkedAt:extra.checkedAt||new Date().toISOString(),freshness:extra.freshness||"עדכני",...extra};}
-function escLevel(score){score=Number(score)||0;if(score<25)return {label:"שגרה",key:"routine"};if(score<45)return {label:"מתיחות מוגברת",key:"elevated"};if(score<65)return {label:"מתיחות גבוהה",key:"high"};if(score<80)return {label:"הסלמה משמעותית",key:"significant"};return {label:"מצב חריג",key:"exceptional"};}
+function escLevel(score){score=Number(score)||0;if(score<30)return {label:"שגרה",key:"routine"};if(score<50)return {label:"מתיחות מוגברת",key:"elevated"};if(score<70)return {label:"מתיחות גבוהה",key:"high"};if(score<85)return {label:"הסלמה משמעותית",key:"significant"};return {label:"מצב חריג",key:"exceptional"};}
 async function escFetch(url,{timeout=6500,type="text",headers={},cf}={}){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort("timeout"),timeout);
-  try{const response=await fetch(url,{signal:controller.signal,redirect:"follow",headers:{"Accept-Language":"he,en-US;q=.8,en;q=.6","User-Agent":"Mozilla/5.0 (compatible; KoteretPlus-Escalation/140.0; +https://hadashota.singles-pr.workers.dev/escalation)",...headers},...(cf?{cf}: {}) });if(!response.ok)throw new Error(`HTTP ${response.status}`);return type==="json"?await response.json():await response.text();}finally{clearTimeout(timer);}
+  try{const response=await fetch(url,{signal:controller.signal,redirect:"follow",headers:{"Accept-Language":"he,en-US;q=.8,en;q=.6","User-Agent":"Mozilla/5.0 (compatible; KoteretPlus-Escalation/142.0; +https://hadashota.singles-pr.workers.dev/escalation)",...headers},...(cf?{cf}: {}) });if(!response.ok)throw new Error(`HTTP ${response.status}`);return type==="json"?await response.json():await response.text();}finally{clearTimeout(timer);}
 }
 async function readEscalationNewsCache(request){
   const cache=caches.default,items=[],sources=[];let freshest=0;
@@ -2498,50 +2502,162 @@ function scoreKoteretNews(cacheData){
 async function fetchOrefForEscalation(){
   try{const parsed=await escFetch("https://www.oref.org.il/WarningMessages/alert/alerts.json",{timeout:3500,type:"text",headers:{Accept:"application/json,text/plain,*/*",Referer:"https://www.oref.org.il/","X-Requested-With":"XMLHttpRequest","Cache-Control":"no-cache"},cf:{cacheEverything:true,cacheTtl:2}});const raw=String(parsed||"").replace(/^\uFEFF/,"").trim();const data=raw&&raw!=="null"?JSON.parse(raw):null;return {ok:true,alerts:normalizeOrefCurrentAlerts(data)};}catch(error){return {ok:false,alerts:[],error:String(error?.message||error)};}
 }
-function scoreOfficialSignal(cacheData,oref){
+async function fetchIdfOfficialForEscalation(){
+  const url="https://www.idf.il/en/mini-sites/idf-press-releases-israel-at-war/";
+  try{
+    const html=await escFetch(url,{timeout:5500,cf:{cacheEverything:true,cacheTtl:120}});
+    const recent=extractRecentDatedSnippets(html,10).filter(x=>/(?:Iran|Iranian|Israel|missile|UAV|strike|attack|Home Front|Lebanon|Hezbollah|Syria|Yemen|Houthi)/i.test(x.snippet));
+    const hard=recent.filter(x=>/(?:strike|attack|missile|UAV|combat|intercept|launch|operation|deploy|readiness)/i.test(x.snippet)).length;
+    const deesc=recent.filter(x=>/(?:ceasefire|truce|agreement|de-escalat|talks)/i.test(x.snippet)).length;
+    return {ok:true,url,recent:recent.length,hard,deesc};
+  }catch(error){return {ok:false,url,recent:0,hard:0,deesc:0,error:String(error?.message||error)};}
+}
+async function fetchNscOfficialForEscalation(){
+  const url="https://www.gov.il/he/departments/national-security-council/govil-landing-page";
+  try{
+    const html=await escFetch(url,{timeout:6000,cf:{cacheEverything:true,cacheTtl:180}});
+    const recent=extractRecentDatedSnippets(html,14).filter(x=>/(?:איראן|איראני|טיסות|תעופה|ביטחון|הסלמה|מלחמה|תקיפה|חירום|אזהרת מסע|Iran|flight|security|escalat|strike)/i.test(x.snippet));
+    const hard=recent.filter(x=>ESCALATION_HARD_RX.test(x.snippet)||/(?:סגירת|נסגר|להימנע|רמה 4|פינוי|עזיבה|departure|leave|withdrawn)/i.test(x.snippet)).length;
+    const deesc=recent.filter(x=>ESCALATION_DEESC_RX.test(x.snippet)).length;
+    return {ok:true,url,recent:recent.length,hard,deesc};
+  }catch(error){return {ok:false,url,recent:0,hard:0,deesc:0,error:String(error?.message||error)};}
+}
+function scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb){
   const now=Date.now(),officialIds=new Set(["tg-idf","tg-homefront","govil-news","iaa-updates"]);const rows=(cacheData?.rows||[]).filter(r=>officialIds.has(r?.sourceId)&&Number.isFinite(Date.parse(r?.publishedAt||0))&&now-Date.parse(r.publishedAt)<=6*3600000);
   const escalation=rows.filter(r=>ESCALATION_HARD_RX.test(`${r?.title||""} ${r?.summary||""}`)&&ESCALATION_REGION_RX.test(`${r?.title||""} ${r?.summary||""}`));
   const deesc=rows.filter(r=>ESCALATION_DEESC_RX.test(`${r?.title||""} ${r?.summary||""}`));const active=(oref?.alerts||[]).length;
-  let score=10+Math.min(48,escalation.length*10)-Math.min(15,deesc.length*5);if(active){const alertFloor=escalation.length?Math.min(94,78+active*3):Math.min(72,56+active*3);score=Math.max(score,alertFloor);}
-  const available=oref?.ok||rows.length>0;const reason=active?`${active} התרעות פעילות של פיקוד העורף כעת; בנוסף נבדקו עדכוני צה״ל/פיקוד העורף/ממשלה.`:`אין התרעה פעילה ברגע הבדיקה; ${escalation.length} עדכונים רשמיים אזוריים בעלי אופי מסלים ב־6 שעות.`;
-  return escSignal("official",score,available,reason,{source:"פיקוד העורף + צה״ל + Gov.il",sourceUrl:"https://www.oref.org.il/",freshness:oref?.ok?"זמן אמת":"מקורות רשמיים במטמון",stats:{activeAlerts:active,officialEscalation:escalation.length,deescalation:deesc.length}});
+  const directHard=Number(idfWeb?.hard)||0,directDeesc=Number(idfWeb?.deesc)||0,nscHard=Number(nscWeb?.hard)||0,nscDeesc=Number(nscWeb?.deesc)||0;
+  let score=10+Math.min(40,escalation.length*9)+Math.min(16,directHard*4)+Math.min(12,nscHard*4)-Math.min(20,deesc.length*5+directDeesc*3+nscDeesc*3);if(active){const alertFloor=(escalation.length||directHard||nscHard)?Math.min(96,80+active*3):Math.min(74,58+active*3);score=Math.max(score,alertFloor);}
+  const available=oref?.ok||rows.length>0||idfWeb?.ok||nscWeb?.ok;const reason=active?`${active} התרעות פעילות של פיקוד העורף כעת; בנוסף נבדקו עדכוני צה״ל, המל״ל, ממשלה ורשות שדות התעופה.`:`אין התרעה פעילה ברגע הבדיקה; ${escalation.length} עדכונים רשמיים אזוריים במטמון${idfWeb?.ok?` · צה״ל: ${directHard} אינדיקציות מבצעיות`:""}${nscWeb?.ok?` · מל״ל: ${nscHard} אינדיקציות חריגות`:""}.`;
+  const freshness=[oref?.ok?"פיקוד העורף חי":null,idfWeb?.ok?"אתר צה״ל ישיר":null,nscWeb?.ok?"המל״ל ישיר":null,rows.length?"מקורות רשמיים במטמון":null].filter(Boolean).join(" · ")||"לא זמין";
+  return escSignal("official",score,available,reason,{source:"פיקוד העורף + צה״ל + המל״ל + Gov.il + רשות שדות התעופה",sourceUrl:"https://www.oref.org.il/",freshness,stats:{activeAlerts:active,officialEscalation:escalation.length,deescalation:deesc.length,idfDirectHard:directHard,idfDirectRecent:Number(idfWeb?.recent)||0,nscHard,nscRecent:Number(nscWeb?.recent)||0}});
 }
-async function fetchAviationSignal(){
-  const points=[[35.6892,51.3890],[32.6546,51.6680],[29.5918,52.5837]];try{const payloads=await Promise.all(points.map(([lat,lon])=>escFetch(`https://api.adsb.lol/v2/point/${lat}/${lon}/250`,{timeout:5500,type:"json",headers:{Accept:"application/json"}})));const byHex=new Map();for(const p of payloads){for(const ac of Array.isArray(p?.ac)?p.ac:[]){const hex=String(ac?.hex||"").replace(/^~/,"");if(!hex)continue;const alt=ac?.alt_baro;const altN=Number(alt);if(String(alt).toLowerCase()==="ground")continue;if(Number.isFinite(altN)&&altN<5000)continue;const dbFlags=Number(ac?.dbFlags||0);if(dbFlags&1)continue;byHex.set(hex,ac);}}const count=byHex.size;return escSignal("aviation",15,true,`נמדדו ${count} מטוסים בגובה שיוט בשלוש דגימות רחבות מעל איראן. קו הבסיס נלמד היסטורית.`,{source:"ADSB.lol (ODbL)",sourceUrl:"https://www.adsb.lol/",freshness:"עדכון חי",rawCount:count,stats:{aircraft:count,samplePoints:3}});}catch(error){return escSignal("aviation",0,false,`נתוני התעופה אינם זמינים כרגע: ${String(error?.message||error).slice(0,90)}`,{source:"ADSB.lol",sourceUrl:"https://www.adsb.lol/",freshness:"לא זמין"});}
+function adsbAircraftKey(ac){return String(ac?.hex||ac?.icao||"").replace(/^~/,"").trim().toLowerCase();}
+function validCruiseAircraft(ac){const alt=ac?.alt_baro,altN=Number(alt);if(String(alt).toLowerCase()==="ground")return false;if(Number.isFinite(altN)&&altN<5000)return false;return true;}
+async function fetchAviationSignals(){
+  const civilianPoints=[[35.6892,51.3890,210],[38.0800,46.2919,210],[32.6546,51.6680,210],[29.5918,52.5837,210]];
+  const militaryPoints=[[33.0,34.7,250],[25.4,53.3,250]];
+  const calls=[...civilianPoints.map(([lat,lon,r])=>({kind:"civil",url:`https://api.adsb.lol/v2/point/${lat}/${lon}/${r}`})),...militaryPoints.map(([lat,lon,r])=>({kind:"mil",url:`https://api.adsb.lol/v2/point/${lat}/${lon}/${r}`}))];
+  const results=await Promise.allSettled(calls.map(c=>escFetch(c.url,{timeout:5500,type:"json",headers:{Accept:"application/json"}})));
+  const civilian=new Map(),military=new Map();let civilReached=0,milReached=0;
+  results.forEach((res,i)=>{if(res.status!=="fulfilled")return;const c=calls[i];if(c.kind==="civil")civilReached++;else milReached++;for(const ac of Array.isArray(res.value?.ac)?res.value.ac:[]){const key=adsbAircraftKey(ac);if(!key||!validCruiseAircraft(ac))continue;const isMil=(Number(ac?.dbFlags||0)&1)!==0;if(c.kind==="civil"&&!isMil)civilian.set(key,ac);if(c.kind==="mil"&&isMil)military.set(key,ac);}});
+  const aviation=civilReached>=2?escSignal("aviation",15,true,`נמדדו ${civilian.size} מטוסים אזרחיים בגובה שיוט ב־${civilReached} מתוך ${civilianPoints.length} אזורי דגימה מעל איראן. קו הבסיס נלמד היסטורית.`,{source:"ADSB.lol (ODbL)",sourceUrl:"https://www.adsb.lol/",freshness:"עדכון חי",rawCount:civilian.size,stats:{aircraft:civilian.size,samplePoints:civilReached}}):escSignal("aviation",0,false,"לא התקבלו מספיק דגימות תעופה מעל איראן ברענון הנוכחי.",{source:"ADSB.lol",sourceUrl:"https://www.adsb.lol/",freshness:"לא זמין"});
+  let milInitial=8;if(military.size>=2)milInitial=20;if(military.size>=4)milInitial=35;if(military.size>=7)milInitial=48;if(military.size>=10)milInitial=60;
+  const mil=milReached>=1?escSignal("military",milInitial,true,`זוהו ${military.size} מטוסים המסומנים כצבאיים במידע ADS-B גלוי באזור מזרח הים התיכון והמפרץ. הכיסוי חלקי ואינו מייצג את כלל הפעילות הצבאית.`,{source:"ADSB.lol (military-tagged)",sourceUrl:"https://api.adsb.lol/",freshness:"עדכון חי / כיסוי חלקי",rawCount:military.size,stats:{militaryVisible:military.size,samplePoints:milReached}}):escSignal("military",0,false,"נתוני הנוכחות הצבאית הגלויה אינם זמינים כרגע.",{source:"ADSB.lol",sourceUrl:"https://www.adsb.lol/",freshness:"לא זמין"});
+  return {aviation,military:mil};
 }
 async function fetchNotamSignal(){
   const urls=["https://ext.iaa.gov.il/aeroinfo/AeroInfo.aspx?msgType=Notam","https://www.iaa.gov.il/airports/ben-gurion/notifications-and-updates/"];
   const settled=await Promise.allSettled(urls.map(u=>escFetch(u,{timeout:6000})));
   const texts=settled.filter(x=>x.status==="fulfilled").map(x=>x.value);
   if(!texts.length)return escSignal("notam",0,false,"מקורות רשות שדות התעופה אינם זמינים כרגע.",{source:"רשות שדות התעופה",sourceUrl:urls[0],freshness:"לא זמין"});
-  const text=normalizeSpace(stripHtml(texts.join(" ")));const routine=(text.match(/(?:DUE WIP|CRANE|PJE|UAS\/UAV ACT|AIR-SHOW|CAPTIVE BALLOON)/gi)||[]).length;const broad=(text.match(/(?:FIR.{0,80}(?:CLSD|CLOSED)|AIRSPACE.{0,80}(?:CLSD|CLOSED)|ALL FLT.{0,100}(?:PROHIBITED|SUSPENDED)|המרחב האווירי.{0,80}(?:נסגר|סגור)|נתב.?ג.{0,70}(?:נסגר|סגור)|פעילות.{0,50}(?:הופסקה|הושבתה))/gi)||[]).length;const route=(text.match(/(?:ATS RTE|CVFR RTE|HEL RTE).{0,70}CLSD/gi)||[]).length;const security=(text.match(/(?:SECURITY|MILITARY|EMERG|חירום|ביטחונ)/gi)||[]).length;let score=8+Math.min(30,route*4)+Math.min(45,broad*24)+Math.min(12,security*3);if(!broad&&routine>6)score=Math.min(score,25);score=escClamp(score);const reason=broad?`זוהו ${broad} ניסוחים של סגירה/הגבלה רחבה ו־${route} סגירות נתיב במסרי רשות שדות התעופה.`:`לא זוהתה סגירה רחבה; נמצאו ${route} סגירות נתיב ופעילויות NOTAM שגרתיות.`;return escSignal("notam",score,true,reason,{source:"רשות שדות התעופה / NOTAM",sourceUrl:urls[0],freshness:`${texts.length}/2 מקורות רשמיים`,stats:{broadClosures:broad,routeClosures:route,routine}});
+  const text=normalizeSpace(stripHtml(texts.join(" ")));const routine=(text.match(/(?:DUE WIP|CRANE|PJE|UAS\/UAV ACT|AIR-SHOW|CAPTIVE BALLOON)/gi)||[]).length;const broad=(text.match(/(?:FIR.{0,80}(?:CLSD|CLOSED)|AIRSPACE.{0,80}(?:CLSD|CLOSED)|ALL FLT.{0,100}(?:PROHIBITED|SUSPENDED)|המרחב האווירי.{0,80}(?:נסגר|סגור)|נתב.?ג.{0,70}(?:נסגר|סגור)|פעילות.{0,50}(?:הופסקה|הושבתה))/gi)||[]).length;const route=(text.match(/(?:ATS RTE|CVFR RTE|HEL RTE).{0,70}CLSD/gi)||[]).length;const security=(text.match(/(?:SECURITY|MILITARY|EMERG|חירום|ביטחונ)/gi)||[]).length;let score=8+Math.min(30,route*4)+Math.min(45,broad*24)+Math.min(12,security*3);if(!broad&&routine>6)score=Math.min(score,25);score=escClamp(score);const reason=broad?`זוהו ${broad} ניסוחים של סגירה/הגבלה רחבה ו־${route} סגירות נתיב במסרי רשות שדות התעופה.`:`לא זוהתה סגירה רחבה; נמצאו ${route} סגירות נתיב ופעילויות NOTAM שגרתיות.`;return escSignal("notam",score,true,reason,{source:"רשות שדות התעופה / NOTAM",sourceUrl:urls[0],freshness:`${texts.length}/2 מקורות רשמיים`,stats:{broadClosures:broad,routeClosures:route,routine,security}});
 }
-function oilScoreFromMove(move,latest){const up=Math.max(0,Number(move)||0);let score=8;if(up>=1)score=18;if(up>=2)score=32;if(up>=4)score=55;if(up>=7)score=76;if(up>=10)score=90;return escSignal("oil",score,true,`${latest?`Brent סביב $${Number(latest).toFixed(2)}; `:""}שינוי משוער ב־24 שעות: ${Number(move||0).toFixed(1)}%. רק עלייה במחיר מוסיפה לחץ למדד.`,{source:"Yahoo Finance / FRED-EIA",sourceUrl:"https://fred.stlouisfed.org/series/DCOILBRENTEU",freshness:"שוק / נתון יומי",stats:{latest:Number(latest)||null,move24h:Number(move)||0}});}
+function parseEscNumericDate(d,m,y){const ts=Date.UTC(Number(y),Number(m)-1,Number(d),12);return Number.isFinite(ts)?ts:null;}
+async function fetchEasaAirRiskSignal(){
+  const pageUrl="https://www.easa.europa.eu/en/domains/air-operations/czibs";
+  const jsonUrl="https://www.easa.europa.eu/en/domains/air-operations/czibs/export-json?_format=json&page=";
+  const relevantRx=/(?:Iran|Persian Gulf|Gulf of Oman|Jordan|Iraq|Lebanon|Middle East|Israel|Syria|Yemen)/i;
+  try{
+    // Prefer EASA's own JSON export. It is structurally safer than scraping the
+    // rendered table and gives us status + issue/update/valid-until fields.
+    const data=await escFetch(jsonUrl,{timeout:6500,type:"json",headers:{Accept:"application/json"}});
+    const zones=Array.isArray(data?.conflict_zones)?data.conflict_zones:[];
+    const active=zones.filter(z=>String(z?.status||"").toLowerCase()==="active"&&relevantRx.test(`${z?.name||""} ${z?.country||""}`));
+    if(zones.length){
+      const now=Date.now();let recentChanges=0,iranSpecific=0,gulfSpecific=0;
+      for(const z of active){
+        const issued=Date.parse(z?.issued_date||0);
+        const updatedMatch=String(z?.updated||"").match(/datetime=["']([^"']+)/i);
+        const updated=Date.parse(updatedMatch?.[1]||0);
+        const newest=Math.max(Number.isFinite(issued)?issued:0,Number.isFinite(updated)?updated:0);
+        if(newest&&now-newest>=-86400000&&now-newest<=10*86400000)recentChanges++;
+        if(/Iran/i.test(`${z?.name||""} ${z?.country||""}`))iranSpecific++;
+        if(/Persian Gulf|Gulf of Oman/i.test(z?.name||""))gulfSpecific++;
+      }
+      let score=8+Math.min(38,active.length*6)+Math.min(24,recentChanges*12)+(iranSpecific?8:0)+(gulfSpecific?5:0);
+      score=escClamp(Math.min(90,score));
+      const reason=active.length
+        ? `EASA מציגה ${active.length} אזהרות Conflict Zone פעילות הרלוונטיות לאיראן/ישראל והמרחב האזורי${recentChanges?`, מהן ${recentChanges} עודכנו בעשרת הימים האחרונים`:""}.`
+        : "לא זוהתה כרגע אזהרת Conflict Zone פעילה רלוונטית בייצוא הרשמי של EASA.";
+      return escSignal("airrisk",score,true,reason,{source:"EASA Conflict Zone Advisories (JSON)",sourceUrl:pageUrl,freshness:"ייצוא JSON רשמי",stats:{activeRelevant:active.length,recentChanges,iranSpecific,gulfSpecific}});
+    }
+    throw new Error("empty EASA export");
+  }catch(jsonError){
+    // HTML fallback keeps the signal alive if EASA changes/temporarily blocks
+    // its export endpoint.
+    try{
+      const html=await escFetch(pageUrl,{timeout:6500});const clean=normalizeSpace(stripHtml(html));const active=clean.split(/Status\s+Withdrawn/i)[0]||clean;
+      const subjects=["Airspace of Iran","Persian Gulf and Gulf of Oman","Airspace of Jordan","Airspace of Iraq","Airspace of Lebanon","Middle East and Persian Gulf","Airspace of Israel"];
+      let activeRelevant=0,recentChanges=0;
+      for(const subject of subjects){const i=active.toLowerCase().indexOf(subject.toLowerCase());if(i<0)continue;activeRelevant++;const snippet=active.slice(Math.max(0,i-160),Math.min(active.length,i+340));let m;const rx=/(\d{2})\/(\d{2})\/(20\d{2})/g;while((m=rx.exec(snippet))){const ts=parseEscNumericDate(m[1],m[2],m[3]);if(ts&&Date.now()-ts>=-86400000&&Date.now()-ts<=10*86400000){recentChanges++;break;}}}
+      let score=10+Math.min(38,activeRelevant*7)+Math.min(30,recentChanges*15);score=escClamp(Math.min(88,score));
+      const reason=activeRelevant?`EASA מציגה ${activeRelevant} אזהרות/הנחיות פעילות הרלוונטיות לאיראן ולמרחב האזורי${recentChanges?`, עם ${recentChanges} עדכונים מהימים האחרונים`:""}.`:`לא זוהתה כרגע אזהרת Conflict Zone פעילה רלוונטית ברשימה שנקראה.`;
+      return escSignal("airrisk",score,true,reason,{source:"EASA Conflict Zone Advisories",sourceUrl:pageUrl,freshness:"HTML fallback",stats:{activeRelevant,recentChanges}});
+    }catch(error){
+      return escSignal("airrisk",0,false,`EASA אינו זמין כרגע: ${String(error?.message||jsonError?.message||error).slice(0,90)}`,{source:"EASA",sourceUrl:pageUrl,freshness:"לא זמין"});
+    }
+  }
+}
+async function fetchFaaAirRiskCorroboration(){
+  const url="https://www.faa.gov/air_traffic/publications/us_restrictions";
+  try{
+    const html=await escFetch(url,{timeout:6500,cf:{cacheEverything:true,cacheTtl:600}});
+    const clean=normalizeSpace(stripHtml(html));
+    const relevant=(clean.match(/(?:Iran|Iraq|Persian Gulf and Gulf of Oman|Syria|Yemen)/gi)||[]).length;
+    const m=clean.match(/Last updated:\s*(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)?,?\s*([A-Za-z]+\s+\d{1,2},\s+20\d{2})/i);
+    const updated=m?Date.parse(`${m[1]} UTC`):NaN;
+    const recent=Number.isFinite(updated)&&Date.now()-updated>=-86400000&&Date.now()-updated<=14*86400000;
+    return {ok:true,url,relevant,recent,updatedAt:Number.isFinite(updated)?new Date(updated).toISOString():null};
+  }catch(error){return {ok:false,url,relevant:0,recent:false,error:String(error?.message||error)};}
+}
+function mergeAirRiskWithFaa(base,faa){
+  if(!faa?.ok)return base;
+  const bonus=faa.recent?8:0;
+  if(base?.available===false)return escSignal("airrisk",faa.recent?24:10,true,`EASA לא זמין ברענון זה; FAA מציגה מגבלות/אזהרות פעילות למרחבים אזוריים${faa.recent?" והעמוד עודכן ב־14 הימים האחרונים":""}.`,{source:"FAA Prohibitions & Restrictions",sourceUrl:faa.url,freshness:faa.recent?"FAA עודכן לאחרונה":"FAA זמין",stats:{faaRelevant:faa.relevant,faaRecent:faa.recent}});
+  return {...base,score:escClamp(Number(base.score||0)+bonus),source:`${base.source||"EASA"} + FAA`,reason:`${base.reason} FAA משמשת מקור הצלבה נוסף למגבלות טיסה; ${faa.recent?"עמוד המגבלות עודכן לאחרונה ולכן נוסף חיזוק מתון.":"לא זוהה עדכון FAA חדש מספיק כדי לשנות את הציון."}`,stats:{...(base.stats||{}),faaRelevant:faa.relevant,faaRecent:faa.recent}};
+}
+function oilScoreFromMove(move,latest){const up=Math.max(0,Number(move)||0);let score=8;if(up>=1)score=18;if(up>=2)score=32;if(up>=4)score=55;if(up>=7)score=76;if(up>=10)score=90;return escSignal("oil",score,true,`${latest?`Brent סביב $${Number(latest).toFixed(2)}; `:""}שינוי משוער ב־24 שעות: ${Number(move||0).toFixed(1)}%. רק עלייה במחיר מוסיפה לחץ למדד.`,{source:"Yahoo Finance / FRED",sourceUrl:"https://fred.stlouisfed.org/series/DCOILBRENTEU",freshness:"שוק / גיבוי יומי",stats:{latest:Number(latest)||null,move24h:Number(move)||0}});}
 async function fetchOilSignal(){
-  try{const j=await escFetch("https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=15m&range=5d",{timeout:5500,type:"json",headers:{Accept:"application/json"}});const r=j?.chart?.result?.[0],ts=r?.timestamp||[],cl=r?.indicators?.quote?.[0]?.close||[];const pairs=ts.map((t,i)=>[Number(t)*1000,Number(cl[i])]).filter(x=>Number.isFinite(x[0])&&Number.isFinite(x[1]));if(pairs.length<2)throw new Error("no Brent series");const latest=pairs[pairs.length-1];const target=latest[0]-24*3600000;let prior=pairs[0];for(const p of pairs)if(Math.abs(p[0]-target)<Math.abs(prior[0]-target))prior=p;const move=(latest[1]/prior[1]-1)*100;return oilScoreFromMove(move,latest[1]);}catch(yahooError){try{const csv=await escFetch("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILBRENTEU",{timeout:6000});const vals=String(csv).split(/\r?\n/).slice(1).map(line=>{const m=line.match(/^(\d{4}-\d{2}-\d{2}),([\d.]+)/);return m?[m[1],Number(m[2])]:null;}).filter(Boolean).slice(-8);if(vals.length<2)throw new Error("no FRED observations");const latest=vals[vals.length-1][1],prior=vals[vals.length-2][1],move=(latest/prior-1)*100;return oilScoreFromMove(move,latest);}catch(error){return escSignal("oil",0,false,`נתוני Brent אינם זמינים כרגע: ${String(error?.message||yahooError?.message||error).slice(0,90)}`,{source:"FRED / EIA",sourceUrl:"https://fred.stlouisfed.org/series/DCOILBRENTEU",freshness:"לא זמין"});}}
+  try{const j=await escFetch("https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=15m&range=5d",{timeout:5500,type:"json",headers:{Accept:"application/json"}});const r=j?.chart?.result?.[0],ts=r?.timestamp||[],cl=r?.indicators?.quote?.[0]?.close||[];const pairs=ts.map((t,i)=>[Number(t)*1000,Number(cl[i])]).filter(x=>Number.isFinite(x[0])&&Number.isFinite(x[1]));if(pairs.length<2)throw new Error("no Brent series");const latest=pairs[pairs.length-1];const target=latest[0]-24*3600000;let prior=pairs[0];for(const p of pairs)if(Math.abs(p[0]-target)<Math.abs(prior[0]-target))prior=p;const move=(latest[1]/prior[1]-1)*100;return oilScoreFromMove(move,latest[1]);}catch(yahooError){try{const csv=await escFetch("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DCOILBRENTEU",{timeout:6000});const vals=String(csv).split(/\r?\n/).slice(1).map(line=>{const m=line.match(/^(\d{4}-\d{2}-\d{2}),([\d.]+)/);return m?[m[1],Number(m[2])]:null;}).filter(Boolean).slice(-8);if(vals.length<2)throw new Error("no FRED observations");const latest=vals[vals.length-1][1],prior=vals[vals.length-2][1],move=(latest/prior-1)*100;return oilScoreFromMove(move,latest);}catch(error){return escSignal("oil",0,false,`נתוני Brent אינם זמינים כרגע: ${String(error?.message||yahooError?.message||error).slice(0,90)}`,{source:"FRED",sourceUrl:"https://fred.stlouisfed.org/series/DCOILBRENTEU",freshness:"לא זמין"});}}
 }
 const ESC_MONTHS="January|February|March|April|May|June|July|August|September|October|November|December";
+const ESC_MONTHS_SHORT="Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec";
 function extractRecentDatedSnippets(text,days=10){
   const clean=normalizeSpace(stripHtml(text)),hits=[];
   const patterns=[
     {rx:new RegExp("("+ESC_MONTHS+")\\s+(\\d{1,2}),\\s+(20\\d{2})","gi"),date:m=>`${m[1]} ${m[2]}, ${m[3]} UTC`},
-    {rx:new RegExp("(\\d{1,2})\\s+("+ESC_MONTHS+")\\s+(20\\d{2})","gi"),date:m=>`${m[2]} ${m[1]}, ${m[3]} UTC`}
+    {rx:new RegExp("(\\d{1,2})\\s+("+ESC_MONTHS+")\\s+(20\\d{2})","gi"),date:m=>`${m[2]} ${m[1]}, ${m[3]} UTC`},
+    {rx:new RegExp("(\\d{1,2})\\s+("+ESC_MONTHS_SHORT+")\\s+(20\\d{2})","gi"),date:m=>`${m[2]} ${m[1]}, ${m[3]} UTC`},
+    {rx:new RegExp("("+ESC_MONTHS_SHORT+")\\s+(\\d{1,2}),?\\s+(20\\d{2})","gi"),date:m=>`${m[1]} ${m[2]}, ${m[3]} UTC`},
+    {rx:/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/g,date:m=>`${String(m[3]).length===2?`20${m[3]}`:m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}T12:00:00Z`}
   ];
-  for(const entry of patterns){let m;while((m=entry.rx.exec(clean))&&hits.length<120){const date=Date.parse(entry.date(m));if(!Number.isFinite(date))continue;const age=Date.now()-date;if(age<=days*86400000&&age>=-86400000)hits.push({date,snippet:clean.slice(m.index,Math.min(clean.length,m.index+420))});}}
+  for(const entry of patterns){let m;while((m=entry.rx.exec(clean))&&hits.length<160){const date=Date.parse(entry.date(m));if(!Number.isFinite(date))continue;const age=Date.now()-date;if(age<=days*86400000&&age>=-86400000)hits.push({date,snippet:clean.slice(Math.max(0,m.index-80),Math.min(clean.length,m.index+500))});}}
   return hits.sort((a,b)=>b.date-a.date);
 }
 async function fetchUSPostureSignal(){
   const sources=[
     ["CENTCOM","https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/"],
-    ["State Dept","https://travel.state.gov/en/international-travel/travel-advisories/global-events/worldwide-caution.html"],
-    ["White House","https://www.whitehouse.gov/?s=Iran"]
+    ["State Dept","https://travel.state.gov/content/travel/en/traveladvisories/traveladvisories/israel-west-bank-and-gaza-travel-advisory.html"],
+    ["White House","https://www.whitehouse.gov/?s=Iran"],
+    ["U.S. DoD","https://www.defense.gov/News/Releases/Search/Iran/"]
   ];
-  const results=await Promise.allSettled(sources.map(([,u])=>escFetch(u,{timeout:6500})));let escN=0,deN=0,reached=0;const notes=[];
-  results.forEach((res,i)=>{if(res.status!=="fulfilled")return;reached++;const label=sources[i][0],text=String(res.value||"");const recent=extractRecentDatedSnippets(text,14);const anyDated=extractRecentDatedSnippets(text,365);const windowText=recent.length?recent.map(x=>x.snippet).join(" "):(anyDated.length?"":normalizeSpace(stripHtml(text)).slice(0,9000));const relevant=windowText.match(/.{0,80}(?:Iran|Iranian|Middle East|Hormuz).{0,160}/gi)||[];const e=relevant.filter(x=>/(?:strike|attack|military|readiness|maximum pressure|blockade|threat|escalat|evacuat|heightened tension)/i.test(x)).length;const d=relevant.filter(x=>/(?:agreement|deal|ceasefire|talks|diplom|de-escalat|negotiat)/i.test(x)).length;escN+=e;deN+=d;if(e||d)notes.push(`${label}: ${e} מסלים / ${d} מרגיע`);});
-  if(!reached)return escSignal("us",0,false,"מקורות ארה״ב הרשמיים אינם זמינים כרגע.",{source:"CENTCOM + State Dept",sourceUrl:sources[0][1],freshness:"לא זמין"});let score=10+Math.min(70,escN*9)-Math.min(32,deN*8);score=escClamp(score);return escSignal("us",score,true,notes.length?notes.join(" · "):"לא אותר שינוי חריג בעמדה הפומבית במקורות האמריקאיים שנבדקו.",{source:"CENTCOM + State Dept + White House",sourceUrl:sources[0][1],freshness:`${reached}/3 מקורות הגיעו`,stats:{escalationMentions:escN,deescalationMentions:deN,reached}});
+  const results=await Promise.allSettled(sources.map(([,u])=>escFetch(u,{timeout:6500})));let escN=0,deN=0,severe=0,reached=0;const notes=[];
+  results.forEach((res,i)=>{if(res.status!=="fulfilled")return;reached++;const label=sources[i][0],text=String(res.value||"");const recent=extractRecentDatedSnippets(text,14);const anyDated=extractRecentDatedSnippets(text,365);const windowText=recent.length?recent.map(x=>x.snippet).join(" "):(anyDated.length?"":normalizeSpace(stripHtml(text)).slice(0,12000));const relevant=(windowText.match(/.{0,90}(?:Iran|Iranian|Israel|Middle East|Hormuz).{0,190}/gi)||[]).slice(0,18);const e=relevant.filter(x=>/(?:strike|attack|combat operation|military action|deploy|readiness|maximum pressure|blockade|threat|escalat|evacuat|heightened tension|carrier|bomber|tanker)/i.test(x)).length;const s=relevant.filter(x=>/(?:authorized departure|ordered departure|combat operations|imminent|military strike|air strike|evacuat)/i.test(x)).length;const d=relevant.filter(x=>/(?:agreement|deal|ceasefire|talks|diplom|de-escalat|negotiat|truce)/i.test(x)).length;escN+=e;deN+=d;severe+=s;if(e||d||s)notes.push(`${label}: ${e} מסלים${s?` / ${s} חזק`:""} / ${d} מרגיע`);});
+  if(!reached)return escSignal("us",0,false,"מקורות ארה״ב הרשמיים אינם זמינים כרגע.",{source:"CENTCOM + DoD + State Dept",sourceUrl:sources[0][1],freshness:"לא זמין"});let score=10+Math.min(50,escN*6)+Math.min(30,severe*15)-Math.min(30,deN*7);score=escClamp(score);return escSignal("us",score,true,notes.length?notes.join(" · "):"לא אותר שינוי חריג בעמדה הפומבית במקורות האמריקאיים שנבדקו.",{source:"CENTCOM + DoD + State Dept + White House",sourceUrl:sources[0][1],freshness:`${reached}/4 מקורות הגיעו`,stats:{escalationMentions:escN,severeMentions:severe,deescalationMentions:deN,reached}});
 }
 async function fetchMaritimeSignal(){
-  const url="https://www.ukmto.org/recent-incidents";try{const html=await escFetch(url,{timeout:6500});const recent=extractRecentDatedSnippets(html,10);const focus=recent.filter(x=>/(?:Hormuz|Arabian Gulf|Gulf of Oman|Fujairah|UAE|Qatar|Bahrain|Kuwait|Iran)/i.test(x.snippet));const attacks=focus.filter(x=>/(?:Attack|Hijack|projectile|fired|RPG|explosion|missile|drone)/i.test(x.snippet)).length;const suspicious=focus.filter(x=>/(?:Suspicious Activity|approached|unauthorised)/i.test(x.snippet)).length;let score=8+Math.min(72,attacks*18)+Math.min(20,suspicious*8);if(!focus.length)score=8;return escSignal("maritime",score,true,focus.length?`UKMTO: ${focus.length} אירועים רלוונטיים באזור המפרץ/הורמוז ב־10 ימים, מהם ${attacks} בעלי אופי תקיפה.`:"לא נמצאו ברשימת UKMTO האחרונה אירועים חדשים ממוקדי הורמוז/המפרץ בחלון הבדיקה.",{source:"UKMTO",sourceUrl:url,freshness:"מקור ימי רשמי",stats:{regionalIncidents:focus.length,attacks,suspicious}});}catch(error){return escSignal("maritime",0,false,`UKMTO אינו זמין כרגע: ${String(error?.message||error).slice(0,90)}`,{source:"UKMTO",sourceUrl:url,freshness:"לא זמין"});}
+  const urls={ukmto:"https://www.ukmto.org/recent-incidents",advisories:"https://www.maritime.dot.gov/msci-advisories",alerts:"https://www.maritime.dot.gov/msci-alerts"};
+  const [u,m,a]=await Promise.allSettled([escFetch(urls.ukmto,{timeout:6500}),escFetch(urls.advisories,{timeout:6500}),escFetch(urls.alerts,{timeout:6500})]);
+  if(u.status!=="fulfilled"&&m.status!=="fulfilled"&&a.status!=="fulfilled")return escSignal("maritime",0,false,"מקורות UKMTO ו-MARAD אינם זמינים כרגע.",{source:"UKMTO + U.S. MARAD",sourceUrl:urls.ukmto,freshness:"לא זמין"});
+  let focus=[],attacks=0,suspicious=0;if(u.status==="fulfilled"){const recent=extractRecentDatedSnippets(u.value,10);focus=recent.filter(x=>/(?:Hormuz|Arabian Gulf|Persian Gulf|Gulf of Oman|Fujairah|UAE|Qatar|Bahrain|Kuwait|Iran)/i.test(x.snippet));attacks=focus.filter(x=>/(?:Attack|Hijack|projectile|fired|RPG|explosion|missile|drone|UAV|USV)/i.test(x.snippet)).length;suspicious=focus.filter(x=>/(?:Suspicious Activity|approached|unauthorised|interference)/i.test(x.snippet)).length;}
+  let advisory=0,alert=0;if(m.status==="fulfilled"){const active=normalizeSpace(stripHtml(m.value)).split(/Cancelled Advisories/i)[0];if(/Persian Gulf|Strait of Hormuz|Gulf of Oman/i.test(active)&&/Iran/i.test(active))advisory=1;}if(a.status==="fulfilled"){const active=normalizeSpace(stripHtml(a.value)).split(/Cancelled Alerts/i)[0];if(/Persian Gulf|Strait of Hormuz|Gulf of Oman|Iran/i.test(active)&&!/no active alerts at this time/i.test(active))alert=1;}
+  let score=8+Math.min(60,attacks*20)+Math.min(16,suspicious*7)+(advisory?12:0)+(alert?25:0);score=escClamp(score);const reason=`UKMTO: ${focus.length} אירועים רלוונטיים ב־10 ימים (${attacks} תקיפה, ${suspicious} חשודים). MARAD: ${advisory?"אזהרה פעילה רלוונטית":"ללא אזהרה פעילה רלוונטית שזוהתה"}${alert?" + התרעת חירום פעילה":""}.`;return escSignal("maritime",score,true,reason,{source:"UKMTO + U.S. MARAD",sourceUrl:urls.ukmto,freshness:"מקורות ימיים רשמיים",stats:{regionalIncidents:focus.length,attacks,suspicious,maradAdvisory:advisory,maradAlert:alert}});
+}
+async function fetchNuclearSignal(){
+  const urls=["https://www-news.iaea.org/EventList.aspx","https://www.iaea.org/newscenter/focus/iran"];
+  const results=await Promise.allSettled(urls.map(u=>escFetch(u,{timeout:6500})));const texts=results.filter(x=>x.status==="fulfilled").map(x=>x.value);if(!texts.length)return escSignal("nuclear",0,false,"מקורות IAEA אינם זמינים כרגע.",{source:"IAEA",sourceUrl:urls[0],freshness:"לא זמין"});
+  const snippets=[];for(const text of texts)snippets.push(...extractRecentDatedSnippets(text,21));const iran=snippets.filter(x=>/Iran|Iranian|Bushehr|Esfahan|Natanz|Fordow/i.test(x.snippet));const incidents=iran.filter(x=>/(?:attack|strike|projectile|missile|damage|explosion|nuclear power plant|nuclear facilit)/i.test(x.snippet)).length;const concern=iran.filter(x=>/(?:safeguard|verification|inspection|enrichment|uranium|cooperation|concern)/i.test(x.snippet)).length;let score=8+Math.min(66,incidents*24)+Math.min(20,concern*5);if(!iran.length)score=8;score=escClamp(score);const reason=iran.length?`IAEA: ${iran.length} עדכונים רלוונטיים לאיראן ב־21 הימים האחרונים, מהם ${incidents} אירועי תקיפה/פגיעה ו־${concern} אזכורי גרעין/פיקוח משמעותיים.`:"לא נמצא בפרסומי IAEA שנקראו עדכון חדש ורלוונטי לאיראן בחלון 21 הימים.";return escSignal("nuclear",score,true,reason,{source:"IAEA",sourceUrl:urls[0],freshness:`${texts.length}/2 מקורות IAEA`,stats:{recentIran:iran.length,incidents,concern}});
 }
 function parseMaybeJson(value){if(Array.isArray(value))return value;try{return JSON.parse(String(value||""));}catch{return [];}}
 async function fetchPredictionMarketSignal(){
@@ -2553,16 +2669,27 @@ async function fetchPredictionMarketSignal(){
   if(!best)return escSignal("market",10,true,"לא נמצא כרגע שוק פעיל ורלוונטי מספיק לתקיפה באיראן; הסיגנל נשאר במשקל נמוך.",{source:"Polymarket",sourceUrl:"https://polymarket.com/",freshness:"API ציבורי",stats:{candidates:candidates.length}});
   const probability=escClamp(best.p),score=escClamp(Math.round(probability));const q=String(best.m?.question||best.m?.title||best.m?._event?.title||"שוק איראן").slice(0,120);return escSignal("market",score,true,`מחיר YES בשוק הרלוונטי: ${probability.toFixed(0)}%. “${q}”`,{source:"Polymarket",sourceUrl:"https://polymarket.com/",freshness:"שוק חיזוי חי",stats:{probability,liquidity:best.liq,question:q}});
 }
+async function fetchDiplomaticRiskSignal(){
+  const sources=[["FCDO ישראל","https://www.gov.uk/foreign-travel-advice/israel"],["FCDO איראן","https://www.gov.uk/foreign-travel-advice/iran"],["FCDO לבנון","https://www.gov.uk/foreign-travel-advice/lebanon"],["FCDO ירדן","https://www.gov.uk/foreign-travel-advice/jordan"]];
+  const results=await Promise.allSettled(sources.map(([,u])=>escFetch(u,{timeout:6000,cf:{cacheEverything:true,cacheTtl:300}})));
+  let reached=0,recentUpdates=0,severe=0;const notes=[];
+  results.forEach((res,i)=>{if(res.status!=="fulfilled")return;reached++;const label=sources[i][0],clean=normalizeSpace(stripHtml(res.value));const m=clean.match(/Updated:\s*(\d{1,2}\s+[A-Za-z]+\s+20\d{2})/i);const updated=m?Date.parse(`${m[1]} UTC`):NaN;const age=Number.isFinite(updated)?Date.now()-updated:Infinity;const recent=age>=-86400000&&age<=14*86400000;const strong=/(?:temporarily withdrawn|consider departing|consider leaving|depart now|leave immediately|regional tensions|recent strikes|retaliatory attacks|conflict has escalated|commercial flight options|airspace closure)/i.test(clean.slice(0,18000));if(recent)recentUpdates++;if(recent&&strong)severe++;if(recent)notes.push(`${label}: עודכן לאחרונה${strong?" עם ניסוח ביטחוני משמעותי":""}`);});
+  if(!reached)return escSignal("diplomatic",0,false,"אזהרות הנסיעה של FCDO אינן זמינות כרגע.",{source:"UK FCDO",sourceUrl:sources[0][1],freshness:"לא זמין"});
+  let score=8+Math.min(42,recentUpdates*10)+Math.min(34,severe*12);score=escClamp(Math.min(88,score));
+  const reason=notes.length?notes.join(" · "):"מקורות FCDO זמינים, אך לא זוהה עדכון חדש מספיק ב־14 הימים האחרונים שמצדיק העלאת הסיגנל.";
+  return escSignal("diplomatic",score,true,reason,{source:"UK FCDO travel advice",sourceUrl:sources[0][1],freshness:`${reached}/4 מקורות הגיעו`,stats:{reached,recentUpdates,severe}});
+}
 async function fetchPizzaExperimental(){
   const url="https://www.pizzint.watch/";try{const html=await escFetch(url,{timeout:6000});const text=normalizeSpace(stripHtml(html));const m=text.match(/DOUGHCON\s*([1-5])/i);if(!m)return {available:false,weight:0,experimental:true,reason:"PizzINT נטען אך רמת DOUGHCON לא זוהתה.",source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};const level=Number(m[1]),mapping={5:10,4:30,3:55,2:78,1:94};return {available:true,weight:0,experimental:true,level:`DOUGHCON ${level}`,score:mapping[level],reason:`PizzINT מציג DOUGHCON ${level}. מוצג לניטור OSINT בלבד ואינו משפיע על מדד ההסלמה.`,source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};}catch(error){return {available:false,weight:0,experimental:true,reason:`מדד הפיצה אינו זמין כרגע: ${String(error?.message||error).slice(0,80)}`,source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};}
 }
 async function collectExternalEscalationSignals(){
-  const [aviation,notam,oil,us,maritime,market,pizza]=await Promise.all([fetchAviationSignal(),fetchNotamSignal(),fetchOilSignal(),fetchUSPostureSignal(),fetchMaritimeSignal(),fetchPredictionMarketSignal(),fetchPizzaExperimental()]);
-  return {signals:{aviation,notam,oil,us,maritime,market},experimental:{pizza},updatedAt:new Date().toISOString()};
+  const [airBundle,notam,airriskBase,faa,oil,us,maritime,nuclear,market,diplomatic,pizza]=await Promise.all([fetchAviationSignals(),fetchNotamSignal(),fetchEasaAirRiskSignal(),fetchFaaAirRiskCorroboration(),fetchOilSignal(),fetchUSPostureSignal(),fetchMaritimeSignal(),fetchNuclearSignal(),fetchPredictionMarketSignal(),fetchDiplomaticRiskSignal(),fetchPizzaExperimental()]);
+  const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
+  return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic},experimental:{pizza},updatedAt:new Date().toISOString()};
 }
 function mergeEscalationExternal(previous,fresh){
   const now=Date.now(),out={signals:{},experimental:{},updatedAt:fresh?.updatedAt||previous?.updatedAt||new Date().toISOString()};
-  for(const k of ["aviation","notam","oil","us","maritime","market"]){
+  for(const k of ["aviation","military","notam","airrisk","oil","us","maritime","nuclear","market","diplomatic"]){
     const n=fresh?.signals?.[k],p=previous?.signals?.[k];
     if(n?.available!==false){out.signals[k]=n;continue;}
     const age=p?now-Date.parse(p.checkedAt||previous?.updatedAt||0):Infinity;
@@ -2575,33 +2702,39 @@ async function escalationHubCall(env,path,method="GET",body=null){const stub=pus
 async function handleEscalation(request,env,ctx){
   try{
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"140.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"140.0.0"});}
-    const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();let external=claim.external||null;
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"142.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"142.0.0"});}
+    const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
-    const oref=await orefPromise;const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref)};
+    const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"140.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"140.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"142.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"142.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
+async function escUpdateSeriesBaseline(storage,signal,{storageKey,rawField,mode}){
+  const now=Date.now();let samples=Array.isArray(await storage.get(storageKey))?await storage.get(storageKey):[];samples=samples.filter(x=>Number.isFinite(Number(x?.count))&&Number.isFinite(Date.parse(x?.at))&&now-Date.parse(x.at)<8*86400000);
+  if(signal?.available!==false&&Number.isFinite(Number(signal?.[rawField]))){const current=Number(signal[rawField]),last=samples[samples.length-1];if(!last||now-Date.parse(last.at)>10*60000){samples.push({at:new Date().toISOString(),count:current});samples=samples.slice(-850);await storage.put(storageKey,samples);}const hour=new Date().getUTCHours();let comparable=samples.filter(x=>now-Date.parse(x.at)>18*3600000&&Math.abs(new Date(x.at).getUTCHours()-hour)<=1).map(x=>Number(x.count));if(comparable.length<4)comparable=samples.slice(0,-1).slice(-96).map(x=>Number(x.count));const baseline=escMedian(comparable);
+    if(mode==="aviation"){if(Number.isFinite(baseline)&&comparable.length>=8&&baseline>3){const drop=(baseline-current)/baseline;let score=8;if(drop>.15)score=22;if(drop>.28)score=42;if(drop>.40)score=62;if(drop>.52)score=79;if(drop>.65)score=92;signal.score=score;signal.reason=`נמדדו ${current} מטוסים אזרחיים מול קו בסיס ${Math.round(baseline)} (${drop>0?"ירידה":"ללא ירידה"} ${Math.abs(drop*100).toFixed(0)}%).`;signal.stats={...(signal.stats||{}),baseline:Number(baseline.toFixed(1)),dropPercent:Number((drop*100).toFixed(1)),baselineSamples:comparable.length};}else{signal.score=Math.min(20,Number(signal.score)||15);signal.reason=`נמדדו ${current} מטוסים אזרחיים. המערכת עדיין לומדת קו בסיס תעופתי (${comparable.length}/8 דגימות מינימום).`;}}
+    if(mode==="military"){if(Number.isFinite(baseline)&&comparable.length>=8){const increase=current-baseline,ratio=baseline>=1?current/baseline:current;let score=8;if(current>=3&&increase>=2)score=30;if(current>=5&&(ratio>=1.7||increase>=3))score=50;if(current>=8&&ratio>=2)score=68;if(current>=12&&ratio>=2.2)score=82;signal.score=Math.min(82,score);signal.reason=`זוהו ${current} מטוסים צבאיים גלויים מול קו בסיס ${Number(baseline.toFixed(1))}. זהו כיסוי ADS-B חלקי בלבד ואינו מייצג פעילות שאינה משדרת.`;signal.stats={...(signal.stats||{}),baseline:Number(baseline.toFixed(1)),increase:Number(increase.toFixed(1)),ratio:Number(ratio.toFixed(2)),baselineSamples:comparable.length};}else{signal.score=Math.min(45,Number(signal.score)||8);signal.reason=`זוהו ${current} מטוסים צבאיים גלויים. המערכת עדיין לומדת קו בסיס (${comparable.length}/8 דגימות מינימום), והכיסוי חלקי.`;}}
+  }
+}
 async function buildEscalationSnapshot(storage,payload){
   const now=Date.now(),previous=await storage.get("escalation.latest"),history=escPublicHistory(await storage.get("escalation.history"));let signals=Object.values(payload?.signals||{}).filter(Boolean).map(s=>({...s,weight:ESCALATION_WEIGHTS[s.key]||Number(s.weight)||0,label:ESCALATION_LABELS[s.key]||s.label}));
-  const avi=signals.find(s=>s.key==="aviation");let aviationSamples=Array.isArray(await storage.get("escalation.aviation.samples"))?await storage.get("escalation.aviation.samples"):[];
-  aviationSamples=aviationSamples.filter(x=>Number.isFinite(Number(x?.count))&&Number.isFinite(Date.parse(x?.at))&&now-Date.parse(x.at)<8*86400000);
-  if(avi?.available!==false&&Number.isFinite(Number(avi.rawCount))){const last=aviationSamples[aviationSamples.length-1];if(!last||now-Date.parse(last.at)>10*60000){aviationSamples.push({at:new Date().toISOString(),count:Number(avi.rawCount)});aviationSamples=aviationSamples.slice(-850);await storage.put("escalation.aviation.samples",aviationSamples);}const current=Number(avi.rawCount),hour=new Date().getUTCHours();let comparable=aviationSamples.filter(x=>now-Date.parse(x.at)>18*3600000&&Math.abs(new Date(x.at).getUTCHours()-hour)<=1).map(x=>Number(x.count));if(comparable.length<4)comparable=aviationSamples.slice(0,-1).slice(-96).map(x=>Number(x.count));const baseline=escMedian(comparable);if(Number.isFinite(baseline)&&comparable.length>=8&&baseline>3){const drop=(baseline-current)/baseline;let score=8;if(drop>.15)score=22;if(drop>.28)score=42;if(drop>.40)score=62;if(drop>.52)score=79;if(drop>.65)score=92;avi.score=score;avi.reason=`נמדדו ${current} מטוסים בדגימה מול קו בסיס ${Math.round(baseline)} (${drop>0?"ירידה":"ללא ירידה"} ${Math.abs(drop*100).toFixed(0)}%).`;avi.stats={...(avi.stats||{}),baseline:Number(baseline.toFixed(1)),dropPercent:Number((drop*100).toFixed(1)),baselineSamples:comparable.length};}else{avi.score=Math.min(20,Number(avi.score)||15);avi.reason=`נמדדו ${current} מטוסים. המערכת עדיין לומדת קו בסיס תעופתי (${comparable.length}/8 דגימות מינימום).`;}}
+  await escUpdateSeriesBaseline(storage,signals.find(s=>s.key==="aviation"),{storageKey:"escalation.aviation.samples",rawField:"rawCount",mode:"aviation"});
+  await escUpdateSeriesBaseline(storage,signals.find(s=>s.key==="military"),{storageKey:"escalation.military.samples",rawField:"rawCount",mode:"military"});
   signals=Object.keys(ESCALATION_WEIGHTS).map(k=>signals.find(s=>s.key===k)||escSignal(k,0,false,"המקור אינו זמין כרגע.",{freshness:"לא זמין"}));
   const available=signals.filter(s=>s.available!==false);
-  const effectiveWeight=s=>Number(s.weight||0)*(s.stale?.5:1);
+  const effectiveWeight=s=>Number(s.weight||0)*(s.stale?.45:1);
   const availableWeight=available.reduce((a,s)=>a+effectiveWeight(s),0);
-  let raw=availableWeight?available.reduce((a,s)=>a+escClamp(s.score)*effectiveWeight(s),0)/availableWeight:0;const elevated=available.filter(s=>!s.stale&&Number(s.score)>=65).length;const multiplier=elevated>=4?1.18:elevated===3?1.12:elevated===2?1.06:1;raw=escClamp(raw*multiplier);
-  let score=raw;if(previous&&Number.isFinite(Number(previous.score))){const prev=Number(previous.score),dt=Math.max(5,Math.min(3600,(now-Date.parse(previous.updatedAt||now))/1000)),half=raw>prev?85*60:7*3600,alpha=1-Math.exp(-Math.LN2*dt/half);score=prev+alpha*(raw-prev);if(raw>=85&&prev<65)score=Math.max(score,prev+4);}
+  let raw=availableWeight?available.reduce((a,s)=>a+escClamp(s.score)*effectiveWeight(s),0)/availableWeight:0;const elevated=available.filter(s=>!s.stale&&Number(s.score)>=70).length;const multiplier=elevated>=5?1.15:elevated===4?1.10:elevated===3?1.06:1;raw=escClamp(raw*multiplier);
+  let score=raw;if(previous&&Number.isFinite(Number(previous.score))){const prev=Number(previous.score),dt=Math.max(5,Math.min(3600,(now-Date.parse(previous.updatedAt||now))/1000)),half=raw>prev?80*60:7*3600,alpha=1-Math.exp(-Math.LN2*dt/half);score=prev+alpha*(raw-prev);if(raw>=88&&prev<70)score=Math.max(score,prev+4);}
   score=Number(escClamp(score).toFixed(1));const level=escLevel(score);let newHistory=history;const last=history[history.length-1];if(!last||now-Date.parse(last.at)>=5*60000)newHistory=[...history,{at:new Date().toISOString(),score:Number(score.toFixed(1)),raw:Number(raw.toFixed(1))}].filter(x=>now-Date.parse(x.at)<73*3600000).slice(-900);else{newHistory=[...history.slice(0,-1),{...last,score:Number(score.toFixed(1)),raw:Number(raw.toFixed(1)),at:new Date().toISOString()}];}
-  const score6=escClosestScore(newHistory,now-6*3600000);const delta6h=Number((score-(Number.isFinite(score6)?score6:(previous?.score??score))).toFixed(1));const coverage=Math.round(availableWeight);const confidenceLabel=coverage>=85?"גבוה":coverage>=65?"בינוני":"נמוך";
-  const prevByKey=new Map((previous?.signals||[]).map(s=>[s.key,s]));const ranked=available.map(s=>({s,delta:Number(s.score)-Number(prevByKey.get(s.key)?.score??s.score),impact:Number(s.score)*Number(s.weight)/100})).sort((a,b)=>Math.abs(b.delta)*.8+b.impact*.2-(Math.abs(a.delta)*.8+a.impact*.2));const changes=ranked.slice(0,4).map(({s,delta})=>`${s.label}: ${delta>3?`עלה בכ־${Math.round(delta)} נק׳ — `:delta<-3?`ירד בכ־${Math.round(Math.abs(delta))} נק׳ — `:""}${s.reason}`);
+  const score6=escClosestScore(newHistory,now-6*3600000);const delta6h=Number((score-(Number.isFinite(score6)?score6:(previous?.score??score))).toFixed(1));const coverage=Math.round(availableWeight);const confidenceLabel=coverage>=88?"גבוה":coverage>=68?"בינוני":"נמוך";
+  const prevByKey=new Map((previous?.signals||[]).map(s=>[s.key,s]));const ranked=available.map(s=>({s,delta:Number(s.score)-Number(prevByKey.get(s.key)?.score??s.score),impact:Number(s.score)*Number(s.weight)/100})).sort((a,b)=>Math.abs(b.delta)*.8+b.impact*.2-(Math.abs(a.delta)*.8+a.impact*.2));const changes=ranked.slice(0,5).map(({s,delta})=>`${s.label}: ${delta>3?`עלה בכ־${Math.round(delta)} נק׳ — `:delta<-3?`ירד בכ־${Math.round(Math.abs(delta))} נק׳ — `:""}${s.reason}`);
   const latest={score,rawScore:Number(raw.toFixed(1)),level:level.label,levelKey:level.key,updatedAt:new Date().toISOString(),delta6h,coverage,confidenceLabel,availableSignals:available.length,totalSignals:Object.keys(ESCALATION_WEIGHTS).length,elevatedSignals:elevated,multiplier,signals,changes,experimental:payload?.experimental||{},disclaimer:"מדד 0–100 של עוצמת המתיחות; אינו הסתברות למלחמה ואינו תחזית מודיעינית."};
-  await storage.put("escalation.latest",latest);await storage.put("escalation.history",newHistory);if(payload?.external){await storage.put("escalation.external",payload.external);await storage.put("escalation.external.updatedAt",payload?.externalUpdatedAt||payload.external?.updatedAt||new Date().toISOString());}await storage.delete("escalation.lock");return {ok:true,latest,history:newHistory,experimental:latest.experimental,methodology:{weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",sourcesConfigured:SOURCES.length}};
+  await storage.put("escalation.latest",latest);await storage.put("escalation.history",newHistory);if(payload?.external){await storage.put("escalation.external",payload.external);await storage.put("escalation.external.updatedAt",payload?.externalUpdatedAt||payload.external?.updatedAt||new Date().toISOString());}await storage.delete("escalation.lock");return {ok:true,latest,history:newHistory,experimental:latest.experimental,methodology:{weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length}};
 }
 
 
@@ -2881,7 +3014,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"140.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"142.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -2928,7 +3061,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"140.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"142.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
