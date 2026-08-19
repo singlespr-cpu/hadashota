@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "167.0.0";
+const KOTERET_CLIENT_BUILD = "168.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -50,6 +50,17 @@ const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
 const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 const LEAD_SESSION_LOCK_MS = 2 * 60 * 1000;
 const LEAD_BREAKOUT_SCORE_DELTA = 30;
+
+// V168: Home Front Push follows the first successful Push approval by default.
+// An existing explicit alertDesktop choice (including OFF) is always preserved.
+const storedAlertDesktopPreference = localStorage.getItem("hadashota.alertDesktop");
+const shouldDefaultAlertDesktopOn = storedAlertDesktopPreference === null
+  && localStorage.getItem("hadashota.headlineNotifications") === "1"
+  && (typeof Notification !== "undefined" && Notification.permission === "granted");
+if (shouldDefaultAlertDesktopOn) {
+  localStorage.setItem("hadashota.alertDesktop", "1");
+  localStorage.setItem("hadashota.alertDesktopInitialized", "1");
+}
 
 const state = {
   items: [],
@@ -4117,7 +4128,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=167.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=168.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4187,7 +4198,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=167.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=168.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4322,14 +4333,19 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
     return { ok:false, reason: permission === "denied" ? "denied" : "permission", message:"לא ניתנה הרשאה להתראות." };
   }
 
-  // First approval enables both editorial Push families. Users can later filter
-  // either one independently from Settings without asking browser permission again.
+  // First approval enables all three Push families. Users can later filter
+  // news, escalation or Home Front independently without another browser prompt.
   if (!localStorage.getItem("hadashota.pushPreferencesInitialized")) {
     state.pushNews = true;
     state.pushEscalation = true;
     localStorage.setItem("hadashota.pushNews", "1");
     localStorage.setItem("hadashota.pushEscalation", "1");
     localStorage.setItem("hadashota.pushPreferencesInitialized", "1");
+  }
+  if (localStorage.getItem("hadashota.alertDesktop") === null) {
+    state.alertDesktop = true;
+    localStorage.setItem("hadashota.alertDesktop", "1");
+    localStorage.setItem("hadashota.alertDesktopInitialized", "1");
   }
 
   try {
@@ -5925,9 +5941,9 @@ async function submitContactForm(event) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d?.ok === false) throw new Error(d?.error || "השליחה נכשלה");
     form.reset();
-    setContactStatus("פנייתך התקבלה בהצלחה ✓", "success");
-    showToast("פנייתך התקבלה");
-    window.setTimeout(() => closeSiteModal(el.contactModal, false), 2000);
+    setContactStatus("הפנייה התקבלה בהצלחה, נחזור אליך בהקדם.", "success");
+    showToast("הפנייה התקבלה בהצלחה");
+    window.setTimeout(() => closeSiteModal(el.contactModal, false), 2800);
   } catch (error) {
     setContactStatus(String(error?.message || "השליחה נכשלה. נסו שוב בעוד רגע."), "error");
   } finally {
@@ -6013,6 +6029,7 @@ async function setAlertDesktop(enabled) {
     if (!state.alertDesktop) showToast("לא ניתנה הרשאה להתראות דפדפן");
   }
   localStorage.setItem("hadashota.alertDesktop", state.alertDesktop ? "1" : "0");
+  localStorage.setItem("hadashota.alertDesktopInitialized", "1");
   syncAlertSettings();
   if (state.alertDesktop && ("Notification" in window) && Notification.permission === "granted") {
     state.notificationsEnabled = true;

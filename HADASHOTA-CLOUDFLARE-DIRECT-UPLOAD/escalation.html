@@ -3,17 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <script id="kp-escalation-initial-top-v166">
-    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-    function kpEscForceEntryTop(){
-      requestAnimationFrame(function(){
-        window.scrollTo(0, 0);
-        requestAnimationFrame(function(){ window.scrollTo(0, 0); });
-        setTimeout(function(){ window.scrollTo(0, 0); }, 80);
+  <script id="kp-escalation-initial-top-v168">
+    (function(){
+      if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+      var active = true, timers = [];
+      document.documentElement.classList.add("kp-force-entry-top");
+      function topNow(){
+        if (!active) return;
+        try { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); } catch (_) { window.scrollTo(0, 0); }
+        if (document.documentElement) document.documentElement.scrollTop = 0;
+        if (document.body) document.body.scrollTop = 0;
+      }
+      function scheduleTop(){
+        [0, 40, 120, 260, 500, 850, 1300].forEach(function(ms){ timers.push(setTimeout(topNow, ms)); });
+      }
+      function release(){
+        if (!active) return;
+        active = false;
+        timers.forEach(clearTimeout);
+        document.documentElement.classList.remove("kp-force-entry-top");
+      }
+      ["touchstart","pointerdown","wheel","keydown"].forEach(function(type){
+        window.addEventListener(type, release, { once: true, passive: type !== "keydown" });
       });
-    }
-    window.addEventListener("pageshow", kpEscForceEntryTop);
-    window.addEventListener("load", kpEscForceEntryTop, { once: true });
+      topNow();
+      document.addEventListener("DOMContentLoaded", scheduleTop, { once: true });
+      window.addEventListener("pageshow", function(){ active = true; document.documentElement.classList.add("kp-force-entry-top"); scheduleTop(); }, { once: true });
+      window.addEventListener("load", scheduleTop, { once: true });
+      setTimeout(release, 1650);
+    })();
   </script>
   <meta name="theme-color" content="#05070a">
   <meta name="color-scheme" content="dark">
@@ -32,8 +50,8 @@
   <meta property="og:title" content="מדד ההסלמה – כמה אנחנו קרובים למלחמה? | כותרת פלוס">
   <meta property="og:description" content="מדד ההסלמה – כמה אנחנו קרובים למלחמה? בדיקה אונליין בכותרת פלוס. היכנסו לראות את תמונת המצב העדכנית של המתיחות באזור.">
   <meta property="og:url" content="__SITE_URL__/escalation">
-  <meta property="og:image" content="__SITE_URL__/escalation-share.png?v=167.0.0">
-  <meta property="og:image:secure_url" content="__SITE_URL__/escalation-share.png?v=167.0.0">
+  <meta property="og:image" content="__SITE_URL__/escalation-share.png?v=168.0.0">
+  <meta property="og:image:secure_url" content="__SITE_URL__/escalation-share.png?v=168.0.0">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -41,15 +59,15 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="מדד ההסלמה – כמה אנחנו קרובים למלחמה? | כותרת פלוס">
   <meta name="twitter:description" content="בדיקה אונליין של רמת המתיחות האזורית. היכנסו למדד ההסלמה של כותרת פלוס כדי לראות את הנתון העדכני.">
-  <meta name="twitter:image" content="__SITE_URL__/escalation-share.png?v=167.0.0">
+  <meta name="twitter:image" content="__SITE_URL__/escalation-share.png?v=168.0.0">
   <meta name="twitter:image:alt" content="מדד ההסלמה של אתר כותרת פלוס">
   <title>מדד ההסלמה איראן–ישראל | מצב המתיחות בזמן אמת | כותרת פלוס</title>
-  <link rel="icon" href="/favicon.svg?v=167.0.0" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=167.0.0">
+  <link rel="icon" href="/favicon.svg?v=168.0.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=168.0.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/escalation.css?v=167.0.0">
+  <link rel="stylesheet" href="/escalation.css?v=168.0.0">
   <script type="application/ld+json">
   {
     "@context":"https://schema.org",
@@ -303,7 +321,7 @@
       <div><p>רוצים לראות את הדיווחים שמאחורי המדד? באתר המלא כותרת פלוס מרכז את החדשות, המבזקים והמקורות שהמערכת מצליבה בזמן אמת.</p><a class="esc-main-cta" href="https://koteretplus.com/">לכותרת פלוס — כל החדשות בזמן אמת</a></div>
     </div>
     <div class="esc-shell esc-visit-counter" aria-label="מונה כניסות למדד"><span>צפיות במדד מאז הפעלת המונה</span><strong id="escVisitCount">—</strong></div>
-    <div class="esc-shell esc-legal">מדד ההסלמה הוא שירות של כותרת פלוס · מידע גלוי בלבד · אין לראות במדד תחזית, התרעה רשמית או תחליף להנחיות פיקוד העורף. · גרסה V167</div>
+    <div class="esc-shell esc-legal">מדד ההסלמה הוא שירות של כותרת פלוס · מידע גלוי בלבד · אין לראות במדד תחזית, התרעה רשמית או תחליף להנחיות פיקוד העורף. · גרסה V168</div>
   </footer>
 
   <button class="esc-to-top" id="escToTop" type="button" aria-label="חזרה לראש העמוד" title="חזרה לראש העמוד" aria-hidden="true" tabindex="-1">
@@ -336,6 +354,6 @@
   </div>
 
   <div class="esc-toast" id="escToast" role="status" aria-live="polite"></div>
-  <script src="/escalation.js?v=167.0.0" defer></script>
+  <script src="/escalation.js?v=168.0.0" defer></script>
 </body>
 </html>

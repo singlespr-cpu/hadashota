@@ -294,3 +294,6 @@ body[data-level="routine"] .z-green,body[data-level="elevated"] .z-yellow,body[d
   .esc-hot-story__body h2,.esc-hot-story h2{font-size:14px!important;line-height:1.28!important;font-weight:900!important;}
   .esc-hot-story__meta{margin-top:6px!important;font-size:7px!important;line-height:1.25!important;}
 }
+
+/* V168 — reliable entry at page top on mobile/external links */
+html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!important;overflow-anchor:none!important;}

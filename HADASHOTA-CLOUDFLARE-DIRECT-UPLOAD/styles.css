@@ -8983,3 +8983,160 @@ html[data-theme="dark"] .feed-show-more{background:#151b24;border-color:#303947;
 @media(max-width:370px){
   #alertCenter .kp-oref-box .alert-mobile-heading{font-size:8.5px!important;}
 }
+
+
+/* =========================================================
+   V168 — Home Front mobile strip + settings modal hardening
+   ========================================================= */
+html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!important;overflow-anchor:none!important;}
+.contact-form-status[data-state="success"]{display:block!important;min-height:22px!important;padding:6px 8px!important;border-radius:9px!important;background:rgba(8,116,67,.08)!important;text-align:center!important;font-size:11px!important;line-height:1.45!important;}
+
+@media(max-width:700px){
+  #alertCenter .kp-oref-box.alert-center-card{
+    min-width:0!important;
+    width:100%!important;
+    overflow:hidden!important;
+  }
+  #alertCenter .kp-oref-box .alert-status-icon{display:none!important;}
+  #alertCenter .kp-oref-box .alert-primary-wrap,
+  #alertCenter .kp-oref-box .alert-status-group,
+  #alertCenter .kp-oref-box .alert-primary-textblock{width:100%!important;min-width:0!important;}
+  #alertCenter .kp-oref-box .alert-primary-textblock{
+    position:relative!important;
+    display:block!important;
+    min-height:32px!important;
+  }
+  #alertCenter .kp-oref-box .alert-center-copy{
+    width:100%!important;
+    min-width:0!important;
+    padding-inline:68px!important;
+    box-sizing:border-box!important;
+  }
+  #alertCenter .kp-oref-box .alert-center-eyebrow{
+    width:100%!important;
+    min-width:0!important;
+    margin:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:5px!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-align:center!important;
+  }
+  #alertCenter .kp-oref-box .alert-mobile-heading{
+    display:block!important;
+    max-width:100%!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    font-size:11.5px!important;
+    line-height:32px!important;
+    text-align:center!important;
+  }
+  #alertCenter .kp-oref-box .alert-live-dot{flex:0 0 auto!important;}
+  #alertCenter .kp-oref-box .alert-center-actions{
+    position:absolute!important;
+    left:0!important;
+    top:50%!important;
+    transform:translateY(-50%)!important;
+    width:64px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    gap:4px!important;
+    margin:0!important;
+  }
+  #alertCenter .kp-oref-box .alert-sound-quick,
+  #alertCenter .kp-oref-box .alert-settings-button{
+    width:30px!important;
+    min-width:30px!important;
+    height:30px!important;
+    min-height:30px!important;
+    padding:0!important;
+    display:grid!important;
+    place-items:center!important;
+    overflow:hidden!important;
+  }
+  #alertCenter .kp-oref-box .alert-sound-quick span,
+  #alertCenter .kp-oref-box .alert-settings-button span{display:none!important;}
+
+  #alertSettingsModal.site-modal{
+    align-items:center!important;
+    justify-content:center!important;
+    padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom))!important;
+    overflow:hidden!important;
+  }
+  #alertSettingsModal .alert-settings-card{
+    width:min(100%,590px)!important;
+    height:auto!important;
+    max-height:calc(100dvh - max(16px,env(safe-area-inset-top)) - max(16px,env(safe-area-inset-bottom)))!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    overscroll-behavior:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+    touch-action:pan-y!important;
+    padding:14px 12px max(14px,env(safe-area-inset-bottom))!important;
+    scroll-padding-top:70px!important;
+    scroll-padding-bottom:72px!important;
+  }
+  #alertSettingsModal .modal-close{
+    position:sticky!important;
+    top:0!important;
+    z-index:30!important;
+  }
+  #alertSettingsModal .alert-settings-heading{
+    position:sticky!important;
+    top:0!important;
+    z-index:20!important;
+    margin:-38px -2px 6px!important;
+    padding:4px 46px 8px 2px!important;
+    min-height:44px!important;
+    background:rgba(255,255,255,.97)!important;
+    border-bottom:1px solid rgba(17,24,39,.06)!important;
+    backdrop-filter:blur(8px)!important;
+    -webkit-backdrop-filter:blur(8px)!important;
+  }
+  #alertSettingsModal .alert-settings-heading h2{
+    margin:1px 0 0!important;
+    padding:0!important;
+    font-size:18px!important;
+    line-height:1.18!important;
+  }
+  #alertSettingsModal .alert-modal-icon{width:34px!important;height:34px!important;flex:0 0 34px!important;}
+  #alertSettingsModal .alert-settings-intro{font-size:11.5px!important;line-height:1.55!important;margin:8px 0 10px!important;}
+  #alertSettingsModal .alert-setting-block{padding:9px 10px!important;margin-top:8px!important;}
+  #alertSettingsModal .alert-setting-row{gap:10px!important;min-width:0!important;}
+  #alertSettingsModal .alert-setting-row>span{min-width:0!important;}
+  #alertSettingsModal .alert-setting-row small{overflow-wrap:anywhere!important;}
+  #alertSettingsModal .alert-city-input-row{grid-template-columns:minmax(0,1fr) auto!important;}
+  #alertSettingsModal .alert-city-input-row input{min-width:0!important;width:100%!important;}
+  #alertSettingsModal .alert-test-row{
+    position:sticky!important;
+    bottom:calc(-1 * max(14px,env(safe-area-inset-bottom)))!important;
+    z-index:18!important;
+    margin:10px -12px 0!important;
+    padding:9px 12px max(10px,env(safe-area-inset-bottom))!important;
+    background:rgba(255,255,255,.97)!important;
+    border-top:1px solid rgba(17,24,39,.08)!important;
+    backdrop-filter:blur(8px)!important;
+    -webkit-backdrop-filter:blur(8px)!important;
+  }
+  #alertSettingsModal .alert-test-button{min-height:40px!important;white-space:nowrap!important;}
+  #alertSettingsModal .alert-test-row span{min-width:0!important;text-align:left!important;overflow-wrap:anywhere!important;}
+  html[data-theme="dark"] #alertSettingsModal .alert-settings-heading,
+  html[data-theme="dark"] #alertSettingsModal .alert-test-row{background:rgba(21,27,36,.97)!important;border-color:#303947!important;}
+}
+@media(max-width:370px){
+  #alertCenter .kp-oref-box .alert-center-copy{padding-inline:62px!important;}
+  #alertCenter .kp-oref-box .alert-mobile-heading{font-size:10.5px!important;}
+  #alertSettingsModal .alert-settings-card{padding-inline:9px!important;}
+  #alertSettingsModal .alert-settings-heading{padding-right:42px!important;}
+  #alertSettingsModal .alert-settings-heading h2{font-size:16px!important;}
+  #alertSettingsModal .alert-test-row{margin-inline:-9px!important;padding-inline:9px!important;}
+}
+@media(max-height:620px) and (max-width:700px){
+  #alertSettingsModal .alert-settings-card{max-height:calc(100dvh - 8px)!important;border-radius:16px!important;padding-top:10px!important;}
+  #alertSettingsModal .alert-settings-intro{margin-block:5px 8px!important;}
+  #alertSettingsModal .alert-setting-block{margin-top:6px!important;padding-block:7px!important;}
+}
