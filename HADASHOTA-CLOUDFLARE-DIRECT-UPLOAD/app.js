@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "163.0.0";
+const KOTERET_CLIENT_BUILD = "157.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -309,9 +309,6 @@ const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v112";
 const FAST_RENDER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
-const PUSH_OFFER_TAB_KEY = "hadashota.notificationOfferShownThisTab";
-const ONLINE_HEARTBEAT_INTERVAL_MS = 120_000;
-let lastOnlineHeartbeatAt = 0;
 
 let feedPromoData = null;
 
@@ -469,9 +466,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V163 · API ${apiVersion}` : "גרסה V163 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V157 · API ${apiVersion}` : "גרסה V157 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V163 · API לא מחובר";
+    marker.textContent = "גרסה V157 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -939,9 +936,6 @@ function armNotificationOffer() {
 
 function maybeShowNotificationOffer() {
   if (notificationOfferShownThisSession || !el.notificationOfferModal) return;
-  try { if (sessionStorage.getItem(PUSH_OFFER_TAB_KEY) === "1") return; } catch {}
-  const lastOfferShownAt = Number(localStorage.getItem("hadashota.notificationOfferLastShownAt") || 0);
-  if (lastOfferShownAt && Date.now() - lastOfferShownAt < 30 * 60 * 1000) return;
   if (!("serviceWorker" in navigator)) return;
 
   const snoozeUntil=Number(localStorage.getItem("hadashota.notificationSnoozeUntil")||0);
@@ -957,7 +951,6 @@ function maybeShowNotificationOffer() {
     if(el.notificationOfferText)el.notificationOfferText.innerHTML="כדי לקבל <strong>Push אמיתי גם כשהאתר סגור</strong>, הוסיפו קודם את כותרת פלוס למסך הבית. אחרי שפותחים מהאייקון אפשר לאשר התראות בלחיצה אחת.";
     if(el.notificationOfferAccept){delete el.notificationOfferAccept.dataset.stage;el.notificationOfferAccept.textContent="איך מפעילים באייפון";}
     notificationOfferShownThisSession=true;
-    try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt", String(Date.now())); } catch {}
     openSiteModal(el.notificationOfferModal);
     return;
   }
@@ -974,7 +967,6 @@ function maybeShowNotificationOffer() {
   if(el.notificationOfferText)el.notificationOfferText.innerHTML="כותרת פלוס שולחת <strong>Push אמיתי גם כשהאתר סגור</strong>, אחרי שהסיפור המרכזי אומת במספר מקורות ונשאר מוביל מספיק זמן כדי למנוע התראות כפולות.";
   if(el.notificationOfferAccept){delete el.notificationOfferAccept.dataset.stage;el.notificationOfferAccept.textContent="הפעלת התראות";}
   notificationOfferShownThisSession = true;
-  try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt", String(Date.now())); } catch {}
   openSiteModal(el.notificationOfferModal);
 }
 
@@ -1122,7 +1114,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V163: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V157: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -1176,13 +1168,11 @@ function closeSiteModal(modal, restoreFocus = true) {
     setModalBackgroundInert(null);
   }
   if (restoreFocus && modalReturnFocus instanceof HTMLElement) modalReturnFocus.focus();
-  if (state.autoRefresh && !document.querySelector(".site-modal:not(.hidden)") && (!state.nextRefreshAt || state.nextRefreshAt <= Date.now())) scheduleNextRefresh(1);
 }
 
 
 function refreshNewsOnForeground(reason = "foreground") {
   if (document.hidden || state.loading) return;
-  if (document.querySelector(".site-modal:not(.hidden)")) return;
   const now = Date.now();
   if (now - state.lastForegroundRefreshAt < FOREGROUND_FRESHNESS_MS) return;
   state.lastForegroundRefreshAt = now;
@@ -1383,12 +1373,6 @@ async function fetchNewsShard(shard, force = false, delayMs = 0) {
   try {
     const params = new URLSearchParams({ shard });
     if (force) params.set("force", "1");
-    if (shard === "sites-1" && Date.now() - lastOnlineHeartbeatAt >= ONLINE_HEARTBEAT_INTERVAL_MS) {
-      params.set("presence", "1");
-      params.set("device", getPushDeviceId());
-      params.set("page", "home");
-      lastOnlineHeartbeatAt = Date.now();
-    }
     params.set("_", String(Math.floor(Date.now() / 15000)));
     const response = await fetch(`/api/news?${params}`, {
       // Keep the request as simple as possible for iOS/WebKit. The cache-busting
@@ -4150,7 +4134,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=163.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=157.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4220,7 +4204,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=163.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=157.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4670,7 +4654,6 @@ function restartAutoRefresh() {
 async function runScheduledRefresh() {
   state.timer = null;
   if (!state.autoRefresh) return;
-  if (document.querySelector(".site-modal:not(.hidden)")) { scheduleNextRefresh(5); return; }
 
   // Never lose the automatic-refresh loop because another network pass happens
   // to be running when the 30-second timer fires.
@@ -4681,7 +4664,7 @@ async function runScheduledRefresh() {
 
   try {
     state.forceLeadReevaluation = true;
-    await loadNews(false, true, true);
+    await loadNews(true, true, true);
   } catch (error) {
     console.warn("Scheduled refresh failed", error);
   } finally {
@@ -5313,7 +5296,7 @@ async function initFeedPromo() {
       const response = await fetch(`/api/feed-promo?_=${Date.now()}`, { cache: "no-store" });
       if (response.ok) apply(await response.json());
     } catch {}
-  }, 180000);
+  }, 60000);
 }
 
 function trackAdEvent(promo, slot, event) {
@@ -5411,7 +5394,7 @@ async function initPromoCard() {
       const response = await fetch(`/api/promo?_=${Date.now()}`, { cache: "no-store" });
       if (response.ok) apply(await response.json());
     } catch {}
-  }, 180000);
+  }, 60000);
 }
 
 function renderTrending() {
@@ -6003,7 +5986,7 @@ async function setAlertDesktop(enabled) {
 
 function scheduleAlertPoll(delay) {
   clearTimeout(state.alertTimer);
-  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : (document.hidden ? 15000 : 5000));
+  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : (document.hidden ? 5000 : 2000));
 }
 
 async function pollEmergencyAlerts() {
@@ -6017,7 +6000,7 @@ async function pollEmergencyAlerts() {
     console.warn("Emergency alerts:", error);
     renderAlertConnectionError();
   } finally {
-    scheduleAlertPoll(document.hidden ? 15000 : 5000);
+    scheduleAlertPoll(document.hidden ? 5000 : 2000);
   }
 }
 

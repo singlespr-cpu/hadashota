@@ -6,37 +6,7 @@
   "assets": {
     "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
     "binding": "ASSETS",
-    "run_worker_first": [
-      "/api/*",
-      "/",
-      "/index.html",
-      "/escalation",
-      "/escalation.html",
-      "/מדד-ההסלמה",
-      "/%D7%9E%D7%93%D7%93-%D7%94%D7%94%D7%A1%D7%9C%D7%9E%D7%94",
-      "/about",
-      "/about.html",
-      "/how-it-works",
-      "/how-it-works.html",
-      "/contact",
-      "/contact.html",
-      "/privacy",
-      "/privacy.html",
-      "/copyright",
-      "/copyright.html",
-      "/manage-kp-7538",
-      "/robots.txt",
-      "/sitemap.xml",
-      "/app.js",
-      "/styles.css",
-      "/escalation.js",
-      "/escalation.css",
-      "/contact.js",
-      "/site-analytics.js",
-      "/info.css",
-      "/site.webmanifest",
-      "/sw.js"
-    ],
+    "run_worker_first": true,
     "html_handling": "none",
     "not_found_handling": "none"
   },
@@ -51,14 +21,10 @@
   "migrations": [
     {
       "tag": "v123-true-web-push-1",
-      "new_sqlite_classes": [
-        "PushHub"
-      ]
+      "new_sqlite_classes": ["PushHub"]
     }
   ],
   "triggers": {
-    "crons": [
-      "* * * * *"
-    ]
+    "crons": ["* * * * *"]
   }
 }

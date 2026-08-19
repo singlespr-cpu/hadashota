@@ -248,7 +248,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "163.0.0",
+          version: "157.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -261,7 +261,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "163.0.0",
+        version: "157.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -271,7 +271,7 @@ export default {
       });
     }
 
-    // V163: the workers.dev hostname is kept only as a technical endpoint.
+    // V157: the workers.dev hostname is kept only as a technical endpoint.
     // Public documents permanently resolve to the official Koteret Plus domain.
     if ((request.method === "GET" || request.method === "HEAD") && (url.hostname === "hadashota.singles-pr.workers.dev" || url.hostname === "www.koteretplus.com")) {
       const publicPaths = new Map([
@@ -291,17 +291,11 @@ export default {
       }
     }
 
-    // V163: keep every executable/style asset version-coherent with the HTML.
-    // These files deliberately pass through the Worker with no-cache headers, while
-    // heavy static images/icons continue to bypass the Worker via Static Assets.
     if (url.pathname === "/sw.js") return serveNoCacheAsset(request, env, "/sw.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/app.js") return serveNoCacheAsset(request, env, "/app.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/styles.css") return serveNoCacheAsset(request, env, "/styles.css", "text/css; charset=utf-8");
     if (url.pathname === "/escalation.js") return serveNoCacheAsset(request, env, "/escalation.js", "application/javascript; charset=utf-8");
     if (url.pathname === "/escalation.css") return serveNoCacheAsset(request, env, "/escalation.css", "text/css; charset=utf-8");
-    if (url.pathname === "/contact.js") return serveNoCacheAsset(request, env, "/contact.js", "application/javascript; charset=utf-8");
-    if (url.pathname === "/site-analytics.js") return serveNoCacheAsset(request, env, "/site-analytics.js", "application/javascript; charset=utf-8");
-    if (url.pathname === "/info.css") return serveNoCacheAsset(request, env, "/info.css", "text/css; charset=utf-8");
     if (url.pathname === "/site.webmanifest") return serveNoCacheAsset(request, env, "/site.webmanifest", "application/manifest+json; charset=utf-8");
     if (url.pathname === "/robots.txt") return robotsResponse(PUBLIC_SITE_ORIGIN);
     if (url.pathname === "/sitemap.xml") return sitemapResponse(PUBLIC_SITE_ORIGIN);
@@ -593,7 +587,7 @@ async function handleEmergencyAlerts(ctx) {
         "User-Agent": "Mozilla/5.0 (compatible; KoteretPlus/119.0; +https://www.oref.org.il/)",
         "Cache-Control": "no-cache"
       },
-      cf: { cacheEverything: true, cacheTtl: 4 }
+      cf: { cacheEverything: true, cacheTtl: 2 }
     });
     if (!response.ok) throw new Error(`OREF HTTP ${response.status}`);
     const raw = (await response.text()).replace(/^\uFEFF/, "").trim();
@@ -610,7 +604,7 @@ async function handleEmergencyAlerts(ctx) {
       "Pragma":"no-cache"
     });
     const sharedResponse = json(payload, 200, {
-      "Cache-Control":"public, max-age=0, s-maxage=4"
+      "Cache-Control":"public, max-age=0, s-maxage=2"
     });
     ctx?.waitUntil(cache.put(cacheKey, sharedResponse));
     return clientResponse;
@@ -1450,21 +1444,8 @@ function summarizeSourceHealth(settled, now, cutoff) {
   );
 }
 
-function maybeTrackOnlinePresenceFromUrl(request,env,ctx,defaultPage="home"){
-  try{
-    const u=new URL(request.url);
-    if(u.searchParams.get("presence")!=="1")return;
-    const deviceId=String(u.searchParams.get("device")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
-    if(!deviceId)return;
-    const rawPage=String(u.searchParams.get("page")||defaultPage);
-    const page=["home","escalation","info"].includes(rawPage)?rawPage:defaultPage;
-    ctx?.waitUntil(handlePushHubRequest(env,"/analytics/heartbeat",new Request("https://push.internal/analytics/heartbeat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({deviceId,page})})).catch(()=>{}));
-  }catch{}
-}
-
 async function handleNews(request, env, ctx) {
   const requestUrl = new URL(request.url);
-  maybeTrackOnlinePresenceFromUrl(request,env,ctx,"home");
   const requestedShard = String(requestUrl.searchParams.get("shard") || "sites-1");
   const shard = /^(sites|telegram)(-[123])?$/.test(requestedShard) ? requestedShard : "sites-1";
   const forceRequested = requestUrl.searchParams.get("force") === "1";
@@ -1496,7 +1477,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "163.0.0",
+          "X-Hadashota-Version": "157.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1619,13 +1600,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "163.0.0",
+      "X-Hadashota-Version": "157.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=12",
-      "X-Hadashota-Version": "163.0.0",
+      "X-Hadashota-Version": "157.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1659,7 +1640,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "163.0.0"
+        "X-Hadashota-Version": "157.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1681,7 +1662,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "163.0.0"
+    "X-Hadashota-Version": "157.0.0"
   });
 }
 
@@ -2938,7 +2919,7 @@ async function collectExternalEscalationSignals(){
   const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
   return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic},experimental:{pizza},updatedAt:new Date().toISOString()};
 }
-// V163 background calibration refresh: split the external OSINT set into three
+// V157 background calibration refresh: split the external OSINT set into three
 // independent five-minute batches. Each signal family still refreshes roughly
 // every 15 minutes, but no scheduled invocation has to perform the whole set.
 async function collectExternalEscalationSignalGroup(groupIndex=0){
@@ -2969,17 +2950,16 @@ function mergeEscalationExternal(previous,fresh){
 }
 async function escalationHubCall(env,path,method="GET",body=null){const stub=pushHubStub(env);if(!stub)throw new Error("Escalation state storage is not bound");const init={method,headers:{"Content-Type":"application/json"}};if(body!==null)init.body=JSON.stringify(body);const r=await stub.fetch(new Request(`https://push.internal${path}`,init));const data=await r.json().catch(()=>null);if(!r.ok)throw new Error(data?.error||`Escalation hub ${r.status}`);return data;}
 async function handleEscalation(request,env,ctx){
-  maybeTrackOnlinePresenceFromUrl(request,env,ctx,"escalation");
   try{
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"157.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"157.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"163.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"157.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"157.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3238,7 +3218,7 @@ async function refreshBackgroundNewsShards(env,ctx,shards=[]){
       if(!response.ok)return;
       const payload=await response.json();
       if(Array.isArray(payload?.items))fresh.set(shard,payload);
-    }catch(error){console.warn(`V163 background shard ${shard} failed`,error);}
+    }catch(error){console.warn(`V157 background shard ${shard} failed`,error);}
   }));
   return fresh;
 }
@@ -3285,7 +3265,7 @@ async function runBackgroundEscalationFromNews(env,recent=[]) {
     const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString(),background:true};
     await escalationHubCall(env,"/escalation/snapshot","POST",payload);
-  }catch(error){console.warn("V163 scheduled escalation monitor failed",error);}
+  }catch(error){console.warn("V157 scheduled escalation monitor failed",error);}
 }
 
 async function runBackgroundPushMonitor(env, ctx) {
@@ -3305,7 +3285,7 @@ async function runBackgroundPushMonitor(env, ctx) {
     } catch(error) { console.warn("OREF background push sync failed",error); }
     if(minute%5===0)await runBackgroundEscalationFromNews(env,context.recent);
   } catch(error) {
-    console.warn("V163 scheduled push monitor failed",error);
+    console.warn("V157 scheduled push monitor failed",error);
   }
 }
 
@@ -3374,7 +3354,7 @@ async function ensurePushStats(storage) {
   let stats=await storage.get("subscription.stats");
   if(stats?.schema==="v152"&&Number.isFinite(Number(stats.count)))return stats;
   const rows=await storage.list({prefix:"sub:"});
-  // One-time V163 repair: a browser can rotate its PushSubscription endpoint.
+  // One-time V157 repair: a browser can rotate its PushSubscription endpoint.
   // Keep only the newest subscription for the same local device id so the admin
   // count and fanout do not include stale duplicates.
   const byDevice=new Map(),remove=[];
@@ -3521,7 +3501,8 @@ async function queuePushJob(storage,notification,targetDeviceId="") {
   }
   const history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[];
   history.push({fingerprint,kind:normalized.kind,title:normalized.title,body:normalized.body,url:normalized.url,queuedAt:now,target:safeDevice?(normalized.kind==="admin-contact"?"admin-device":"device"):"all",status:active?"queued":"sending",pushed:0,clicked:0});
-  const cleanHistory=history.slice(-50);
+  const cutoff=Date.now()-30*24*60*60*1000;
+  const cleanHistory=history.filter(x=>Date.parse(x?.queuedAt||x?.finishedAt||0)>=cutoff).slice(-50);
   await storage.put("push.history",cleanHistory);
   return {ok:true,queued:true,fingerprint,target:safeDevice?"device":"all"};
 }
@@ -3542,7 +3523,7 @@ async function finalizePushJob(storage,job) {
   const history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[];
   const i=history.map((x)=>x.fingerprint).lastIndexOf(job.notificationFingerprint);
   if(i>=0)history[i]={...history[i],status:"done",finishedAt:result.finishedAt,pushed:result.pushed,failed:result.failed,removed:result.removed,skipped:Number(result.skipped||0)};
-  await storage.put("push.history",history.slice(-50));
+  const cutoff=Date.now()-30*24*60*60*1000;await storage.put("push.history",history.filter(x=>Date.parse(x?.queuedAt||x?.finishedAt||0)>=cutoff).slice(-50));
   await storage.delete("push.job");
   await startNextPushJob(storage);
 }
@@ -3557,7 +3538,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"163.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"157.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -3670,22 +3651,8 @@ export class PushHub {
       return json({ok:true,id,adminPushQueued},200,{"Cache-Control":"no-store"});
     }
 
-    const touchOnlinePresence=async(data={})=>{
-      const deviceId=String(data?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
-      if(!deviceId)return;
-      const page=["home","escalation","info"].includes(String(data?.page))?String(data.page):"other";
-      await storage.put(`online:${deviceId}`,{deviceId,page,lastSeenAt:Date.now()});
-    };
-
-    if(url.pathname==="/analytics/heartbeat"&&request.method==="POST"){
-      const data=await request.json().catch(()=>({}));
-      await touchOnlinePresence(data);
-      return json({ok:true},200,{"Cache-Control":"no-store"});
-    }
-
     if(url.pathname==="/analytics/visit"&&request.method==="POST"){
       const data=await request.json().catch(()=>({}));
-      await touchOnlinePresence(data);
       const page=["home","escalation","info"].includes(String(data?.page))?String(data.page):"other";
       const now=Date.now(),parts=analyticsJerusalemParts(now),dayKey=`analytics.day:${parts.date}`,hourKey=`analytics.hour:${parts.date}:${String(parts.hour).padStart(2,"0")}`;
       const deviceId=String(data?.deviceId||"").slice(0,160);
@@ -3732,16 +3699,7 @@ export class PushHub {
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
       const adStatsRows=[...(await storage.list({prefix:"ad.stats:"})).values()];
       const ads={};for(const row of adStatsRows){if(row?.adId)ads[row.adId]=row;}
-      const onlineEntries=[...(await storage.list({prefix:"online:",limit:500})).entries()];
-      const onlineCutoff=Date.now()-150000,cleanupCutoff=Date.now()-15*60000;
-      let onlineNow=0;const onlinePages={home:0,escalation:0,info:0,other:0},staleOnlineKeys=[];
-      for(const [key,row] of onlineEntries){
-        const seen=Number(row?.lastSeenAt||0);
-        if(seen>=onlineCutoff){onlineNow+=1;const pg=["home","escalation","info"].includes(String(row?.page))?String(row.page):"other";onlinePages[pg]=Number(onlinePages[pg]||0)+1;}
-        else if(seen<cleanupCutoff)staleOnlineKeys.push(key);
-      }
-      if(staleOnlineKeys.length)await Promise.all(staleOnlineKeys.map((key)=>storage.delete(key)));
-      return json({ok:true,version:"163.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today,onlineNow,onlinePages,onlineWindowSeconds:150},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows},ads},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"157.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows},ads},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -3794,7 +3752,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"163.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"157.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -3843,13 +3801,7 @@ export class PushHub {
       const titleKey=cleanPushTitle(payload.title).toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
       const last=await storage.get("lead.lastPushedFingerprint"),lastTitleKey=await storage.get("lead.lastPushedTitleKey");
       if(!last){await storage.put("lead.lastPushedFingerprint",payload.fingerprint);await storage.put("lead.lastPushedTitleKey",titleKey);await storage.delete("lead.candidate");return json({ok:true,primed:true,pushed:0});}
-      const recentRows=Array.isArray(await storage.get("lead.recentPushed"))?await storage.get("lead.recentPushed"):[];
-      const recentCut=Date.now()-6*60*60*1000;
-      const recentPushed=recentRows.filter(x=>Date.parse(x?.at||0)>=recentCut).slice(-39);
-      if(last===payload.fingerprint||lastTitleKey===titleKey||recentPushed.some(x=>x?.fingerprint===payload.fingerprint||x?.titleKey===titleKey)){
-        if(recentRows.length!==recentPushed.length)await storage.put("lead.recentPushed",recentPushed);
-        await storage.delete("lead.candidate");return json({ok:true,changed:false,pushed:0,duplicate:true});
-      }
+      if(last===payload.fingerprint||lastTitleKey===titleKey){await storage.delete("lead.candidate");return json({ok:true,changed:false,pushed:0,duplicate:true});}
       const now=Date.now();let candidate=await storage.get("lead.candidate");
       if(candidate?.fingerprint===payload.fingerprint){candidate={...candidate,observations:Number(candidate.observations||1)+1,lastSeenAt:new Date().toISOString(),sources:Number(payload.sources||0)};}
       else candidate={fingerprint:payload.fingerprint,observations:1,firstSeenAt:new Date().toISOString(),lastSeenAt:new Date().toISOString(),sources:Number(payload.sources||0)};
@@ -3857,13 +3809,7 @@ export class PushHub {
       const stableMs=now-Date.parse(candidate.firstSeenAt||now),qualified=Number(payload.sources||0)>=2;
       if(!qualified||candidate.observations<2||stableMs<45000)return json({ok:true,changed:true,pending:true,observations:candidate.observations,stableSeconds:Math.round(stableMs/1000),sources:Number(payload.sources||0)});
       const queued=await queuePushJob(storage,{fingerprint:`lead:${payload.fingerprint}`,kind:"hot-story",title:payload.title,body:`🔥 הסיפור המרכזי עכשיו · ${Number(payload.sources||0)} מקורות מדווחים${payload.official?" · כולל מקור רשמי":""}`,url:"/",at:payload.at,sources:Number(payload.sources||0)});
-      if(queued.ok&&!queued.duplicate){
-        await storage.put("lead.lastPushedFingerprint",payload.fingerprint);await storage.put("lead.lastPushedTitleKey",titleKey);
-        const rows=Array.isArray(await storage.get("lead.recentPushed"))?await storage.get("lead.recentPushed"):[];
-        const kept=rows.filter(x=>Date.parse(x?.at||0)>=Date.now()-6*60*60*1000).slice(-39);
-        kept.push({fingerprint:payload.fingerprint,titleKey,at:new Date().toISOString()});await storage.put("lead.recentPushed",kept.slice(-40));
-        await storage.delete("lead.candidate");
-      }
+      if(queued.ok&&!queued.duplicate){await storage.put("lead.lastPushedFingerprint",payload.fingerprint);await storage.put("lead.lastPushedTitleKey",titleKey);await storage.delete("lead.candidate");}
       return json({ok:queued.ok,changed:true,queued:queued.ok,subscriptions:Number((await ensurePushStats(storage)).count||0),stabilitySeconds:Math.round(stableMs/1000)});
     }
 
