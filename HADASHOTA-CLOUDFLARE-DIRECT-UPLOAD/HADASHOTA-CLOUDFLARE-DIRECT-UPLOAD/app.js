@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "140.0.0";
+const KOTERET_CLIENT_BUILD = "142.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -272,7 +272,10 @@ const el = {
   homeEscalationScore: document.querySelector("#homeEscalationScore"),
   homeEscalationLevel: document.querySelector("#homeEscalationLevel"),
   homeEscalationTrend: document.querySelector("#homeEscalationTrend"),
-  escalationTeaser: document.querySelector("#escalationTeaser")
+  escalationTeaser: document.querySelector("#escalationTeaser"),
+  desktopEscalationBox: document.querySelector("#desktopEscalationBox"),
+  stripEscalationScore: document.querySelector("#stripEscalationScore"),
+  stripEscalationLevel: document.querySelector("#stripEscalationLevel")
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
@@ -347,7 +350,7 @@ function installInteractionSafetyNet() {
 }
 
 async function loadEscalationTeaser() {
-  if (!el.escalationTeaser && !el.navEscalationScore) return;
+  if (!el.escalationTeaser && !el.navEscalationScore && !el.desktopEscalationBox) return;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
@@ -359,13 +362,16 @@ async function loadEscalationTeaser() {
     const score = Math.round(Number(latest.score));
     if (el.navEscalationScore) el.navEscalationScore.textContent = String(score);
     if (el.homeEscalationScore) el.homeEscalationScore.textContent = String(score);
+    if (el.stripEscalationScore) el.stripEscalationScore.textContent = String(score);
+    if (el.stripEscalationLevel) el.stripEscalationLevel.textContent = latest.level || "מדד פעיל";
     if (el.homeEscalationLevel) el.homeEscalationLevel.textContent = latest.level || "מדד פעיל";
     if (el.homeEscalationTrend) {
       const delta = Number(latest.delta6h || 0);
       const arrow = delta > 1 ? "↑" : delta < -1 ? "↓" : "→";
-      el.homeEscalationTrend.textContent = `${arrow} ${Math.abs(delta).toFixed(0)} נק׳ ב־6 שעות · ${latest.availableSignals || 0}/${latest.totalSignals || 8} סיגנלים פעילים`;
+      el.homeEscalationTrend.textContent = `${arrow} ${Math.abs(delta).toFixed(0)} נק׳ ב־6 שעות · ${latest.availableSignals || 0}/${latest.totalSignals || 12} סיגנלים פעילים`;
     }
     el.escalationTeaser?.setAttribute("data-level", String(latest.levelKey || "routine"));
+    el.desktopEscalationBox?.setAttribute("data-level", String(latest.levelKey || "routine"));
   } catch (error) {
     if (error?.name !== "AbortError") console.warn("Escalation teaser refresh failed", error);
   } finally { clearTimeout(timer); }
@@ -435,9 +441,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V140 · API ${apiVersion}` : "גרסה V140 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V142 · API ${apiVersion}` : "גרסה V142 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V140 · API לא מחובר";
+    marker.textContent = "גרסה V142 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3945,7 +3951,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=140.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=142.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);

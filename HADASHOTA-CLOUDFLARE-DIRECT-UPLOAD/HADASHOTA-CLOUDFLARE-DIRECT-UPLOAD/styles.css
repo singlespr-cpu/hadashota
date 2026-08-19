@@ -8182,7 +8182,7 @@ html[data-theme="dark"] .homepage-url code{color:#cbd3dd}
 }
 
 /* =========================================================
-   V140 — Escalation Index entry points
+   V141 — Escalation Index entry points
    ========================================================= */
 .escalation-nav-link{
   display:inline-flex !important;
@@ -8264,3 +8264,158 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
   .escalation-teaser{grid-template-columns:minmax(92px,1fr) auto 18px;padding-inline:8px;gap:5px}
   .escalation-teaser__reading>b{display:none}
 }
+
+
+/* =========================================================
+   V141 — brand slogan parity for mobile-first indexing + UX
+   Keep the site slogan visible beneath the logo on every viewport.
+   ========================================================= */
+.brand-copy small {
+  display:block !important;
+}
+@media (max-width:700px) {
+  .topbar .brand-copy {
+    gap:2px !important;
+    min-width:0 !important;
+  }
+  .topbar .brand-copy small {
+    display:block !important;
+    font-size:7.4px !important;
+    line-height:1.05 !important;
+    white-space:nowrap !important;
+    max-width:145px !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+}
+@media (max-width:390px) {
+  .topbar .brand-copy small {
+    font-size:7px !important;
+    max-width:128px !important;
+  }
+}
+
+
+/* =========================================================
+   V142 — DESKTOP ONLY: three-box utility strip
+   Google | Escalation Index | Home Front Command
+   Mobile keeps the compact V139/V141 behavior.
+   ========================================================= */
+@media (min-width: 981px) {
+  #alertCenter { margin-top:10px !important; }
+  #alertCenter .kp-desktop-triple-strip {
+    width:100%;
+    display:grid;
+    grid-template-columns:minmax(280px,1fr) minmax(250px,.82fr) minmax(360px,1.12fr);
+    gap:10px;
+    align-items:stretch;
+    direction:ltr;
+  }
+  #alertCenter .kp-strip-box {
+    box-sizing:border-box;
+    min-height:66px;
+    height:66px;
+    border:1px solid #e3e7ec;
+    border-radius:16px;
+    background:#fff;
+    box-shadow:0 5px 18px rgba(16,24,40,.04);
+    overflow:hidden;
+  }
+  #alertCenter .kp-google-box {
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    min-width:0 !important;
+    max-width:none !important;
+    width:100% !important;
+    padding:10px 12px !important;
+    margin:0 !important;
+    direction:ltr !important;
+  }
+  #alertCenter .kp-google-box .google-search-form {
+    display:flex !important;
+    width:100% !important;
+    max-width:none !important;
+    height:38px !important;
+    margin:0 !important;
+    box-shadow:none !important;
+  }
+  #alertCenter .kp-google-box .homepage-button { display:none !important; }
+  #alertCenter .kp-escalation-box {
+    position:relative;
+    display:grid;
+    grid-template-columns:42px minmax(0,1fr) auto;
+    align-items:center;
+    gap:9px;
+    padding:8px 12px;
+    text-decoration:none;
+    color:#f8fafc;
+    background:linear-gradient(135deg,#101317 0%,#171b21 58%,#101317 100%);
+    border-color:#272d35;
+    direction:ltr;
+    isolation:isolate;
+  }
+  #alertCenter .kp-escalation-box::after {
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:radial-gradient(circle at 25% 50%,rgba(66,211,146,.10),transparent 44%);
+    z-index:-1;
+  }
+  #alertCenter .kp-escalation-radar {
+    width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+    border:1px solid rgba(255,255,255,.18);position:relative;
+    background:radial-gradient(circle,rgba(51,209,122,.18) 0 12%,transparent 13% 100%);
+  }
+  #alertCenter .kp-escalation-radar::before,
+  #alertCenter .kp-escalation-radar::after {content:"";position:absolute;border-radius:50%;border:1px solid rgba(255,255,255,.10);}
+  #alertCenter .kp-escalation-radar::before{inset:7px}
+  #alertCenter .kp-escalation-radar::after{inset:13px}
+  #alertCenter .kp-escalation-radar i{position:absolute;width:16px;height:1px;background:#33d17a;transform-origin:0 50%;left:50%;top:50%;animation:kpRadarSweep 3.4s linear infinite;box-shadow:0 0 7px rgba(51,209,122,.7)}
+  @keyframes kpRadarSweep{to{transform:rotate(360deg)}}
+  #alertCenter .kp-escalation-copy {display:flex;flex-direction:column;min-width:0;direction:rtl;text-align:right;line-height:1.08}
+  #alertCenter .kp-escalation-copy small{font-size:9px;color:#9aa4b2;font-weight:700;white-space:nowrap}
+  #alertCenter .kp-escalation-copy strong{font-size:14px;color:#fff;font-weight:900;white-space:nowrap;margin-top:3px}
+  #alertCenter .kp-escalation-value{display:grid;grid-template-columns:auto auto;grid-template-areas:"score unit" "level level";align-items:end;justify-items:end;column-gap:2px;direction:ltr}
+  #alertCenter .kp-escalation-value b{grid-area:score;font-size:25px;line-height:.9;font-weight:950;color:#33d17a;letter-spacing:-1px}
+  #alertCenter .kp-escalation-value em{grid-area:unit;font-style:normal;font-size:9px;color:#82909f;margin-bottom:2px}
+  #alertCenter .kp-escalation-value small{grid-area:level;font-size:9px;color:#aeb8c4;font-weight:800;margin-top:4px;white-space:nowrap;direction:rtl}
+  #alertCenter .kp-escalation-box[data-level="elevated"] .kp-escalation-value b{color:#f2c94c}
+  #alertCenter .kp-escalation-box[data-level="high"] .kp-escalation-value b{color:#ff9f43}
+  #alertCenter .kp-escalation-box[data-level="significant"] .kp-escalation-value b,
+  #alertCenter .kp-escalation-box[data-level="exceptional"] .kp-escalation-value b{color:#ff5a5f}
+  #alertCenter .kp-oref-box.alert-center-card {
+    display:flex !important;
+    align-items:center !important;
+    justify-content:flex-end !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    min-height:66px !important;
+    height:66px !important;
+    max-height:66px !important;
+    padding:8px 12px !important;
+    margin:0 !important;
+    direction:rtl !important;
+    gap:0 !important;
+  }
+  #alertCenter .kp-oref-box .alert-primary-wrap {
+    width:100% !important;max-width:none !important;min-width:0 !important;
+    flex:1 1 auto !important;display:flex !important;align-items:flex-end !important;
+  }
+  #alertCenter .kp-oref-box .alert-status-group {width:100% !important;justify-content:flex-start !important;}
+  #alertCenter .kp-oref-box .alert-center-eyebrow {justify-content:flex-start !important;}
+  #alertCenter .kp-oref-box .alert-center-actions {justify-content:flex-start !important;}
+  html[data-theme="dark"] #alertCenter .kp-google-box{background:#151b24;border-color:#2b333e}
+  /* The lower teaser is kept for mobile; on desktop the new center box replaces it. */
+  .escalation-teaser { display:none !important; }
+}
+
+@media (max-width: 980px) {
+  #alertCenter .kp-desktop-triple-strip { display:block !important; }
+  #alertCenter .kp-google-box,
+  #alertCenter .kp-escalation-box { display:none !important; }
+  #alertCenter .kp-oref-box.alert-center-card { width:100% !important; }
+}
+@media (prefers-reduced-motion:reduce){#alertCenter .kp-escalation-radar i{animation:none!important}}
