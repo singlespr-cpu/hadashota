@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "160.0.0";
+const KOTERET_CLIENT_BUILD = "162.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -432,10 +432,22 @@ function init() {
   //    localStorage snapshots;
   // 2) as soon as that fast render completes, force one real source collection
   //    and replace the screen again if newer data exists.
-  // V160: browsers only consume the shared edge snapshot. The one-minute Cron
-  // owns source collection, so opening the site never triggers another 45-source
-  // collection just because a cached snapshot was returned.
-  loadNews(false).catch((error) => console.warn("Initial news load failed", error));
+  loadNews(false).then((initialData) => {
+    // V74: a warm shared snapshot paints immediately, then gets exactly one
+    // full-source refresh. If the first request itself had to collect every
+    // source (cold cache), do NOT immediately collect all 45 sources a second time.
+    const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
+    const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 20_000;
+    const cameFromCache = Boolean(initialData?.servedFromCache);
+    const needsFreshPass = cameFromCache || state.dataDelayed || tooOld;
+    if (!needsFreshPass) return;
+
+    window.setTimeout(() => {
+      if (state.loading || document.hidden) return;
+      state.lastForegroundRefreshAt = 0;
+      loadNews(true, true, true);
+    }, 180);
+  }).catch((error) => console.warn("Initial news load failed", error));
   restartAutoRefresh();
   // First-visit Push offer: wait for the first paint/news merge so the dialog is responsive,
   // but still show it automatically on a new visit. App installation itself is never auto-prompted.
@@ -457,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V160 · API ${apiVersion}` : "גרסה V160 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V162 · API ${apiVersion}` : "גרסה V162 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V160 · API לא מחובר";
+    marker.textContent = "גרסה V162 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -490,7 +502,7 @@ function scheduleInstantResumeRefresh(reason = "resume", delayMs = 140) {
     try {
       state.lastForegroundRefreshAt = Date.now();
       state.forceLeadReevaluation = true;
-      await loadNews(false, true, true);
+      await loadNews(true, true, true);
     } catch (error) {
       console.warn(`Resume refresh (${resumeRefreshReason}) failed`, error);
     } finally {
@@ -821,7 +833,7 @@ function bindEvents() {
     localStorage.setItem("hadashota.notificationPromptChoice", "later");
     localStorage.setItem("hadashota.notificationSnoozeUntil", String(Date.now() + 24 * 60 * 60 * 1000));
     closeSiteModal(el.notificationOfferModal, false);
-    showToast("בסדר — נזכיר שוב בעוד 24 שעות");
+    showToast("בסדר — נזכיר שוב בעוד כשבועיים");
   });
 
   el.aboutBtn?.addEventListener("click", () => openSiteModal(el.aboutModal, el.aboutBtn));
@@ -928,8 +940,8 @@ function armNotificationOffer() {
 function maybeShowNotificationOffer() {
   if (notificationOfferShownThisSession || !el.notificationOfferModal) return;
   try { if (sessionStorage.getItem(PUSH_OFFER_TAB_KEY) === "1") return; } catch {}
-  const lastOfferShownAt=Number(localStorage.getItem("hadashota.notificationOfferLastShownAt")||0);
-  if(lastOfferShownAt&&Date.now()-lastOfferShownAt<30*60*1000)return;
+  const lastOfferShownAt = Number(localStorage.getItem("hadashota.notificationOfferLastShownAt") || 0);
+  if (lastOfferShownAt && Date.now() - lastOfferShownAt < 30 * 60 * 1000) return;
   if (!("serviceWorker" in navigator)) return;
 
   const snoozeUntil=Number(localStorage.getItem("hadashota.notificationSnoozeUntil")||0);
@@ -945,7 +957,7 @@ function maybeShowNotificationOffer() {
     if(el.notificationOfferText)el.notificationOfferText.innerHTML="כדי לקבל <strong>Push אמיתי גם כשהאתר סגור</strong>, הוסיפו קודם את כותרת פלוס למסך הבית. אחרי שפותחים מהאייקון אפשר לאשר התראות בלחיצה אחת.";
     if(el.notificationOfferAccept){delete el.notificationOfferAccept.dataset.stage;el.notificationOfferAccept.textContent="איך מפעילים באייפון";}
     notificationOfferShownThisSession=true;
-    try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt",String(Date.now())); } catch {}
+    try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt", String(Date.now())); } catch {}
     openSiteModal(el.notificationOfferModal);
     return;
   }
@@ -962,7 +974,7 @@ function maybeShowNotificationOffer() {
   if(el.notificationOfferText)el.notificationOfferText.innerHTML="כותרת פלוס שולחת <strong>Push אמיתי גם כשהאתר סגור</strong>, אחרי שהסיפור המרכזי אומת במספר מקורות ונשאר מוביל מספיק זמן כדי למנוע התראות כפולות.";
   if(el.notificationOfferAccept){delete el.notificationOfferAccept.dataset.stage;el.notificationOfferAccept.textContent="הפעלת התראות";}
   notificationOfferShownThisSession = true;
-  try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt",String(Date.now())); } catch {}
+  try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt", String(Date.now())); } catch {}
   openSiteModal(el.notificationOfferModal);
 }
 
@@ -1110,7 +1122,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V160: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V162: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -1179,11 +1191,11 @@ function refreshNewsOnForeground(reason = "foreground") {
   const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
   const snapshotAge = Number.isFinite(generatedMs) ? now - generatedMs : Infinity;
 
-  // V160: foreground resumes read the shared edge snapshot only. Source collection
-  // is centralized in Cron; a reader returning to the tab must never fan out to
-  // publishers.
-  void hiddenFor; void snapshotAge;
-  loadNews(false, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
+  // Returning after a meaningful absence should behave like opening the site:
+  // collect a fresh server snapshot immediately. Short focus changes can reuse
+  // the shared snapshot to avoid hammering publishers.
+  const forceFresh = hiddenFor >= 3_000 || snapshotAge >= 30_000 || reason === "online" || reason === "pageshow-bfcache";
+  loadNews(forceFresh, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
 async function loadNews(force = false, fromRetry = false, silent = false) {
@@ -1205,29 +1217,15 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
     let progressiveRendered = false;
-    let results;
-    if (!force) {
-      try {
-        const bundlePayloads = await fetchNewsBundle();
-        results = NEWS_SHARDS.map((shard) => {
-          const value = bundlePayloads.find((row) => row?.shard === shard);
-          return value ? { status: "fulfilled", value } : { status: "rejected", reason: new Error(`BUNDLE_MISSING_${shard}`) };
-        });
-      } catch (bundleError) {
-        console.warn("Shared news bundle unavailable; falling back to shard snapshots", bundleError);
-        results = await Promise.allSettled(NEWS_SHARDS.map((shard, index) => fetchNewsShard(shard, false, index * NEWS_SHARD_STAGGER_MS)));
-      }
-    } else {
-      const shardRequests = NEWS_SHARDS.map((shard, index) =>
-        fetchNewsShard(shard, true, index * NEWS_SHARD_STAGGER_MS).then((value) => {
-          if (!background && !progressiveRendered && Array.isArray(value?.items) && value.items.length) {
-            progressiveRendered = renderProgressiveShardPayload(shard, value);
-          }
-          return value;
-        })
-      );
-      results = await Promise.allSettled(shardRequests);
-    }
+    const shardRequests = NEWS_SHARDS.map((shard, index) =>
+      fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
+        if (!background && !progressiveRendered && Array.isArray(value?.items) && value.items.length) {
+          progressiveRendered = renderProgressiveShardPayload(shard, value);
+        }
+        return value;
+      })
+    );
+    const results = await Promise.allSettled(shardRequests);
     const payloads = [];
     let delayed = false;
     let freshShards = 0;
@@ -1378,30 +1376,6 @@ function renderProgressiveShardPayload(shard, payload) {
   }
 }
 
-async function fetchNewsBundle() {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort("client_bundle_timeout"), CLIENT_NEWS_TIMEOUT_MS);
-  try {
-    const params = new URLSearchParams({ _: String(Math.floor(Date.now() / 15000)) });
-    if (Date.now() - lastOnlineHeartbeatAt >= ONLINE_HEARTBEAT_INTERVAL_MS) {
-      params.set("presence", "1");
-      params.set("device", getPushDeviceId());
-      params.set("page", "home");
-      lastOnlineHeartbeatAt = Date.now();
-    }
-    const response = await fetch(`/api/news-bundle?${params}`, {
-      headers: { Accept: "application/json" },
-      signal: controller.signal,
-      cache: "no-store",
-      credentials: "same-origin"
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} (bundle)`);
-    const data = await response.json();
-    if (!Array.isArray(data?.shards) || !data.shards.length) throw new Error("EMPTY_NEWS_BUNDLE");
-    return data.shards;
-  } finally { clearTimeout(timeout); }
-}
-
 async function fetchNewsShard(shard, force = false, delayMs = 0) {
   if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   const controller = new AbortController();
@@ -1409,6 +1383,12 @@ async function fetchNewsShard(shard, force = false, delayMs = 0) {
   try {
     const params = new URLSearchParams({ shard });
     if (force) params.set("force", "1");
+    if (shard === "sites-1" && Date.now() - lastOnlineHeartbeatAt >= ONLINE_HEARTBEAT_INTERVAL_MS) {
+      params.set("presence", "1");
+      params.set("device", getPushDeviceId());
+      params.set("page", "home");
+      lastOnlineHeartbeatAt = Date.now();
+    }
     params.set("_", String(Math.floor(Date.now() / 15000)));
     const response = await fetch(`/api/news?${params}`, {
       // Keep the request as simple as possible for iOS/WebKit. The cache-busting
@@ -3128,23 +3108,6 @@ function renderStats(data = null) {
   if (data?.stats?.configuredSources) el.statSources.title = `${data.stats.configuredSources} מקורות מוגדרים במערכת; מוצגים רק מקורות שסיפקו נתונים`;
 }
 
-function renderFeedFallbackCard(item, index = 0) {
-  const title = escapeHtml(cleanDisplayTitle(item?.title || "עדכון חדשותי"));
-  const source = escapeHtml(cleanDisplayText(item?.sourceName || item?.publisher || "מקור חדשות"));
-  const rawUrl = String(item?.url || "").trim();
-  const href = /^https?:\/\//i.test(rawUrl) ? escapeHtml(rawUrl) : "#";
-  const category = String(item?.category || "other");
-  let age = "עכשיו";
-  try { age = formatAge(item?.publishedAt || item?.latestReportAt || ""); } catch {}
-  return `<article class="news-card clickable-story feed-fallback-card" data-category="${escapeHtml(category)}" data-story-url="${href}" role="link" tabindex="0" aria-label="פתיחת המקור: ${title}">
-    <div class="news-main"><div class="news-copy">
-      <div class="news-meta"><span class="source-name">${source}</span><span class="meta-sep">•</span><time>${escapeHtml(age)}</time></div>
-      <h3 class="news-title"><a href="${href}" target="_blank" rel="noopener noreferrer">${title}</a></h3>
-      <p class="news-preview">עדכון חדשותי בזמן אמת. לחצו למעבר לידיעה במקור.</p>
-    </div></div>
-  </article>`;
-}
-
 function renderFeed() {
   const allItems = filteredItems();
   const items = allItems.slice(0, Math.max(10, Number(state.feedVisibleCount || 10)));
@@ -3164,27 +3127,12 @@ function renderFeed() {
     return;
   }
 
-  // V160: once real data exists, never leave the initial skeletons on screen.
-  // A malformed image/license/report field in one story must not be able to
-  // abort the entire feed render. Render each card independently and fall back
-  // to a lightweight text card for the problematic item only.
-  let feedPromoHtml = "";
-  try { feedPromoHtml = feedPromoCardHtml(feedPromoData); }
-  catch (error) { console.warn("Feed promo render failed", error); }
-  try { captureVisibleFeedImages(); }
-  catch (error) { console.warn("Feed image-memory capture failed", error); }
-
-  const cardHtml = items.map((item, index) => {
-    try { return newsCardHtml(item); }
-    catch (error) {
-      console.error("News card render failed", { index, id: item?.id, url: item?.url, title: item?.title, error });
-      return renderFeedFallbackCard(item, index);
-    }
-  }).join("");
-
-  el.feed.innerHTML = feedPromoHtml + cardHtml;
-  try { hydrateDirectSourceImageSlotsNow(); }
-  catch (error) { console.warn("Direct feed image hydration failed", error); }
+  const feedPromoHtml = feedPromoCardHtml(feedPromoData);
+  // Preserve already loaded source images before the 30-second refresh rebuilds
+  // the feed DOM, then restore them immediately into the new cards.
+  captureVisibleFeedImages();
+  el.feed.innerHTML = feedPromoHtml + items.map(newsCardHtml).join("");
+  hydrateDirectSourceImageSlotsNow();
   requestAnimationFrame(() => {
     try { if (typeof v106ReapplyActiveFilter === "function") v106ReapplyActiveFilter(); } catch {}
   });
@@ -3635,14 +3583,13 @@ function applyLeadTitleSizing(title = "") {
   });
 }
 
-let lastDisplayedHotStorySyncKey="";
+let lastDisplayedHotStorySyncKey="",lastDisplayedHotStorySyncAt=0;
 function syncDisplayedHotStoryToServer(story) {
   if(!story?.fingerprint||!story?.title)return;
+  const now=Date.now();
   const key=`${story.fingerprint}|${story.title}|${story.sources}`;
-  if(key===lastDisplayedHotStorySyncKey)return;
-  try{if(sessionStorage.getItem("hadashota.lastHotStoryServerSyncKey")===key){lastDisplayedHotStorySyncKey=key;return}}catch{}
-  lastDisplayedHotStorySyncKey=key;
-  try{sessionStorage.setItem("hadashota.lastHotStoryServerSyncKey",key)}catch{}
+  if(key===lastDisplayedHotStorySyncKey&&now-lastDisplayedHotStorySyncAt<45000)return;
+  lastDisplayedHotStorySyncKey=key;lastDisplayedHotStorySyncAt=now;
   fetch("/api/hot-story",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},cache:"no-store",keepalive:true,body:JSON.stringify(story)}).catch(()=>{});
 }
 
@@ -4203,7 +4150,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=160.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=162.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4273,7 +4220,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=160.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=162.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4723,8 +4670,6 @@ function restartAutoRefresh() {
 async function runScheduledRefresh() {
   state.timer = null;
   if (!state.autoRefresh) return;
-  // Never let a background data merge compete with a modal button/permission
-  // interaction. Resume a few seconds after the dialog closes.
   if (document.querySelector(".site-modal:not(.hidden)")) { scheduleNextRefresh(5); return; }
 
   // Never lose the automatic-refresh loop because another network pass happens
@@ -6058,8 +6003,7 @@ async function setAlertDesktop(enabled) {
 
 function scheduleAlertPoll(delay) {
   clearTimeout(state.alertTimer);
-  if(document.hidden)return;
-  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : 10000);
+  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : (document.hidden ? 15000 : 5000));
 }
 
 async function pollEmergencyAlerts() {
@@ -6073,7 +6017,7 @@ async function pollEmergencyAlerts() {
     console.warn("Emergency alerts:", error);
     renderAlertConnectionError();
   } finally {
-    if(!document.hidden)scheduleAlertPoll(10000);
+    scheduleAlertPoll(document.hidden ? 15000 : 5000);
   }
 }
 

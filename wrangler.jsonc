@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hadashota",
   "main": "HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/_worker.js",
-  "compatibility_date": "2026-08-19",
+  "compatibility_date": "2026-08-12",
   "assets": {
     "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
     "binding": "ASSETS",
@@ -12,8 +12,8 @@
       "/index.html",
       "/escalation",
       "/escalation.html",
+      "/מדד-ההסלמה",
       "/%D7%9E%D7%93%D7%93-%D7%94%D7%94%D7%A1%D7%9C%D7%9E%D7%94",
-      "/manage-kp-7538*",
       "/about",
       "/about.html",
       "/how-it-works",
@@ -24,6 +24,7 @@
       "/privacy.html",
       "/copyright",
       "/copyright.html",
+      "/manage-kp-7538",
       "/robots.txt",
       "/sitemap.xml",
       "/sw.js"
@@ -42,10 +43,14 @@
   "migrations": [
     {
       "tag": "v123-true-web-push-1",
-      "new_sqlite_classes": ["PushHub"]
+      "new_sqlite_classes": [
+        "PushHub"
+      ]
     }
   ],
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": [
+      "* * * * *"
+    ]
   }
 }
