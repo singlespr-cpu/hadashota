@@ -8544,3 +8544,80 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
   #alertCenter .kp-mobile-escalation-top__value small{display:none}
   #alertCenter .kp-mobile-escalation-top__cta{font-size:6.8px;padding-inline:6px}
 }
+
+/* =========================================================
+   V145 — definitive desktop triple-strip placement
+   Fixes inherited <=980px grid-column/order rules that pushed Google
+   into a second row. Desktop visual order: Google | Index | Home Front.
+   ========================================================= */
+@media (min-width:701px) {
+  #alertCenter .kp-desktop-triple-strip {
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr) !important;
+    grid-template-rows:64px !important;
+    grid-template-areas:"google escalation oref" !important;
+    grid-auto-flow:column !important;
+    align-items:stretch !important;
+    gap:8px !important;
+    width:100% !important;
+    direction:ltr !important;
+  }
+
+  #alertCenter .kp-google-box {
+    grid-area:google !important;
+    grid-column:1 !important;
+    grid-row:1 !important;
+    order:0 !important;
+    align-self:stretch !important;
+    justify-self:stretch !important;
+    min-width:0 !important;
+    width:100% !important;
+  }
+
+  #alertCenter .kp-escalation-box {
+    grid-area:escalation !important;
+    grid-column:2 !important;
+    grid-row:1 !important;
+    order:0 !important;
+    align-self:stretch !important;
+    justify-self:stretch !important;
+    min-width:0 !important;
+    width:100% !important;
+  }
+
+  #alertCenter .kp-oref-box.alert-center-card {
+    grid-area:oref !important;
+    grid-column:3 !important;
+    grid-row:1 !important;
+    order:0 !important;
+    align-self:stretch !important;
+    justify-self:stretch !important;
+    min-width:0 !important;
+    width:100% !important;
+  }
+}
+
+/* Keep the one-line desktop strip usable even on narrower desktop windows. */
+@media (min-width:701px) and (max-width:930px) {
+  #alertCenter .kp-desktop-triple-strip {
+    grid-template-columns:minmax(0,.92fr) minmax(0,.96fr) minmax(0,1.12fr) !important;
+    gap:6px !important;
+  }
+  #alertCenter .kp-google-box { padding:7px 8px !important; }
+  #alertCenter .kp-escalation-box { padding:6px 8px !important; gap:5px !important; }
+  #alertCenter .kp-escalation-radar { width:29px !important; height:29px !important; }
+  #alertCenter .kp-escalation-copy small { display:none !important; }
+  #alertCenter .kp-escalation-copy strong { font-size:11px !important; }
+  #alertCenter .kp-escalation-value b { font-size:18px !important; }
+  #alertCenter .kp-escalation-value small { font-size:7px !important; }
+  #alertCenter .kp-escalation-cta { font-size:6.5px !important; padding-inline:5px !important; }
+  #alertCenter .kp-oref-box.alert-center-card { padding:6px 8px !important; }
+  #alertCenter .kp-oref-box #alertLastCheck { display:none !important; }
+  #alertCenter .kp-oref-box .alert-center-eyebrow b { font-size:11px !important; }
+  #alertCenter .kp-oref-box .alert-sound-quick,
+  #alertCenter .kp-oref-box .alert-settings-button {
+    height:28px !important;
+    padding-inline:6px !important;
+    font-size:8px !important;
+  }
+}

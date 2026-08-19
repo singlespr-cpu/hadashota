@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "144.0.0";
+const KOTERET_CLIENT_BUILD = "150.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -384,6 +384,7 @@ async function loadEscalationTeaser() {
 }
 
 function init() {
+  trackAnalyticsVisit("home");
   state.visitCount += 1;
   localStorage.setItem("hadashota.visitCount", String(state.visitCount));
   el.currentDate.textContent = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
@@ -447,9 +448,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V144 · API ${apiVersion}` : "גרסה V144 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V150 · API ${apiVersion}` : "גרסה V150 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V144 · API לא מחובר";
+    marker.textContent = "גרסה V150 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -739,14 +740,14 @@ function bindEvents() {
   });
 
   el.notificationOfferAccept?.addEventListener("click", async () => {
-    localStorage.setItem("hadashota.notificationPromptChoice", "accepted");
     closeSiteModal(el.notificationOfferModal, false);
     await toggleHeadlineNotifications(true);
   });
   el.notificationOfferDecline?.addEventListener("click", () => {
-    localStorage.setItem("hadashota.notificationPromptChoice", "declined");
+    localStorage.setItem("hadashota.notificationPromptChoice", "later");
+    localStorage.setItem("hadashota.notificationSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
     closeSiteModal(el.notificationOfferModal, false);
-    showToast("לא נציג שוב את ההצעה להתראות — אפשר להפעיל אותן בכל עת בהעדפות");
+    showToast("בסדר — נזכיר שוב בעוד כשבועיים");
   });
 
   el.aboutBtn?.addEventListener("click", () => openSiteModal(el.aboutModal, el.aboutBtn));
@@ -824,16 +825,17 @@ let notificationOfferShownThisSession = false;
 
 function maybeShowNotificationOffer() {
   if (notificationOfferShownThisSession || !el.notificationOfferModal) return;
-  const choice = localStorage.getItem("hadashota.notificationPromptChoice");
-  if (choice === "accepted" || choice === "declined") return;
-  if (state.notificationsEnabled) {
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  if (state.notificationsEnabled && Notification.permission === "granted") {
     localStorage.setItem("hadashota.notificationPromptChoice", "accepted");
     return;
   }
-  if ("Notification" in window && Notification.permission === "denied") {
-    localStorage.setItem("hadashota.notificationPromptChoice", "declined");
-    return;
-  }
+  if (Notification.permission === "denied") return;
+  const snoozeUntil=Number(localStorage.getItem("hadashota.notificationSnoozeUntil")||0);
+  if(snoozeUntil>Date.now())return;
+  const choice=localStorage.getItem("hadashota.notificationPromptChoice");
+  if(choice==="accepted"&&Notification.permission==="granted")return;
+  if(choice==="declined"&&!snoozeUntil){localStorage.setItem("hadashota.notificationPromptChoice","later");localStorage.setItem("hadashota.notificationSnoozeUntil",String(Date.now()+14*24*60*60*1000));return;}
   notificationOfferShownThisSession = true;
   openSiteModal(el.notificationOfferModal);
 }
@@ -3603,6 +3605,19 @@ function renderLeadStory() {
   const count = Math.max(1, Number(winner.uniqueSources) || unique.length || 1);
   el.leadStoryCount.textContent = `${count} ${count === 1 ? "מקור מדווח" : "מקורות מדווחים"}`;
 
+  // V148 — publish the exact headline currently shown by the newsroom so the
+  // escalation page can mirror the same hot story without inventing a second
+  // editorial choice. localStorage also emits a cross-tab storage event.
+  try {
+    localStorage.setItem("hadashota.publicLead.v1", JSON.stringify({
+      fingerprint: winnerFingerprint,
+      title: leadTitle,
+      sources: count,
+      at: winner.latestAt || item.latestReportAt || item.publishedAt || new Date().toISOString(),
+      savedAt: Date.now()
+    }));
+  } catch {}
+
   const leadHot = storyHotScore(item);
   const leadVerify = storyVerification(item);
   if (el.leadHotScore) el.leadHotScore.textContent = `🔥 חום ${leadHot}/100`;
@@ -3947,6 +3962,19 @@ function getRefreshInterval() {
 }
 
 
+async function trackAnalyticsVisit(page="home") {
+  try {
+    await fetch("/api/analytics/visit",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",keepalive:true,body:JSON.stringify({page,deviceId:getPushDeviceId(),userAgent:navigator.userAgent.slice(0,220),referrer:document.referrer||""})});
+  } catch {}
+}
+function syncPushDeviceIdToServiceWorker(registration=state.serviceWorkerRegistration) {
+  const deviceId=getPushDeviceId();
+  try{registration?.active?.postMessage({type:"SET_PUSH_DEVICE_ID",deviceId});}catch{}
+  try{registration?.waiting?.postMessage({type:"SET_PUSH_DEVICE_ID",deviceId});}catch{}
+  try{registration?.installing?.postMessage({type:"SET_PUSH_DEVICE_ID",deviceId});}catch{}
+  try{navigator.serviceWorker?.controller?.postMessage({type:"SET_PUSH_DEVICE_ID",deviceId});}catch{}
+}
+
 function reconcileNotificationPermission() {
   if (!("Notification" in window) || Notification.permission !== "granted") {
     state.notificationsEnabled = false;
@@ -3957,7 +3985,9 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=144.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=150.0.0", { updateViaCache: "none" });
+    syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
+    navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
@@ -4052,6 +4082,7 @@ async function ensureServerPushSubscription() {
     })
   });
   if (!response.ok) throw new Error(`push_subscribe_${response.status}`);
+  syncPushDeviceIdToServiceWorker(registration);
   return subscription;
 }
 
@@ -4083,8 +4114,6 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
     return;
   }
 
-  localStorage.setItem("hadashota.notificationPromptChoice", "accepted");
-
   if (!("Notification" in window)) {
     showToast("הדפדפן לא תומך בהתראות");
     return;
@@ -4095,7 +4124,7 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
     localStorage.setItem("hadashota.headlineNotifications", "0");
     syncControlsFromState();
     showToast("באייפון: הוסיפו קודם את כותרת פלוס למסך הבית ואז הפעילו התראות");
-    openInstallOffer?.();
+    maybeShowInstallOffer("manual");
     return;
   }
 
@@ -4122,6 +4151,8 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
 
   state.notificationsEnabled = true;
   state.leadNotificationPrimed = true;
+  localStorage.setItem("hadashota.notificationPromptChoice", "accepted");
+  localStorage.removeItem("hadashota.notificationSnoozeUntil");
   localStorage.setItem("hadashota.headlineNotifications", "1");
   syncControlsFromState();
   showToast("Push אמיתי הופעל — תקבלו התראה גם כשהאתר לא פתוח");
@@ -5579,22 +5610,23 @@ function escapeHtml(value) {
 
 async function shareKoteretPlus() {
   const shareData = {
-    title: "כותרת פלוס",
-    text: "כל החדשות. כל המקורות. במקום אחד.",
+    title: "כותרת פלוס — חדשות בזמן אמת",
+    text: "כותרת פלוס — כל מה שקורה עכשיו במקום אחד. חדשות, מבזקים ועדכונים בזמן אמת ממגוון מקורות בישראל.",
     url: location.origin + "/"
   };
+  const clipboardText = `${shareData.text}\n${shareData.url}`;
   try {
     if (navigator.share) {
       await navigator.share(shareData);
       return;
     }
-    await navigator.clipboard.writeText(shareData.url);
-    showToast("הקישור לכותרת פלוס הועתק");
+    await navigator.clipboard.writeText(clipboardText);
+    showToast("טקסט השיתוף והקישור הועתקו");
   } catch (error) {
     if (error?.name === "AbortError") return;
     try {
       const box = document.createElement("textarea");
-      box.value = shareData.url;
+      box.value = clipboardText;
       box.setAttribute("readonly", "");
       box.style.position = "fixed";
       box.style.opacity = "0";
@@ -5602,7 +5634,7 @@ async function shareKoteretPlus() {
       box.select();
       document.execCommand("copy");
       box.remove();
-      showToast("הקישור לכותרת פלוס הועתק");
+      showToast("טקסט השיתוף והקישור הועתקו");
     } catch {
       showToast("אפשר להעתיק את כתובת האתר משורת הכתובת");
     }
