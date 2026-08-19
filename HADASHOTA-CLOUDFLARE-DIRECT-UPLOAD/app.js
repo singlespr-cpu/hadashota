@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "139.0.0";
+const KOTERET_CLIENT_BUILD = "140.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -267,7 +267,12 @@ const el = {
   alertDesktopToggle: document.querySelector("#alertDesktopToggle"),
   alertTestBtn: document.querySelector("#alertTestBtn"),
   alertConnectionState: document.querySelector("#alertConnectionState"),
-  alertLiveRegion: document.querySelector("#alertLiveRegion")
+  alertLiveRegion: document.querySelector("#alertLiveRegion"),
+  navEscalationScore: document.querySelector("#navEscalationScore"),
+  homeEscalationScore: document.querySelector("#homeEscalationScore"),
+  homeEscalationLevel: document.querySelector("#homeEscalationLevel"),
+  homeEscalationTrend: document.querySelector("#homeEscalationTrend"),
+  escalationTeaser: document.querySelector("#escalationTeaser")
 };
 
 const MAINSTREAM_PUBLISHERS = ["ynet", "n12", "walla", "israelhayom", "kan", "13tv", "maariv"];
@@ -341,6 +346,31 @@ function installInteractionSafetyNet() {
   }, { capture: false });
 }
 
+async function loadEscalationTeaser() {
+  if (!el.escalationTeaser && !el.navEscalationScore) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch("/api/escalation", { cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Escalation HTTP ${response.status}`);
+    const payload = await response.json();
+    const latest = payload?.latest;
+    if (!latest || !Number.isFinite(Number(latest.score))) return;
+    const score = Math.round(Number(latest.score));
+    if (el.navEscalationScore) el.navEscalationScore.textContent = String(score);
+    if (el.homeEscalationScore) el.homeEscalationScore.textContent = String(score);
+    if (el.homeEscalationLevel) el.homeEscalationLevel.textContent = latest.level || "מדד פעיל";
+    if (el.homeEscalationTrend) {
+      const delta = Number(latest.delta6h || 0);
+      const arrow = delta > 1 ? "↑" : delta < -1 ? "↓" : "→";
+      el.homeEscalationTrend.textContent = `${arrow} ${Math.abs(delta).toFixed(0)} נק׳ ב־6 שעות · ${latest.availableSignals || 0}/${latest.totalSignals || 8} סיגנלים פעילים`;
+    }
+    el.escalationTeaser?.setAttribute("data-level", String(latest.levelKey || "routine"));
+  } catch (error) {
+    if (error?.name !== "AbortError") console.warn("Escalation teaser refresh failed", error);
+  } finally { clearTimeout(timer); }
+}
+
 function init() {
   state.visitCount += 1;
   localStorage.setItem("hadashota.visitCount", String(state.visitCount));
@@ -359,6 +389,8 @@ function init() {
   initPromoCard();
   initFeedPromo();
   initAlertCenter();
+  setTimeout(loadEscalationTeaser, restoredInstantly ? 950 : 500);
+  window.setInterval(() => { if (!document.hidden) loadEscalationTeaser(); }, 60 * 1000);
   window.setInterval(() => { if (!document.hidden) loadUtilities(); }, 5 * 60 * 1000);
   // V80 always-ready strategy:
   // 1) immediately join the shared Worker snapshot so Safari, desktop and the
@@ -403,9 +435,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V139 · API ${apiVersion}` : "גרסה V139 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V140 · API ${apiVersion}` : "גרסה V140 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V139 · API לא מחובר";
+    marker.textContent = "גרסה V140 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3913,7 +3945,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=139.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=140.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration.update().catch(() => {});
 
     const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);

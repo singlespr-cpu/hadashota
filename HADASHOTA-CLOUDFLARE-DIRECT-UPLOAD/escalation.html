@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c1118">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="description" content="__ESC_DESC__">
+  <link rel="canonical" href="__SITE_URL__/escalation">
+  <meta property="og:locale" content="he_IL">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="כותרת פלוס">
+  <meta property="og:title" content="מדד ההסלמה: __ESC_SCORE__/100 — __ESC_LEVEL__ | כותרת פלוס">
+  <meta property="og:description" content="__ESC_DESC__">
+  <meta property="og:url" content="__SITE_URL__/escalation">
+  <meta property="og:image" content="__SITE_URL__/koteret-plus-share.png?v=140.0.0">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="מדד ההסלמה: __ESC_SCORE__/100 — __ESC_LEVEL__ | כותרת פלוס">
+  <meta name="twitter:description" content="__ESC_DESC__">
+  <meta name="twitter:image" content="__SITE_URL__/koteret-plus-share.png?v=140.0.0">
+  <title>מדד ההסלמה: __ESC_SCORE__/100 — __ESC_LEVEL__ | כותרת פלוס</title>
+  <link rel="icon" href="/favicon.svg?v=140.0.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=140.0.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/escalation.css?v=140.0.0">
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"WebPage",
+    "name":"מדד ההסלמה של כותרת פלוס",
+    "description":"מדד OSINT אוטומטי לרמת המתיחות האזורית המבוסס על מקורות פתוחים.",
+    "url":"__SITE_URL__/escalation",
+    "isPartOf":{"@type":"WebSite","name":"כותרת פלוס","url":"__SITE_URL__/"}
+  }
+  </script>
+</head>
+<body>
+  <header class="esc-topbar">
+    <div class="esc-shell esc-topbar-inner">
+      <a class="esc-brand" href="/" aria-label="כותרת פלוס - דף הבית">
+        <span class="esc-brand-mark" aria-hidden="true"><i></i></span>
+        <span><strong>כותרת פלוס</strong><small>חדשות בזמן אמת</small></span>
+      </a>
+      <div class="esc-top-actions">
+        <button id="shareEscalation" class="esc-share" type="button" aria-label="שיתוף מדד ההסלמה">שיתוף</button>
+        <a class="esc-back" href="/">חזרה לאתר המלא</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="esc-hero">
+      <div class="esc-shell esc-hero-grid">
+        <div class="esc-hero-copy">
+          <span class="esc-kicker"><i></i> OSINT · מתעדכן אוטומטית</span>
+          <h1>מדד ההסלמה של כותרת פלוס</h1>
+          <p class="esc-subtitle">רמת המתיחות האזורית בזמן אמת על בסיס חדשות, התרעות, תעופה, NOTAM, נפט, מקורות רשמיים, תעבורה ימית ושווקי חיזוי.</p>
+          <div class="esc-status-line">
+            <span id="escUpdated">אוסף נתונים…</span>
+            <span class="esc-dot">•</span>
+            <span id="escConfidence">בודק מקורות</span>
+          </div>
+          <div class="esc-trend-box" id="escTrendBox">
+            <strong id="escTrend">—</strong>
+            <span>שינוי ב־6 השעות האחרונות</span>
+          </div>
+        </div>
+
+        <div class="esc-gauge-wrap" aria-live="polite">
+          <div class="esc-gauge" id="escGauge" style="--score:0">
+            <svg viewBox="0 0 200 200" aria-hidden="true">
+              <circle class="esc-gauge-track" cx="100" cy="100" r="82"></circle>
+              <circle class="esc-gauge-value" id="escGaugeCircle" cx="100" cy="100" r="82"></circle>
+            </svg>
+            <div class="esc-gauge-center">
+              <div><strong id="escScore">—</strong><span>%</span></div>
+              <b id="escLevel">אוסף נתונים</b>
+              <small>מדד 0–100</small>
+            </div>
+          </div>
+          <p class="esc-not-probability"><b>חשוב:</b> המספר הוא מדד לעוצמת המתיחות — <strong>לא הסתברות שמלחמה תתחיל</strong> ולא תחזית מודיעינית.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="esc-shell esc-summary" aria-label="מצב מקורות המדד">
+      <div><span>מקורות פעילים</span><strong id="escSourcesActive">—</strong></div>
+      <div><span>כיסוי נתונים</span><strong id="escCoverage">—</strong></div>
+      <div><span>סיגנלים מוגברים</span><strong id="escElevated">—</strong></div>
+      <div><span>רענון הבא</span><strong id="escNextRefresh">60 שנ׳</strong></div>
+    </section>
+
+    <section class="esc-shell esc-panel">
+      <div class="esc-section-head">
+        <div><span>מגמה</span><h2>72 השעות האחרונות</h2></div>
+        <div class="esc-legend"><i></i> מדד משוקלל</div>
+      </div>
+      <div class="esc-chart-wrap">
+        <svg class="esc-chart" id="escChart" viewBox="0 0 900 240" preserveAspectRatio="none" role="img" aria-label="גרף מדד ההסלמה ב-72 השעות האחרונות">
+          <defs>
+            <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity=".18"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient>
+          </defs>
+          <g class="esc-chart-grid"><line x1="0" x2="900" y1="60" y2="60"></line><line x1="0" x2="900" y1="120" y2="120"></line><line x1="0" x2="900" y1="180" y2="180"></line></g>
+          <path id="escChartArea" class="esc-chart-area" d=""></path>
+          <path id="escChartLine" class="esc-chart-line" d=""></path>
+        </svg>
+        <div class="esc-chart-empty" id="escChartEmpty">המערכת אוספת היסטוריה. הגרף יתמלא אוטומטית.</div>
+      </div>
+      <div class="esc-chart-axis"><span>לפני 72 שעות</span><span>לפני 36 שעות</span><span>עכשיו</span></div>
+    </section>
+
+    <section class="esc-shell esc-panel">
+      <div class="esc-section-head">
+        <div><span>למה המדד נמצא כאן?</span><h2>הסיגנלים שמרכיבים את המדד</h2></div>
+        <small>משקלים מתאזנים אוטומטית כאשר מקור אינו זמין</small>
+      </div>
+      <div class="esc-signals" id="escSignals">
+        <div class="esc-loading-card">טוען מקורות…</div>
+      </div>
+    </section>
+
+    <section class="esc-shell esc-two-col">
+      <article class="esc-panel esc-changes-panel">
+        <div class="esc-section-head"><div><span>מה השתנה?</span><h2>הגורמים המשפיעים עכשיו</h2></div></div>
+        <ol class="esc-changes" id="escChanges"><li>אוסף ומצליב נתונים…</li></ol>
+      </article>
+
+      <article class="esc-panel esc-pizza-panel">
+        <div class="esc-section-head"><div><span>סיגנל ניסיוני</span><h2>🍕 מדד הפיצה של הפנטגון</h2></div><b class="esc-zero-weight">0% משקל</b></div>
+        <div class="esc-pizza-value"><strong id="pizzaLevel">—</strong><span id="pizzaScore">ממתין לנתונים</span></div>
+        <p id="pizzaReason">הסיגנל מוצג לצורכי OSINT וסקרנות בלבד ואינו משפיע כלל על המדד הראשי.</p>
+        <a href="https://www.pizzint.watch/" target="_blank" rel="noopener noreferrer">מקור: PizzINT ↗</a>
+        <small>פעילות חריגה בפיצריות אינה ראיה לפעילות צבאית. קורלציה אינה סיבתיות.</small>
+      </article>
+    </section>
+
+    <section class="esc-shell esc-panel esc-methodology">
+      <div class="esc-section-head"><div><span>שקיפות מלאה</span><h2>איך אנחנו מחשבים את המדד?</h2></div></div>
+      <div class="esc-method-grid">
+        <div><b>1</b><strong>אוספים</strong><p>המערכת משתמשת במידע גלוי בלבד: 45 מקורות כותרת פלוס ומקורות OSINT/רשמיים נוספים.</p></div>
+        <div><b>2</b><strong>מצליבים</strong><p>סיגנל בודד לא אמור להקפיץ את המדד לבדו. שילוב של מקורות עצמאיים מקבל משמעות גבוהה יותר.</p></div>
+        <div><b>3</b><strong>משקללים</strong><p>כל משפחת נתונים מקבלת משקל ידוע מראש. מקור לא זמין מוסר זמנית והמשקלים האחרים מנורמלים.</p></div>
+        <div><b>4</b><strong>מחליקים</strong><p>העלייה מגיבה מהר יחסית; הירידה איטית יותר כדי למנוע קפיצות מלאכותיות בין רענונים.</p></div>
+      </div>
+      <div class="esc-weights" id="escWeights"></div>
+      <p class="esc-method-note">המדד הוא כלי למודעות מצבית המבוסס OSINT. הוא אינו מבוסס על מידע מסווג, אינו יודע החלטות סודיות ואינו יכול לחזות מועד של תקיפה או מלחמה.</p>
+    </section>
+
+    <section class="esc-shell esc-sources-panel">
+      <h2>מקורות מרכזיים</h2>
+      <div class="esc-source-links">
+        <a href="/" target="_self">45 מקורות כותרת פלוס</a>
+        <a href="https://www.oref.org.il/" target="_blank" rel="noopener noreferrer">פיקוד העורף</a>
+        <a href="https://ext.iaa.gov.il/aeroinfo/AeroInfo.aspx?msgType=Notam" target="_blank" rel="noopener noreferrer">רשות שדות התעופה / NOTAM</a>
+        <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer">ADSB.lol</a>
+        <a href="https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/" target="_blank" rel="noopener noreferrer">CENTCOM</a>
+        <a href="https://travel.state.gov/" target="_blank" rel="noopener noreferrer">U.S. State Department</a>
+        <a href="https://www.ukmto.org/recent-incidents" target="_blank" rel="noopener noreferrer">UKMTO</a>
+        <a href="https://fred.stlouisfed.org/series/DCOILBRENTEU" target="_blank" rel="noopener noreferrer">Brent / Yahoo + FRED-EIA</a>
+        <a href="https://polymarket.com/" target="_blank" rel="noopener noreferrer">Polymarket</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="esc-footer">
+    <div class="esc-shell esc-footer-card">
+      <div class="esc-footer-brand"><span class="esc-brand-mark"><i></i></span><div><strong>כותרת פלוס</strong><small>כל החדשות, המבזקים והמקורות במקום אחד</small></div></div>
+      <div><p>רוצים להבין מה עומד מאחורי המדד? עברו לאתר המלא וצפו בדיווחים שהמערכת אוספת ומצליבה בזמן אמת.</p><a class="esc-main-cta" href="/">לכותרת פלוס — כל החדשות בזמן אמת</a></div>
+    </div>
+    <div class="esc-shell esc-legal">מדד ההסלמה הוא שירות של כותרת פלוס · מידע גלוי בלבד · אין לראות במדד תחזית, התרעה רשמית או תחליף להנחיות פיקוד העורף.</div>
+  </footer>
+
+  <div class="esc-toast" id="escToast" role="status" aria-live="polite"></div>
+  <script src="/escalation.js?v=140.0.0" defer></script>
+</body>
+</html>
