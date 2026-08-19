@@ -2,11 +2,20 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hadashota",
   "main": "HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/_worker.js",
-  "compatibility_date": "2026-08-12",
+  "compatibility_date": "2026-08-19",
   "assets": {
     "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
     "binding": "ASSETS",
-    "run_worker_first": true,
+    "run_worker_first": [
+      "/index.html",
+      "/escalation.html",
+      "/about.html",
+      "/how-it-works.html",
+      "/contact.html",
+      "/privacy.html",
+      "/copyright.html",
+      "/sw.js"
+    ],
     "html_handling": "none",
     "not_found_handling": "none"
   },

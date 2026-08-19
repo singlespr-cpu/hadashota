@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "156.0.0";
+const KOTERET_CLIENT_BUILD = "158.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -81,6 +81,7 @@ const state = {
   notificationsEnabled: localStorage.getItem("hadashota.headlineNotifications") === "1",
   pushNews: localStorage.getItem("hadashota.pushNews") !== "0",
   pushEscalation: localStorage.getItem("hadashota.pushEscalation") !== "0",
+  pushOref: localStorage.getItem("hadashota.pushOref") !== "0",
   currentLeadFingerprint: localStorage.getItem("hadashota.lastLeadFingerprint") || "",
   leadNotificationPrimed: localStorage.getItem("hadashota.lastLeadFingerprint") ? true : false,
   serviceWorkerRegistration: null,
@@ -134,6 +135,7 @@ const el = {
   notificationToggle: document.querySelector("#notificationToggle"),
   pushNewsToggle: document.querySelector("#pushNewsToggle"),
   pushEscalationToggle: document.querySelector("#pushEscalationToggle"),
+  pushOrefToggle: document.querySelector("#pushOrefToggle"),
   notificationOfferModal: document.querySelector("#notificationOfferModal"),
   notificationOfferTitle: document.querySelector("#notificationOfferTitle"),
   notificationOfferText: document.querySelector("#notificationOfferText"),
@@ -307,6 +309,9 @@ const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v112";
 const FAST_RENDER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
+const PUSH_OFFER_TAB_KEY = "hadashota.notificationOfferShownThisTab";
+const ONLINE_HEARTBEAT_INTERVAL_MS = 120_000;
+let lastOnlineHeartbeatAt = 0;
 
 let feedPromoData = null;
 
@@ -427,26 +432,14 @@ function init() {
   //    localStorage snapshots;
   // 2) as soon as that fast render completes, force one real source collection
   //    and replace the screen again if newer data exists.
-  loadNews(false).then((initialData) => {
-    // V74: a warm shared snapshot paints immediately, then gets exactly one
-    // full-source refresh. If the first request itself had to collect every
-    // source (cold cache), do NOT immediately collect all 45 sources a second time.
-    const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
-    const tooOld = !Number.isFinite(generatedMs) || Date.now() - generatedMs > 20_000;
-    const cameFromCache = Boolean(initialData?.servedFromCache);
-    const needsFreshPass = cameFromCache || state.dataDelayed || tooOld;
-    if (!needsFreshPass) return;
-
-    window.setTimeout(() => {
-      if (state.loading || document.hidden) return;
-      state.lastForegroundRefreshAt = 0;
-      loadNews(true, true, true);
-    }, 180);
-  }).catch((error) => console.warn("Initial news load failed", error));
+  // V158: browsers only consume the shared edge snapshot. The one-minute Cron
+  // owns source collection, so opening the site never triggers another 45-source
+  // collection just because a cached snapshot was returned.
+  loadNews(false).catch((error) => console.warn("Initial news load failed", error));
   restartAutoRefresh();
   // First-visit Push offer: wait for the first paint/news merge so the dialog is responsive,
   // but still show it automatically on a new visit. App installation itself is never auto-prompted.
-  window.setTimeout(maybeShowNotificationOffer, 1800);
+  armNotificationOffer();
   syncInstallControl();
 }
 
@@ -464,9 +457,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V156 · API ${apiVersion}` : "גרסה V156 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V158 · API ${apiVersion}` : "גרסה V158 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V156 · API לא מחובר";
+    marker.textContent = "גרסה V158 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -497,7 +490,7 @@ function scheduleInstantResumeRefresh(reason = "resume", delayMs = 140) {
     try {
       state.lastForegroundRefreshAt = Date.now();
       state.forceLeadReevaluation = true;
-      await loadNews(true, true, true);
+      await loadNews(false, true, true);
     } catch (error) {
       console.warn(`Resume refresh (${resumeRefreshReason}) failed`, error);
     } finally {
@@ -540,6 +533,10 @@ function bindEvents() {
 
   // Every news item is a link to its exact source, including Telegram messages.
   // Interactive controls inside a card keep their own behavior.
+  document.addEventListener("click", (event) => {
+    const adLink=event.target.closest("[data-ad-id][data-ad-slot]");
+    if(adLink?.dataset.adId)trackAdEvent({id:adLink.dataset.adId},adLink.dataset.adSlot,"click");
+  }, {capture:true});
   el.feed?.addEventListener("click", (event) => {
     const adContact = event.target.closest("[data-open-ad-contact]");
     if (adContact) { event.preventDefault(); openContactModal("פרסום", adContact); return; }
@@ -618,6 +615,7 @@ function bindEvents() {
     state.alertAllIsrael = el.alertAllIsrael.checked;
     localStorage.setItem("hadashota.alertAllIsrael", state.alertAllIsrael ? "1" : "0");
     syncAlertSettings();
+    syncPushPreferencesToServer();
   });
   el.alertAddCity?.addEventListener("click", addAlertCityFromInput);
   el.alertCityInput?.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); addAlertCityFromInput(); } });
@@ -627,6 +625,7 @@ function bindEvents() {
     state.alertCities = state.alertCities.filter((city) => city !== button.dataset.alertCity);
     localStorage.setItem("hadashota.alertCities", JSON.stringify(state.alertCities));
     syncAlertSettings();
+    syncPushPreferencesToServer();
   });
   el.alertTestBtn?.addEventListener("click", runAlertTest);
   window.addEventListener("scroll", () => {
@@ -698,6 +697,13 @@ function bindEvents() {
     state.pushEscalation = el.pushEscalationToggle.checked;
     localStorage.setItem("hadashota.pushEscalation", state.pushEscalation ? "1" : "0");
     await syncPushPreferencesToServer();
+    syncControlsFromState();
+  });
+  el.pushOrefToggle?.addEventListener("change", async () => {
+    state.pushOref = el.pushOrefToggle.checked;
+    localStorage.setItem("hadashota.pushOref", state.pushOref ? "1" : "0");
+    if (state.pushOref && !state.notificationsEnabled) await toggleHeadlineNotifications(true);
+    else await syncPushPreferencesToServer();
     syncControlsFromState();
   });
 
@@ -813,9 +819,9 @@ function bindEvents() {
   });
   el.notificationOfferDecline?.addEventListener("click", () => {
     localStorage.setItem("hadashota.notificationPromptChoice", "later");
-    localStorage.setItem("hadashota.notificationSnoozeUntil", String(Date.now() + 14 * 24 * 60 * 60 * 1000));
+    localStorage.setItem("hadashota.notificationSnoozeUntil", String(Date.now() + 24 * 60 * 60 * 1000));
     closeSiteModal(el.notificationOfferModal, false);
-    showToast("בסדר — נזכיר שוב בעוד כשבועיים");
+    showToast("בסדר — נזכיר שוב בעוד 24 שעות");
   });
 
   el.aboutBtn?.addEventListener("click", () => openSiteModal(el.aboutModal, el.aboutBtn));
@@ -897,9 +903,33 @@ function bindEvents() {
 }
 
 let notificationOfferShownThisSession = false;
+let notificationOfferTimer = null;
+let notificationOfferArmed = false;
+
+function armNotificationOffer() {
+  if (notificationOfferArmed) return;
+  notificationOfferArmed = true;
+  const trigger = () => {
+    if (notificationOfferTimer) { clearTimeout(notificationOfferTimer); notificationOfferTimer = null; }
+    window.removeEventListener("scroll", onScroll);
+    document.removeEventListener("visibilitychange", onVisibility);
+    document.removeEventListener("click", onNavClick, true);
+    window.setTimeout(maybeShowNotificationOffer, 120);
+  };
+  const onScroll = () => { if (window.scrollY > 160) trigger(); };
+  const onVisibility = () => { if (!document.hidden) trigger(); };
+  const onNavClick = (event) => { if (event.target.closest(".news-nav, [data-quick-category], [data-quick-kind]")) trigger(); };
+  window.addEventListener("scroll", onScroll, { passive:true });
+  document.addEventListener("visibilitychange", onVisibility);
+  document.addEventListener("click", onNavClick, true);
+  notificationOfferTimer = window.setTimeout(trigger, 5000);
+}
 
 function maybeShowNotificationOffer() {
   if (notificationOfferShownThisSession || !el.notificationOfferModal) return;
+  try { if (sessionStorage.getItem(PUSH_OFFER_TAB_KEY) === "1") return; } catch {}
+  const lastOfferShownAt=Number(localStorage.getItem("hadashota.notificationOfferLastShownAt")||0);
+  if(lastOfferShownAt&&Date.now()-lastOfferShownAt<30*60*1000)return;
   if (!("serviceWorker" in navigator)) return;
 
   const snoozeUntil=Number(localStorage.getItem("hadashota.notificationSnoozeUntil")||0);
@@ -915,6 +945,7 @@ function maybeShowNotificationOffer() {
     if(el.notificationOfferText)el.notificationOfferText.innerHTML="כדי לקבל <strong>Push אמיתי גם כשהאתר סגור</strong>, הוסיפו קודם את כותרת פלוס למסך הבית. אחרי שפותחים מהאייקון אפשר לאשר התראות בלחיצה אחת.";
     if(el.notificationOfferAccept){delete el.notificationOfferAccept.dataset.stage;el.notificationOfferAccept.textContent="איך מפעילים באייפון";}
     notificationOfferShownThisSession=true;
+    try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt",String(Date.now())); } catch {}
     openSiteModal(el.notificationOfferModal);
     return;
   }
@@ -926,11 +957,12 @@ function maybeShowNotificationOffer() {
   }
   if (Notification.permission === "denied") return;
   if(choice==="accepted"&&Notification.permission==="granted")return;
-  if(choice==="declined"&&!snoozeUntil){localStorage.setItem("hadashota.notificationPromptChoice","later");localStorage.setItem("hadashota.notificationSnoozeUntil",String(Date.now()+14*24*60*60*1000));return;}
+  if(choice==="declined"&&!snoozeUntil){localStorage.setItem("hadashota.notificationPromptChoice","later");localStorage.setItem("hadashota.notificationSnoozeUntil",String(Date.now()+24*60*60*1000));return;}
   if(el.notificationOfferTitle)el.notificationOfferTitle.textContent="לקבל Push כשהכותרת החמה מתחלפת?";
   if(el.notificationOfferText)el.notificationOfferText.innerHTML="כותרת פלוס שולחת <strong>Push אמיתי גם כשהאתר סגור</strong>, אחרי שהסיפור המרכזי אומת במספר מקורות ונשאר מוביל מספיק זמן כדי למנוע התראות כפולות.";
   if(el.notificationOfferAccept){delete el.notificationOfferAccept.dataset.stage;el.notificationOfferAccept.textContent="הפעלת התראות";}
   notificationOfferShownThisSession = true;
+  try { sessionStorage.setItem(PUSH_OFFER_TAB_KEY, "1"); localStorage.setItem("hadashota.notificationOfferLastShownAt",String(Date.now())); } catch {}
   openSiteModal(el.notificationOfferModal);
 }
 
@@ -1078,7 +1110,7 @@ async function handleInstallAccept() {
 
 let modalReturnFocus = null;
 
-function setModalBackgroundInert() { /* V156: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
+function setModalBackgroundInert() { /* V158: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
 function modalFocusableElements(modal) {
   if (!modal) return [];
@@ -1132,11 +1164,13 @@ function closeSiteModal(modal, restoreFocus = true) {
     setModalBackgroundInert(null);
   }
   if (restoreFocus && modalReturnFocus instanceof HTMLElement) modalReturnFocus.focus();
+  if (state.autoRefresh && !document.querySelector(".site-modal:not(.hidden)") && (!state.nextRefreshAt || state.nextRefreshAt <= Date.now())) scheduleNextRefresh(1);
 }
 
 
 function refreshNewsOnForeground(reason = "foreground") {
   if (document.hidden || state.loading) return;
+  if (document.querySelector(".site-modal:not(.hidden)")) return;
   const now = Date.now();
   if (now - state.lastForegroundRefreshAt < FOREGROUND_FRESHNESS_MS) return;
   state.lastForegroundRefreshAt = now;
@@ -1145,11 +1179,11 @@ function refreshNewsOnForeground(reason = "foreground") {
   const generatedMs = Date.parse(state.lastDataGeneratedAt || "");
   const snapshotAge = Number.isFinite(generatedMs) ? now - generatedMs : Infinity;
 
-  // Returning after a meaningful absence should behave like opening the site:
-  // collect a fresh server snapshot immediately. Short focus changes can reuse
-  // the shared snapshot to avoid hammering publishers.
-  const forceFresh = hiddenFor >= 3_000 || snapshotAge >= 30_000 || reason === "online" || reason === "pageshow-bfcache";
-  loadNews(forceFresh, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
+  // V158: foreground resumes read the shared edge snapshot only. Source collection
+  // is centralized in Cron; a reader returning to the tab must never fan out to
+  // publishers.
+  void hiddenFor; void snapshotAge;
+  loadNews(false, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
 async function loadNews(force = false, fromRetry = false, silent = false) {
@@ -1171,15 +1205,29 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
     let progressiveRendered = false;
-    const shardRequests = NEWS_SHARDS.map((shard, index) =>
-      fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
-        if (!background && !progressiveRendered && Array.isArray(value?.items) && value.items.length) {
-          progressiveRendered = renderProgressiveShardPayload(shard, value);
-        }
-        return value;
-      })
-    );
-    const results = await Promise.allSettled(shardRequests);
+    let results;
+    if (!force) {
+      try {
+        const bundlePayloads = await fetchNewsBundle();
+        results = NEWS_SHARDS.map((shard) => {
+          const value = bundlePayloads.find((row) => row?.shard === shard);
+          return value ? { status: "fulfilled", value } : { status: "rejected", reason: new Error(`BUNDLE_MISSING_${shard}`) };
+        });
+      } catch (bundleError) {
+        console.warn("Shared news bundle unavailable; falling back to shard snapshots", bundleError);
+        results = await Promise.allSettled(NEWS_SHARDS.map((shard, index) => fetchNewsShard(shard, false, index * NEWS_SHARD_STAGGER_MS)));
+      }
+    } else {
+      const shardRequests = NEWS_SHARDS.map((shard, index) =>
+        fetchNewsShard(shard, true, index * NEWS_SHARD_STAGGER_MS).then((value) => {
+          if (!background && !progressiveRendered && Array.isArray(value?.items) && value.items.length) {
+            progressiveRendered = renderProgressiveShardPayload(shard, value);
+          }
+          return value;
+        })
+      );
+      results = await Promise.allSettled(shardRequests);
+    }
     const payloads = [];
     let delayed = false;
     let freshShards = 0;
@@ -1328,6 +1376,30 @@ function renderProgressiveShardPayload(shard, payload) {
     console.warn("Progressive shard render failed", error);
     return false;
   }
+}
+
+async function fetchNewsBundle() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("client_bundle_timeout"), CLIENT_NEWS_TIMEOUT_MS);
+  try {
+    const params = new URLSearchParams({ _: String(Math.floor(Date.now() / 15000)) });
+    if (Date.now() - lastOnlineHeartbeatAt >= ONLINE_HEARTBEAT_INTERVAL_MS) {
+      params.set("presence", "1");
+      params.set("device", getPushDeviceId());
+      params.set("page", "home");
+      lastOnlineHeartbeatAt = Date.now();
+    }
+    const response = await fetch(`/api/news-bundle?${params}`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+      cache: "no-store",
+      credentials: "same-origin"
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} (bundle)`);
+    const data = await response.json();
+    if (!Array.isArray(data?.shards) || !data.shards.length) throw new Error("EMPTY_NEWS_BUNDLE");
+    return data.shards;
+  } finally { clearTimeout(timeout); }
 }
 
 async function fetchNewsShard(shard, force = false, delayMs = 0) {
@@ -3531,13 +3603,14 @@ function applyLeadTitleSizing(title = "") {
   });
 }
 
-let lastDisplayedHotStorySyncKey="",lastDisplayedHotStorySyncAt=0;
+let lastDisplayedHotStorySyncKey="";
 function syncDisplayedHotStoryToServer(story) {
   if(!story?.fingerprint||!story?.title)return;
-  const now=Date.now();
   const key=`${story.fingerprint}|${story.title}|${story.sources}`;
-  if(key===lastDisplayedHotStorySyncKey&&now-lastDisplayedHotStorySyncAt<45000)return;
-  lastDisplayedHotStorySyncKey=key;lastDisplayedHotStorySyncAt=now;
+  if(key===lastDisplayedHotStorySyncKey)return;
+  try{if(sessionStorage.getItem("hadashota.lastHotStoryServerSyncKey")===key){lastDisplayedHotStorySyncKey=key;return}}catch{}
+  lastDisplayedHotStorySyncKey=key;
+  try{sessionStorage.setItem("hadashota.lastHotStoryServerSyncKey",key)}catch{}
   fetch("/api/hot-story",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},cache:"no-store",keepalive:true,body:JSON.stringify(story)}).catch(()=>{});
 }
 
@@ -4098,7 +4171,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=156.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=158.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4168,7 +4241,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=156.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=158.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4217,7 +4290,7 @@ async function ensureServerPushSubscription() {
       subscription: subscription.toJSON(),
       userAgent: navigator.userAgent.slice(0, 220),
       deviceId: getPushDeviceId(),
-      preferences: { news: state.pushNews !== false, escalation: state.pushEscalation !== false }
+      preferences: { news: state.pushNews !== false, escalation: state.pushEscalation !== false, alerts: state.pushOref !== false && state.alertDesktop !== false, alertAllIsrael: state.alertAllIsrael !== false, alertCities: state.alertCities || [] }
     })
   });
   if (!response.ok) throw new Error(`push_subscribe_${response.status}`);
@@ -4308,8 +4381,12 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
   if (!localStorage.getItem("hadashota.pushPreferencesInitialized")) {
     state.pushNews = true;
     state.pushEscalation = true;
+    state.pushOref = true;
+    state.alertDesktop = true;
     localStorage.setItem("hadashota.pushNews", "1");
     localStorage.setItem("hadashota.pushEscalation", "1");
+    localStorage.setItem("hadashota.pushOref", "1");
+    localStorage.setItem("hadashota.alertDesktop", "1");
     localStorage.setItem("hadashota.pushPreferencesInitialized", "1");
   }
 
@@ -4510,6 +4587,7 @@ function syncControlsFromState() {
   if (el.notificationToggle) el.notificationToggle.checked = state.notificationsEnabled;
   if (el.pushNewsToggle) { el.pushNewsToggle.checked = state.pushNews; el.pushNewsToggle.disabled = !state.notificationsEnabled; }
   if (el.pushEscalationToggle) { el.pushEscalationToggle.checked = state.pushEscalation; el.pushEscalationToggle.disabled = !state.notificationsEnabled; }
+  if (el.pushOrefToggle) { el.pushOrefToggle.checked = state.pushOref && state.alertDesktop; el.pushOrefToggle.disabled = !state.notificationsEnabled; }
   if (el.citySelect) el.citySelect.value = state.city;
   document.querySelectorAll("[data-quick-category]").forEach((button) => {
     const active = state.kind === "all" && button.dataset.quickCategory === state.category;
@@ -4613,6 +4691,9 @@ function restartAutoRefresh() {
 async function runScheduledRefresh() {
   state.timer = null;
   if (!state.autoRefresh) return;
+  // Never let a background data merge compete with a modal button/permission
+  // interaction. Resume a few seconds after the dialog closes.
+  if (document.querySelector(".site-modal:not(.hidden)")) { scheduleNextRefresh(5); return; }
 
   // Never lose the automatic-refresh loop because another network pass happens
   // to be running when the 30-second timer fires.
@@ -4623,7 +4704,7 @@ async function runScheduledRefresh() {
 
   try {
     state.forceLeadReevaluation = true;
-    await loadNews(true, true, true);
+    await loadNews(false, true, true);
   } catch (error) {
     console.warn("Scheduled refresh failed", error);
   } finally {
@@ -5239,6 +5320,7 @@ function refreshPremiumLayer() {
 async function initFeedPromo() {
   const apply = (promo) => {
     feedPromoData = promo?.active && promo?.text && promo?.url ? promo : { active: false };
+    if(feedPromoData.active) trackAdEvent(feedPromoData,"feed","view");
     try { renderFeed(); } catch {}
   };
   try {
@@ -5254,7 +5336,19 @@ async function initFeedPromo() {
       const response = await fetch(`/api/feed-promo?_=${Date.now()}`, { cache: "no-store" });
       if (response.ok) apply(await response.json());
     } catch {}
-  }, 60000);
+  }, 180000);
+}
+
+function trackAdEvent(promo, slot, event) {
+  if (!promo?.id || !["view","click"].includes(event)) return;
+  const key=`kp.ad.${event}.${promo.id}.${slot}`;
+  if(event==="view"&&sessionStorage.getItem(key))return;
+  if(event==="view")sessionStorage.setItem(key,"1");
+  const body=JSON.stringify({adId:promo.id,slot,event});
+  try {
+    if(event==="click"&&navigator.sendBeacon){navigator.sendBeacon("/api/ad-event",new Blob([body],{type:"application/json"}));return;}
+    fetch("/api/ad-event",{method:"POST",headers:{"Content-Type":"application/json"},body,keepalive:true}).catch(()=>{});
+  } catch {}
 }
 
 function feedPromoCardHtml(promo) {
@@ -5273,7 +5367,7 @@ function feedPromoCardHtml(promo) {
     ? `<img class="feed-promo-image" src="${escapeHtml(promo.imageData)}" alt="" loading="eager">`
     : "";
   return `<article class="news-card feed-promo-card" aria-label="פרסום">
-    <a class="feed-promo-link" href="${escapeHtml(promo.url)}" target="_blank" rel="noopener noreferrer sponsored">
+    <a class="feed-promo-link" data-ad-id="${escapeHtml(promo.id||'')}" data-ad-slot="feed" href="${escapeHtml(promo.url)}" target="_blank" rel="noopener noreferrer sponsored">
       ${image}
       <div class="feed-promo-copy">
         <div class="feed-promo-meta"><span class="feed-promo-badge">פרסום</span></div>
@@ -5295,6 +5389,7 @@ async function initPromoCard() {
 
   const apply = (promo) => {
     const active = Boolean(promo?.active && promo?.text && promo?.url);
+    if(active) trackAdEvent(promo,"top","view");
     card.classList.toggle("is-active", active);
     if (!active) {
       link.href = "#contact";
@@ -5312,6 +5407,7 @@ async function initPromoCard() {
     if (subtext) subtext.classList.add("hidden");
     link.onclick = null;
     link.href = promo.url;
+    link.dataset.adId = promo.id || ""; link.dataset.adSlot = "top";
     link.target = "_blank";
     link.rel = "noopener noreferrer sponsored";
     badge.textContent = "פרסום";
@@ -5338,7 +5434,7 @@ async function initPromoCard() {
       const response = await fetch(`/api/promo?_=${Date.now()}`, { cache: "no-store" });
       if (response.ok) apply(await response.json());
     } catch {}
-  }, 60000);
+  }, 180000);
 }
 
 function renderTrending() {
@@ -5914,26 +6010,24 @@ async function setAlertSound(enabled, userGesture = false) {
 async function setAlertDesktop(enabled) {
   if (!enabled) {
     state.alertDesktop = false;
-  } else if (isIOSDevice() && !isStandaloneMode()) {
-    state.alertDesktop = false;
-    showToast("באייפון: הוסיפו קודם את כותרת פלוס למסך הבית");
-    maybeShowNotificationOffer();
-  } else if (!("Notification" in window)) {
-    state.alertDesktop = false;
-    showToast("הדפדפן הזה לא תומך בהתראות מערכת");
+    state.pushOref = false;
   } else {
-    let permission = Notification.permission;
-    if (permission === "default") permission = await Notification.requestPermission();
-    state.alertDesktop = permission === "granted";
-    if (!state.alertDesktop) showToast("לא ניתנה הרשאה להתראות דפדפן");
+    const result = await toggleHeadlineNotifications(true, { quiet:true });
+    state.alertDesktop = Boolean(result?.ok);
+    state.pushOref = state.alertDesktop;
+    if (!state.alertDesktop) showToast("לא הצלחנו להפעיל Push — בדקו את הרשאת ההתראות בדפדפן");
   }
   localStorage.setItem("hadashota.alertDesktop", state.alertDesktop ? "1" : "0");
+  localStorage.setItem("hadashota.pushOref", state.pushOref ? "1" : "0");
+  await syncPushPreferencesToServer();
   syncAlertSettings();
+  syncControlsFromState();
 }
 
 function scheduleAlertPoll(delay) {
   clearTimeout(state.alertTimer);
-  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : (document.hidden ? 5000 : 2000));
+  if(document.hidden)return;
+  state.alertTimer = setTimeout(pollEmergencyAlerts, Number.isFinite(delay) ? delay : 10000);
 }
 
 async function pollEmergencyAlerts() {
@@ -5947,7 +6041,7 @@ async function pollEmergencyAlerts() {
     console.warn("Emergency alerts:", error);
     renderAlertConnectionError();
   } finally {
-    scheduleAlertPoll(document.hidden ? 5000 : 2000);
+    if(!document.hidden)scheduleAlertPoll(10000);
   }
 }
 
@@ -6008,7 +6102,7 @@ function renderEmergencyAlerts(alerts, payload = {}) {
     state.lastAlertFingerprint = fingerprint;
     localStorage.setItem("hadashota.lastAlertFingerprint", fingerprint);
     if (state.alertSound) playAlertTone(false);
-    if (state.alertDesktop) showEmergencyNotification(title, allAreas);
+    if (state.alertDesktop && !state.notificationsEnabled) showEmergencyNotification(title, allAreas);
   }
 }
 
