@@ -16,4 +16,4 @@
 ## Cloudflare
 החבילה כוללת `wrangler.jsonc` בשורש. יש לשמור על `PUSH_HUB`, Cron של פעם בדקה והגדרות Static Assets הקיימות.
 
-גרסה: 142.0.0
+גרסה: 144.0.0
