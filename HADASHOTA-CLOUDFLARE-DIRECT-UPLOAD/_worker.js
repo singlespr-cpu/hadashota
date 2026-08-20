@@ -255,7 +255,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "183.0.0",
+          version: "185.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -268,7 +268,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "183.0.0",
+        version: "185.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1517,7 +1517,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "183.0.0",
+          "X-Hadashota-Version": "185.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1640,13 +1640,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "183.0.0",
+      "X-Hadashota-Version": "185.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "183.0.0",
+      "X-Hadashota-Version": "185.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1680,7 +1680,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "183.0.0"
+        "X-Hadashota-Version": "185.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1702,7 +1702,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "183.0.0"
+    "X-Hadashota-Version": "185.0.0"
   });
 }
 
@@ -2994,14 +2994,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"183.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"183.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"183.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"183.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3453,13 +3453,15 @@ function pushPlatformFromUserAgent(value="") {
 }
 async function ensurePushStats(storage) {
   let stats=await storage.get("subscription.stats");
-  if(stats?.schema==="v179"&&Number.isFinite(Number(stats.count)))return stats;
+  if(stats?.schema==="v184"&&Number.isFinite(Number(stats.count)))return stats;
   const rows=await storage.list({prefix:"sub:"});
-  // One-time V167 repair: a browser can rotate its PushSubscription endpoint.
-  // Keep only the newest subscription for the same local device id so the admin
-  // count and fanout do not include stale duplicates.
+  // V185 repair: rebuild device -> subscription mappings from the actual rows.
+  // This fixes stale pointers left after an endpoint expired and keeps only the
+  // newest endpoint for the same installation/device id.
   const byDevice=new Map(),remove=[];
   for(const [key,row] of rows.entries()){
+    const endpoint=String(row?.subscription?.endpoint||"");
+    if(!/^https:\/\//i.test(endpoint)){remove.push(key);continue;}
     const deviceId=String(row?.deviceId||"");
     if(!deviceId)continue;
     const previous=byDevice.get(deviceId);
@@ -3469,15 +3471,20 @@ async function ensurePushStats(storage) {
     if(nextTime>=prevTime){remove.push(previous.key);byDevice.set(deviceId,{key,row});}
     else remove.push(key);
   }
-  for(const key of remove)await storage.delete(key);
-  for(const [deviceId,entry] of byDevice.entries())await storage.put(`device:${deviceId}`,entry.key);
-  const cleanRows=remove.length?await storage.list({prefix:"sub:"}):rows;
+  for(const key of [...new Set(remove)])await storage.delete(key);
+  const oldMappings=await storage.list({prefix:"device:"});
+  for(const key of oldMappings.keys())await storage.delete(key);
+  const cleanRows=await storage.list({prefix:"sub:"});
+  for(const [key,row] of cleanRows.entries()){
+    const deviceId=String(row?.deviceId||"");
+    if(deviceId)await storage.put(`device:${deviceId}`,key);
+  }
   const platforms={ios:0,android:0,windows:0,mac:0,linux:0,other:0};
   for(const row of cleanRows.values()){
     const p=String(row?.platform||pushPlatformFromUserAgent(row?.userAgent)||"other");
     platforms[p]=(platforms[p]||0)+1;
   }
-  stats={schema:"v179",count:cleanRows.size,platforms,updatedAt:new Date().toISOString(),deduplicated:remove.length};
+  stats={schema:"v184",count:cleanRows.size,platforms,updatedAt:new Date().toISOString(),deduplicated:[...new Set(remove)].length,mappingsRebuilt:true};
   await storage.put("subscription.stats",stats);
   return stats;
 }
@@ -3584,6 +3591,14 @@ async function rememberLeadPush(storage,payload){
   rows.push({fingerprint:String(payload?.fingerprint||""),title:cleanPushTitle(payload?.title||""),titleKey:pushTitleIdentity(payload?.title||""),at:new Date().toISOString()});
   await storage.put("lead.recentPushedStories",rows.slice(-30));
 }
+function pushVisibleIdentity(notification={}){
+  const kind=String(notification?.kind||"manual");
+  let body=cleanPushBody(notification?.body||"").toLowerCase();
+  body=body.replace(/^[^\p{L}\p{N}]+/u,"").replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();
+  if(kind==="hot-story")return `hot:${body.slice(0,180)}`;
+  const title=cleanPushTitle(notification?.title||"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();
+  return `${kind}:${title.slice(0,100)}:${body.slice(0,140)}:${safePushPath(notification?.url||"/")}`;
+}
 async function queuePushJob(storage,notification,targetDeviceId="") {
   const now=new Date().toISOString();
   const fingerprint=String(notification?.fingerprint||`manual:${crypto.randomUUID()}`).slice(0,220);
@@ -3604,6 +3619,11 @@ async function queuePushJob(storage,notification,targetDeviceId="") {
   const recent=Array.isArray(await storage.get("push.recentFingerprints"))?await storage.get("push.recentFingerprints"):[];
   const duplicate=activeBefore?.notificationFingerprint===fingerprint||queueBefore.some((x)=>x?.notificationFingerprint===fingerprint)||recent.some((x)=>x?.fingerprint===fingerprint&&Date.now()-Date.parse(x.at||0)<12*3600000);
   if(duplicate)return {ok:true,queued:false,duplicate:true,fingerprint,target:targetDeviceId?"device":"all"};
+  const visibleIdentity=pushVisibleIdentity(normalized);
+  const recentVisible=Array.isArray(await storage.get("push.recentVisible"))?await storage.get("push.recentVisible"):[];
+  const visibleWindow=normalized.kind==="hot-story"?10*60*1000:3*60*1000;
+  const visibleDuplicate=recentVisible.some((x)=>x?.identity===visibleIdentity&&Date.now()-Date.parse(x?.at||0)<visibleWindow);
+  if(visibleDuplicate)return {ok:true,queued:false,duplicate:true,duplicateBy:"visible-content",fingerprint,target:targetDeviceId?"device":"all"};
   await storage.put(`notification:${fingerprint}`,normalized);
 
   let targetKey="";
@@ -3631,6 +3651,7 @@ async function queuePushJob(storage,notification,targetDeviceId="") {
     await storage.setAlarm(Date.now()+100);
   }
   const freshRecent=recent.filter((x)=>Date.now()-Date.parse(x?.at||0)<12*3600000);freshRecent.push({fingerprint,at:now});await storage.put("push.recentFingerprints",freshRecent.slice(-80));
+  const freshVisible=recentVisible.filter((x)=>Date.now()-Date.parse(x?.at||0)<12*3600000);freshVisible.push({identity:visibleIdentity,at:now});await storage.put("push.recentVisible",freshVisible.slice(-100));
   const history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[];
   history.push({fingerprint,kind:normalized.kind,title:normalized.title,body:normalized.body,url:normalized.url,queuedAt:now,target:safeDevice?(normalized.kind==="admin-contact"?"admin-device":"device"):"all",status:active?"queued":"sending",delivered:0,clicks:0});
   await storage.put("push.history",history.slice(-50));
@@ -3668,7 +3689,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"183.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"185.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -3679,6 +3700,13 @@ export class PushHub {
       await ensureVapidKeys(storage);
       const id=await sha256Base64Url(endpoint);
       const key=`sub:${id}`;
+      const invalidKey=`push.invalid:${id}`;
+      const invalid=await storage.get(invalidKey);
+      if(invalid&&!data?.forceRefresh){
+        const invalidAt=Date.parse(invalid?.at||0)||0;
+        if(!invalidAt||Date.now()-invalidAt<7*24*3600000)return json({error:"Push subscription expired",refreshRequired:true},409,{"Cache-Control":"no-store"});
+        await storage.delete(invalidKey);
+      }
       const existing=await storage.get(key);
       const userAgent=String(data?.userAgent||"").slice(0,240);
       const platform=pushPlatformFromUserAgent(userAgent);
@@ -3701,7 +3729,7 @@ export class PushHub {
       if(deviceId)await storage.put(`device:${deviceId}`,key);
       if(!existing)stats=await updatePushStats(storage,1,platform);
       else if(existing?.platform&&existing.platform!==platform){await updatePushStats(storage,-1,existing.platform);stats=await updatePushStats(storage,1,platform);}
-      // V183: both / and /escalation share hadashota.pushDeviceId.  Older
+      // V185: both / and /escalation share hadashota.pushDeviceId.  Older
       // releases could nevertheless leave more than one stored subscription for
       // that same browser.  Remove every stale row now, not only the row pointed
       // to by device:<id>, so enabling Push on both pages can never double-send.
@@ -3714,6 +3742,7 @@ export class PushHub {
         }
         await storage.put(`device:${deviceId}`,key);
       }
+      await storage.delete(invalidKey);
       return json({ok:true,id,subscriptions:Number(stats.count||0),platform,preferences},200,{"Cache-Control":"no-store"});
     }
 
@@ -3867,7 +3896,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"183.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"185.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -3900,7 +3929,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"183.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"185.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -3984,7 +4013,7 @@ export class PushHub {
           const updated={...row,pendingFingerprint:job.notificationFingerprint,pendingAt:new Date().toISOString()};await storage.put(job.targetKey,updated);
           const notification=await storage.get(`notification:${job.notificationFingerprint}`);
           const result=await sendWebPush(updated.subscription,keys,notification);job.processed=1;
-          if(result.ok)job.pushed=1;else if([404,410].includes(result.status)){await storage.delete(job.targetKey);if(updated.deviceId){const mapped=await storage.get(`device:${updated.deviceId}`);if(mapped===job.targetKey)await storage.delete(`device:${updated.deviceId}`);}await updatePushStats(storage,-1,updated.platform||pushPlatformFromUserAgent(updated.userAgent));job.removed=1;}else job.failed=1;
+          if(result.ok)job.pushed=1;else if([404,410].includes(result.status)){const invalidId=String(job.targetKey||"").replace(/^sub:/,"");if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:result.status});await storage.delete(job.targetKey);if(updated.deviceId){const mapped=await storage.get(`device:${updated.deviceId}`);if(mapped===job.targetKey)await storage.delete(`device:${updated.deviceId}`);}await updatePushStats(storage,-1,updated.platform||pushPlatformFromUserAgent(updated.userAgent));job.removed=1;}else job.failed=1;
         }catch{job.processed=1;job.failed=1;}
       } else {job.processed=1;job.failed=1;}
       await finalizePushJob(storage,job);return;
@@ -4001,19 +4030,32 @@ export class PushHub {
       const notification=await storage.get(`notification:${job.notificationFingerprint}`);
       const eligible=[],skipped=[];
       for(const [key,row] of batch){
-        // V183 server-side device dedupe: only the subscription currently mapped
-        // to this browser/deviceId is allowed to receive a fanout.  If an old
-        // endpoint survived from a previous release, remove it before sending.
+        // V185: repair stale device mappings instead of blindly deleting the
+        // current subscription. A stale device:<id> pointer could previously
+        // remove the only valid iPhone endpoint during fanout.
         const rowDeviceId=String(row?.deviceId||"");
         if(rowDeviceId){
           const mapped=String(await storage.get(`device:${rowDeviceId}`)||"");
           if(mapped&&mapped!==key){
-            await storage.delete(key);
-            await updatePushStats(storage,-1,row?.platform||pushPlatformFromUserAgent(row?.userAgent));
-            job.processed+=1;job.removed+=1;
-            continue;
-          }
-          if(!mapped)await storage.put(`device:${rowDeviceId}`,key);
+            const mappedRow=await storage.get(mapped);
+            if(mappedRow&&String(mappedRow?.deviceId||"")===rowDeviceId){
+              const mappedTime=Date.parse(mappedRow?.lastSeenAt||mappedRow?.createdAt||0)||0;
+              const rowTime=Date.parse(row?.lastSeenAt||row?.createdAt||0)||0;
+              if(rowTime>mappedTime){
+                await storage.delete(mapped);
+                await updatePushStats(storage,-1,mappedRow?.platform||pushPlatformFromUserAgent(mappedRow?.userAgent));
+                await storage.put(`device:${rowDeviceId}`,key);
+                job.removed+=1;
+              }else{
+                await storage.delete(key);
+                await updatePushStats(storage,-1,row?.platform||pushPlatformFromUserAgent(row?.userAgent));
+                job.processed+=1;job.removed+=1;
+                continue;
+              }
+            }else{
+              await storage.put(`device:${rowDeviceId}`,key);
+            }
+          }else if(!mapped)await storage.put(`device:${rowDeviceId}`,key);
         }
         if(!pushPreferenceAllows(row,notification?.kind,notification)){skipped.push([key,row]);continue;}
         const updated={...row,pendingFingerprint:job.notificationFingerprint,pendingAt:new Date().toISOString()};
@@ -4021,13 +4063,13 @@ export class PushHub {
       }
       job.processed+=skipped.length;job.skipped=Number(job.skipped||0)+skipped.length;
       const results=await Promise.all(eligible.map(async([key,row])=>{
-        try{const result=await sendWebPush(row?.subscription,keys,notification);if(result.ok)return {key,ok:true,mode:result.mode};if([404,410].includes(result.status))return {key,remove:true,row};return {key,ok:false,status:result.status,mode:result.mode};}
+        try{const result=await sendWebPush(row?.subscription,keys,notification);if(result.ok)return {key,ok:true,mode:result.mode};if([404,410].includes(result.status))return {key,remove:true,row,status:result.status};return {key,ok:false,status:result.status,mode:result.mode};}
         catch(error){return {key,ok:false,error:String(error?.message||error)};}
       }));
       for(const result of results){
         job.processed+=1;
         if(result.ok)job.pushed+=1;
-        else if(result.remove){await storage.delete(result.key);if(result.row?.deviceId){const mapped=await storage.get(`device:${result.row.deviceId}`);if(mapped===result.key)await storage.delete(`device:${result.row.deviceId}`);}await updatePushStats(storage,-1,result.row?.platform||pushPlatformFromUserAgent(result.row?.userAgent));job.removed+=1;}
+        else if(result.remove){const invalidId=String(result.key||"").replace(/^sub:/,"");if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:result.status||410});await storage.delete(result.key);if(result.row?.deviceId){const mapped=await storage.get(`device:${result.row.deviceId}`);if(mapped===result.key)await storage.delete(`device:${result.row.deviceId}`);}await updatePushStats(storage,-1,result.row?.platform||pushPlatformFromUserAgent(result.row?.userAgent));job.removed+=1;}
         else job.failed+=1;
       }
     }

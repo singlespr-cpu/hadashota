@@ -267,7 +267,7 @@ html[data-theme="dark"] .about-process strong,html[data-theme="dark"] .about-fea
 }
 
 
-/* V183 — clear Google landing-page handoff to the live news site */
+/* V185 — clear Google landing-page handoff to the live news site */
 .info-landing-notice{
   width:min(1040px,calc(100% - 32px));margin:14px auto 0;
   display:flex;align-items:center;justify-content:space-between;gap:18px;

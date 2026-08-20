@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "183.0.0";
+const KOTERET_CLIENT_BUILD = "185.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -469,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V183 · API ${apiVersion}` : "גרסה V183 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V185 · API ${apiVersion}` : "גרסה V185 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V183 · API לא מחובר";
+    marker.textContent = "גרסה V185 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3133,7 +3133,7 @@ function renderFeed() {
     return;
   }
 
-  // V183: the sponsored rectangle lives directly after "האחרונים החשובים"
+  // V185: the sponsored rectangle lives directly after "האחרונים החשובים"
   // instead of consuming the first position inside "כל העדכונים".
   captureVisibleFeedImages();
   el.feed.innerHTML = items.map(newsCardHtml).join("");
@@ -4161,7 +4161,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=183.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=185.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4231,7 +4231,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=183.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=185.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4265,25 +4265,39 @@ async function ensureServerPushSubscription() {
   const config = await configResponse.json();
   if (!config?.enabled || !config?.publicKey) throw new Error("push_server_not_ready");
 
+  const applicationServerKey = await urlBase64ToUint8Array(config.publicKey);
   let subscription = await registration.pushManager.getSubscription();
+  // V185 one-time iOS repair: refresh the PushSubscription endpoint without a
+  // new permission prompt. This recovers Home-Screen apps whose Apple endpoint
+  // expired while Notification.permission still remained "granted".
+  const iosRepair=isIOSDevice()&&isStandaloneMode()&&localStorage.getItem("hadashota.iosPushRepairV185")!=="1";
+  if(subscription&&iosRepair){
+    await fetch("/api/push/unsubscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:subscription.endpoint})}).catch(()=>{});
+    await subscription.unsubscribe().catch(()=>{});
+    subscription=null;
+  }
   if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: await urlBase64ToUint8Array(config.publicKey)
-    });
+    subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
   }
 
-  const response = await fetch("/api/push/subscribe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify({
-      subscription: subscription.toJSON(),
-      userAgent: navigator.userAgent.slice(0, 220),
-      deviceId: getPushDeviceId(),
-      preferences: { news: state.pushNews !== false, escalation: state.pushEscalation !== false, alerts: state.alertDesktop === true, alertAllIsrael: state.alertAllIsrael === true, alertCities: state.alertCities.slice(0,30) }
-    })
+  const payloadFor=(sub,forceRefresh=false)=>JSON.stringify({
+    subscription: sub.toJSON(),
+    userAgent: navigator.userAgent.slice(0, 220),
+    deviceId: getPushDeviceId(),
+    forceRefresh,
+    preferences: { news: state.pushNews !== false, escalation: state.pushEscalation !== false, alerts: state.alertDesktop === true, alertAllIsrael: state.alertAllIsrael === true, alertCities: state.alertCities.slice(0,30) }
   });
+  let response = await fetch("/api/push/subscribe", {method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:payloadFor(subscription,false)});
+  if(response.status===409){
+    const repair=await response.json().catch(()=>({}));
+    if(repair?.refreshRequired){
+      await subscription.unsubscribe().catch(()=>{});
+      subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey});
+      response=await fetch("/api/push/subscribe",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:payloadFor(subscription,true)});
+    }
+  }
   if (!response.ok) throw new Error(`push_subscribe_${response.status}`);
+  if(iosRepair)localStorage.setItem("hadashota.iosPushRepairV185","1");
   syncPushDeviceIdToServiceWorker(registration);
   return subscription;
 }

@@ -4597,7 +4597,7 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
   .feed-promo-copy h3 { font-size:15px; }
 }
 
-/* V183 — premium ad placement: immediately after "האחרונים החשובים" */
+/* V185 — premium ad placement: immediately after "האחרונים החשובים" */
 .spotlight-promo-slot {
   margin: 12px 0 18px;
   width: 100%;
@@ -9252,7 +9252,7 @@ html[data-theme="dark"] #alertSettingsModal .alert-settings-intro{
 
 
 /* =========================================================
-   V183 — optional site support: floating heart + Bit/PayBox
+   V185 — optional site support: floating heart + Bit/PayBox
    ========================================================= */
 @keyframes kpSupportHeartBeat{
   0%,100%{transform:scale(1)}
@@ -9353,7 +9353,7 @@ html[data-theme="dark"] .support-card>p{color:#aeb8c5!important}
 
 
 /* =========================================================
-   V183 — floating controls sizing/stability + mobile About
+   V185 — floating controls sizing/stability + mobile About
    ========================================================= */
 /* Desktop: support is deliberately ~20% larger and the red outline is stronger. */
 .support-float{
@@ -9418,7 +9418,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V183 — mobile house-ad contrast + desktop OREF/escalation position swap
+   V185 — mobile house-ad contrast + desktop OREF/escalation position swap
    House ad is slightly stronger on mobile, without using the saturated red
    of the upper promo tile. Desktop dimensions are preserved while the two
    existing panels exchange positions.
@@ -9437,7 +9437,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V183 — desktop-only floating control positions
+   V185 — desktop-only floating control positions
    Main site: back-to-top on the left. Mobile remains unchanged.
    ========================================================= */
 @media (min-width:701px){
@@ -9449,7 +9449,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V183 — desktop-only floating actions cluster
+   V185 — desktop-only floating actions cluster
    Back-to-top sits above-left of the support banner.
    Mobile is intentionally unchanged.
    ========================================================= */
@@ -9483,5 +9483,76 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
     justify-self:end !important;
     align-self:end !important;
     pointer-events:auto !important;
+  }
+}
+
+/* =========================================================
+   V185 — desktop contact dialog: compact, balanced, no needless inner scroll
+   Mobile remains unchanged.
+   ========================================================= */
+@media (min-width: 701px) {
+  #contactModal .modal-card-contact {
+    width: min(690px, calc(100vw - 48px)) !important;
+    max-width: 690px !important;
+    max-height: calc(100vh - 36px) !important;
+    overflow: hidden !important;
+    padding: 24px 26px 20px !important;
+    border-radius: 24px !important;
+  }
+  #contactModal .modal-icon {
+    width: 40px !important;
+    height: 40px !important;
+    margin-bottom: 10px !important;
+  }
+  #contactModal .modal-eyebrow { margin-bottom: 4px !important; }
+  #contactModal .modal-card-contact h2 {
+    margin-bottom: 7px !important;
+    font-size: 25px !important;
+  }
+  #contactModal .modal-card-contact > p {
+    max-width: 590px !important;
+    margin: 0 auto 8px !important;
+    font-size: 13px !important;
+    line-height: 1.55 !important;
+  }
+  #contactModal .contact-inline-form {
+    grid-template-columns: 1fr 1fr !important;
+    column-gap: 10px !important;
+    row-gap: 8px !important;
+    margin: 10px 0 6px !important;
+  }
+  #contactModal .contact-form-grid {
+    grid-column: 1 / -1 !important;
+    gap: 10px !important;
+  }
+  #contactModal .contact-inline-form > label:nth-of-type(3),
+  #contactModal .contact-submit-button,
+  #contactModal .contact-form-status {
+    grid-column: 1 / -1 !important;
+  }
+  #contactModal .contact-inline-form label { gap: 4px !important; }
+  #contactModal .contact-inline-form input,
+  #contactModal .contact-inline-form select {
+    padding: 9px 10px !important;
+    min-height: 38px !important;
+  }
+  #contactModal .contact-inline-form textarea {
+    height: 92px !important;
+    min-height: 92px !important;
+    max-height: 130px !important;
+    padding: 9px 10px !important;
+    resize: vertical !important;
+  }
+  #contactModal .contact-submit-button {
+    min-height: 39px !important;
+    padding: 9px 14px !important;
+  }
+  #contactModal .contact-form-status { min-height: 15px !important; }
+  #contactModal .modal-card-contact .modal-note {
+    margin-top: 6px !important;
+    padding: 9px 12px !important;
+    border-radius: 12px !important;
+    font-size: 11px !important;
+    line-height: 1.45 !important;
   }
 }

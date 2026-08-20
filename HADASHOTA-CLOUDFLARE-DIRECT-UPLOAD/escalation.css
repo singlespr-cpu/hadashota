@@ -300,7 +300,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V183 — support replaces the escalation back-to-top button
+   V185 — support replaces the escalation back-to-top button
    ========================================================= */
 @keyframes escSupportBeat{
   0%,100%{transform:scale(1)}
@@ -370,7 +370,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V183 — larger support + viewport-fixed mobile action layer
+   V185 — larger support + viewport-fixed mobile action layer
    ========================================================= */
 /* Desktop: ~20% larger support control with a clearer red rim. */
 .esc-support-float{
@@ -411,9 +411,9 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V183 — desktop-only escalation floating controls
+   V185 — desktop-only escalation floating controls
    Desktop: support on right, back-to-top on left.
-   Mobile keeps V183/V176 support + full-site bridge only.
+   Mobile keeps V185/V176 support + full-site bridge only.
    ========================================================= */
 @media (min-width:701px){
   .esc-support-float{
@@ -430,7 +430,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 }
 
 
-/* V183 — mobile Push offer centered with a light background dim */
+/* V185 — mobile Push offer centered with a light background dim */
 .esc-push-backdrop{display:none}
 @media(max-width:700px){
   .esc-push-backdrop:not([hidden]){
@@ -451,7 +451,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V183 — desktop-only escalation floating actions cluster
+   V185 — desktop-only escalation floating actions cluster
    Back-to-top sits above-left of the support banner.
    Mobile is intentionally unchanged.
    ========================================================= */
@@ -489,4 +489,52 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
   .esc-floating-controls .esc-to-top.is-visible{
     pointer-events:auto !important;
   }
+}
+
+/* =========================================================
+   V185 — desktop contact dialog: compact, balanced, no needless inner scroll
+   Mobile remains unchanged.
+   ========================================================= */
+@media (min-width: 701px) {
+  #escContactModal .esc-contact-card {
+    width: min(680px, calc(100vw - 48px)) !important;
+    max-width: 680px !important;
+    max-height: calc(100vh - 36px) !important;
+    overflow: hidden !important;
+    padding: 22px 24px 18px !important;
+  }
+  #escContactModal .esc-contact-card > p {
+    max-width: 590px !important;
+    margin-bottom: 9px !important;
+  }
+  #escContactModal .esc-contact-form {
+    grid-template-columns: 1fr 1fr !important;
+    column-gap: 10px !important;
+    row-gap: 8px !important;
+  }
+  #escContactModal .esc-contact-grid {
+    grid-column: 1 / -1 !important;
+    gap: 10px !important;
+  }
+  #escContactModal .esc-contact-form > label:nth-of-type(3),
+  #escContactModal .esc-contact-form > button,
+  #escContactModal .esc-contact-status {
+    grid-column: 1 / -1 !important;
+  }
+  #escContactModal .esc-contact-form input,
+  #escContactModal .esc-contact-form select {
+    min-height: 38px !important;
+    padding: 9px 10px !important;
+  }
+  #escContactModal .esc-contact-form textarea {
+    height: 92px !important;
+    min-height: 92px !important;
+    max-height: 130px !important;
+    padding: 9px 10px !important;
+    resize: vertical !important;
+  }
+  #escContactModal .esc-contact-form > button {
+    height: 39px !important;
+  }
+  #escContactModal .esc-contact-status { min-height: 15px !important; }
 }

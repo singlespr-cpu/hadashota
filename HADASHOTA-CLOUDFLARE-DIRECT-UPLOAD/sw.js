@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "183.0.0";
+const HADASHOTA_SW_VERSION = "185.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -33,7 +33,12 @@ const PUSH_CONTENT_DEDUPE_MS=3*60*1000;
 const pushDisplayClaims=new Set();
 const pushContentClaims=new Set();
 function pushContentSignature(payload={}){
-  const raw=[payload.kind||"push",payload.title||"",payload.body||"",payload.url||"/"].join("|").replace(/\s+/g," ").trim();
+  const kind=String(payload.kind||"push");
+  const normalize=(value)=>String(value||"").toLowerCase().replace(/^[^\p{L}\p{N}]+/u,"").replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim();
+  // For hot stories ignore the compact "X sources" notification title. The
+  // actual newsroom headline is the identity, so 3->4 sources cannot produce a
+  // second visible notification for the same story.
+  const raw=kind==="hot-story"?`${kind}|${normalize(payload.body)}|${payload.url||"/"}`:[kind,normalize(payload.title),normalize(payload.body),payload.url||"/"].join("|");
   let hash=2166136261;
   for(let i=0;i<raw.length;i++){hash^=raw.charCodeAt(i);hash=Math.imul(hash,16777619);}
   return `${raw.length}-${(hash>>>0).toString(36)}`;
@@ -113,11 +118,11 @@ self.addEventListener("push", (event) => {
       try {
         await self.registration.showNotification(payload.title, {
           body: payload.body || "עדכון חדש מכותרת פלוס",
-          tag: `koteret-${payload.kind||"push"}-${payload.fingerprint}`,
-          renotify: true,
+          tag: payload.kind==="hot-story"?`koteret-hot-${contentClaim.signature}`:`koteret-${payload.kind||"push"}-${payload.fingerprint}`,
+          renotify: payload.kind!=="hot-story",
           requireInteraction: payload.kind === "escalation",
-          icon: "/icon-192.png?v=183.0.0",
-          badge: "/favicon-32.png?v=183.0.0",
+          icon: "/icon-192.png?v=185.0.0",
+          badge: "/favicon-32.png?v=185.0.0",
           data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
           timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
         });
