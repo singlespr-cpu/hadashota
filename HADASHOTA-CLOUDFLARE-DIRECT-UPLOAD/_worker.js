@@ -261,7 +261,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "192.0.0",
+          version: "194.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -274,7 +274,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "192.0.0",
+        version: "194.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1524,7 +1524,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "192.0.0"
+      "X-Hadashota-Version": "194.0.0"
     }));
   }
 
@@ -1534,7 +1534,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "192.0.0",
+    "X-Hadashota-Version": "194.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1575,7 +1575,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "192.0.0",
+          "X-Hadashota-Version": "194.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1698,13 +1698,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "192.0.0",
+      "X-Hadashota-Version": "194.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "192.0.0",
+      "X-Hadashota-Version": "194.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1738,7 +1738,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "192.0.0"
+        "X-Hadashota-Version": "194.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1760,7 +1760,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "192.0.0"
+    "X-Hadashota-Version": "194.0.0"
   });
 }
 
@@ -2750,7 +2750,7 @@ function scoreKoteretNews(cacheData){
   const now=Date.now(),windowMs=12*3600000,contextMs=48*3600000,twoHours=2*3600000;
   const allRows=(cacheData?.rows||[]).filter(r=>{const t=Date.parse(r?.publishedAt||0);return Number.isFinite(t)&&now-t>=-600000&&now-t<=contextMs;});
   const rows=allRows.filter(r=>now-Date.parse(r?.publishedAt||0)<=windowMs);
-  // V192: immediate news momentum is measured over 12h, while a separate 48h
+  // V194: immediate news momentum is measured over 12h, while a separate 48h
   // conflict-context memory prevents a sustained verified crisis from becoming
   // "normal" merely because the most recent few hours were quieter.
   const relevant=rows.filter(r=>ESCALATION_CORE_RX.test(`${r?.title||""} ${r?.summary||r?.description||""}`));
@@ -2921,7 +2921,7 @@ function oilScoreFromContext({move24=0,move7=0,premium20=0,latest=null,source="Y
   let s24=8;if(up24>=1)s24=16;if(up24>=2)s24=28;if(up24>=4)s24=48;if(up24>=7)s24=68;if(up24>=10)s24=84;
   let s7=8;if(up7>=3)s7=20;if(up7>=6)s7=34;if(up7>=10)s7=52;if(up7>=15)s7=68;if(up7>=22)s7=82;
   let s20=8;if(premium>=4)s20=16;if(premium>=8)s20=27;if(premium>=12)s20=40;if(premium>=18)s20=56;if(premium>=25)s20=72;
-  // V192: absolute Brent stress is deliberately only a partial floor. Oil can be
+  // V194: absolute Brent stress is deliberately only a partial floor. Oil can be
   // expensive for non-war reasons, so it cannot create a high index by itself;
   // it merely prevents a long-lived $90-$120 regime from normalising back to 8.
   let absolute=8;if(Number.isFinite(price)){if(price>=75)absolute=16;if(price>=80)absolute=24;if(price>=85)absolute=34;if(price>=90)absolute=46;if(price>=100)absolute=60;if(price>=115)absolute=74;if(price>=130)absolute=86;}
@@ -3097,14 +3097,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"194.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"194.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"194.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"194.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3113,7 +3113,7 @@ async function escUpdateSeriesBaseline(storage,signal,{storageKey,rawField,mode}
   samples=samples.filter(x=>Number.isFinite(Number(x?.count))&&Number.isFinite(Date.parse(x?.at))&&now-Date.parse(x.at)<180*86400000);
   if(signal?.available===false||!Number.isFinite(Number(signal?.[rawField])))return;
   const current=Number(signal[rawField]),last=samples[samples.length-1];
-  // V192: one hourly sample is enough for time-of-day baselines and lets us keep
+  // V194: one hourly sample is enough for time-of-day baselines and lets us keep
   // roughly six months of history without growing the Durable Object value.
   if(!last||now-Date.parse(last.at)>55*60000){samples.push({at:new Date().toISOString(),count:current});samples=samples.slice(-4600);await storage.put(storageKey,samples);}
   const hour=new Date().getUTCHours();let comparable=samples.filter(x=>now-Date.parse(x.at)>36*3600000&&Math.min((new Date(x.at).getUTCHours()-hour+24)%24,(hour-new Date(x.at).getUTCHours()+24)%24)<=1).map(x=>Number(x.count));
@@ -3158,7 +3158,7 @@ function escWeightedDomainScore(signals,keys,field="score"){
   const total=weighted.reduce((a,x)=>a+x.w,0);if(!total)return 0;
   const mean=weighted.reduce((a,x)=>a+x.v*x.w,0)/total;
   const rms=Math.sqrt(weighted.reduce((a,x)=>a+x.v*x.v*x.w,0)/total);
-  // V192: a domain is a blend of average stress and RMS stress. RMS lets a
+  // V194: a domain is a blend of average stress and RMS stress. RMS lets a
   // genuinely severe sub-signal register without allowing a single source to
   // become the whole domain.
   return escClamp(mean*.72+rms*.28);
@@ -3227,7 +3227,7 @@ async function buildEscalationSnapshot(storage,payload){
   const signalInstantBase=availableWeight?available.reduce((a,s)=>a+escClamp(s.rawSignalScore??s.score)*effectiveWeight(s),0)/availableWeight:0;
   const signalContextBase=availableWeight?available.reduce((a,s)=>a+escClamp(s.score)*effectiveWeight(s),0)/availableWeight:0;
   const live=available.filter(s=>!s.stale),elevated=live.filter(s=>Number(s.score)>=65).length;
-  // V192 REALITY NOWCAST: raw/current evidence and persistent context are kept
+  // V194 REALITY NOWCAST: raw/current evidence and persistent context are kept
   // separate. Independent domains are aggregated before they are fused, so one
   // noisy family cannot dominate and unavailable sources do not count as calm.
   const groups={news:["news","intlnews"],official:["official"],air:["aviation","notam","airrisk"],posture:["us","diplomatic"],maritime:["maritime"],market:["oil","market"],nuclear:["nuclear"],military:["military"]};
@@ -3261,7 +3261,7 @@ async function buildEscalationSnapshot(storage,payload){
   const score6=escClosestScore(newHistory,now-6*3600000),delta6h=Number((score-(Number.isFinite(score6)?score6:(previous?.score??score))).toFixed(1)),coverage=Math.round(availableWeight),confidenceLabel=coverage>=88?"גבוה":coverage>=68?"בינוני":"נמוך";
   const ranked=available.map(s=>({s,delta:Number(s.score)-Number(prevByKey.get(s.key)?.score??s.score),impact:Number(s.score)*Number(s.weight)/100})).sort((a,b)=>Math.abs(b.delta)*.8+b.impact*.2-(Math.abs(a.delta)*.8+a.impact*.2));const changes=ranked.slice(0,5).map(({s,delta})=>`${s.label}: ${delta>3?`עלה בכ־${Math.round(delta)} נק׳ — `:delta<-3?`ירד בכ־${Math.round(Math.abs(delta))} נק׳ — `:""}${s.reason}`);
   if(strategicRegime.floor>preRegimeRaw+1)changes.unshift(`מצב בסיס אסטרטגי: כמה משפחות מידע בלתי־תלויות עדיין מאשרות לחץ מבני מתמשך; רכיב הזיכרון הנתוני מונע נרמול מהיר מדי של מצב חריג.`);
-  if(calibrationReset)changes.unshift("כיול V192: המדד אותחל למודל Reality Nowcast שמפריד בין תמונת מצב מיידית להקשר מתמשך ומצליב תחומים בלתי־תלויים — ללא תוספת נקודות ידנית.");
+  if(calibrationReset)changes.unshift("כיול V194: המדד אותחל למודל Reality Nowcast שמפריד בין תמונת מצב מיידית להקשר מתמשך ומצליב תחומים בלתי־תלויים — ללא תוספת נקודות ידנית.");
   const sourceHealth={live:live.length,stale:available.filter(s=>s.stale).length,unavailable:signals.filter(s=>s.available===false).length,coverage};
   const latest={modelVersion:ESCALATION_MODEL_VERSION,score,rawScore:Number(raw.toFixed(1)),preRegimeRaw:Number(preRegimeRaw.toFixed(1)),level:level.label,levelKey:level.key,updatedAt:new Date().toISOString(),delta6h,coverage,confidenceLabel,availableSignals:available.length,totalSignals:Object.keys(ESCALATION_WEIGHTS).length,elevatedSignals:elevated,corroboratingDomains,strongDomains,multiplier,domainScores,domainInstantScores,strategicRegime,nowcast:{signalInstantBase:Number(signalInstantBase.toFixed(1)),signalContextBase:Number(signalContextBase.toFixed(1)),instantDomains:instantDomains.score,contextDomains:contextDomains.score,immediateScore:Number(immediateScore.toFixed(1)),contextualScore:Number(contextualScore.toFixed(1))},sourceHealth,calibrationReset,signals,changes:changes.slice(0,6),experimental:payload?.experimental||{},disclaimer:"מדד 0–100 של עוצמת המתיחות בזמן אמת; אינו הסתברות למלחמה ואינו תחזית מודיעינית."};
   let _pushCandidate=null;
@@ -3898,7 +3898,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"192.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"194.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4105,7 +4105,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"192.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"194.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4138,7 +4138,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"192.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"194.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {

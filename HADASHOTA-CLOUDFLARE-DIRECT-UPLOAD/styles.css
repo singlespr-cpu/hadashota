@@ -9556,3 +9556,25 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
     line-height: 1.45 !important;
   }
 }
+
+
+/* =========================================================
+   V194 — visible lead-story loading state
+   ========================================================= */
+.lead-story-loading{display:none;position:relative;z-index:2;min-height:150px;align-items:center;justify-content:center;gap:16px;text-align:center;padding:18px 20px;color:var(--text)}
+.lead-story.is-initializing .lead-story-loading{display:flex!important}
+.lead-story-loading-spinner{width:34px;height:34px;flex:0 0 34px;border-radius:50%;border:3px solid rgba(255,77,61,.16);border-top-color:#ff4d3d;animation:kp-lead-loading-spin .8s linear infinite;box-shadow:0 0 0 5px rgba(255,77,61,.05)}
+.lead-story-loading-copy{display:flex;flex-direction:column;align-items:center;gap:5px;line-height:1.4}
+.lead-story-loading-copy strong{font-size:16px;font-weight:900;color:var(--text)}
+.lead-story-loading-copy span{font-size:12px;font-weight:750;color:var(--muted)}
+.lead-story-loading-copy small{font-size:10px;font-weight:800;color:#d4473d}
+@keyframes kp-lead-loading-spin{to{transform:rotate(360deg)}}
+html[data-theme="dark"] .lead-story-loading-copy small{color:#ff8b80}
+@media(max-width:700px){
+  .lead-story-loading{min-height:120px;padding:14px 10px;gap:12px;flex-direction:column}
+  .lead-story-loading-spinner{width:30px;height:30px;flex-basis:30px}
+  .lead-story-loading-copy strong{font-size:14px}
+  .lead-story-loading-copy span{font-size:11px}
+  .lead-story-loading-copy small{font-size:9px}
+}
+@media(prefers-reduced-motion:reduce){.lead-story-loading-spinner{animation-duration:1.8s}}

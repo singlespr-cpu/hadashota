@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "192.0.0";
+const KOTERET_CLIENT_BUILD = "194.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -469,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V192 · API ${apiVersion}` : "גרסה V192 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V194 · API ${apiVersion}` : "גרסה V194 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V192 · API לא מחובר";
+    marker.textContent = "גרסה V194 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1314,12 +1314,13 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
 
     if (!payloads.length) throw new Error("No news shard returned usable data");
 
-    // A background pass uses the chunked merger. It yields to the browser
-    // repeatedly, so taps, scrolling and links remain responsive even when many
-    // reports need cross-source clustering.
-    const data = background
-      ? await mergeNewsPayloadsResponsive(payloads)
-      : mergeNewsPayloads(payloads);
+    // V194: every newsroom refresh (initial, manual and automatic) uses the
+    // cooperative merger. The old foreground/manual path used the synchronous
+    // O(n×clusters) merger on the browser main thread, which could briefly make
+    // taps, links and scrolling feel frozen while the refresh icon was spinning.
+    // Yielding during clustering does not change data, source cadence or freshness;
+    // it only lets the browser process user interaction between chunks.
+    const data = await mergeNewsPayloadsResponsive(payloads);
     if (!data.items.length) throw new Error("Merged news feed is empty");
 
     const nextFingerprint = newsSnapshotFingerprint(data);
@@ -1347,12 +1348,16 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
 
     renderStats(data);
     persistFastRenderSnapshot(data);
-    if (materiallyChanged || !background) {
-      render();
+    if (materiallyChanged || !state.lastNewsFingerprint) {
+      // V194: rendering is also cooperative. Most blocks are small, but yielding
+      // between them prevents one complete newsroom rebuild from monopolising the
+      // main thread on slower phones/desktops.
+      await renderResponsive();
       state.lastNewsFingerprint = nextFingerprint;
     } else {
-      // Even when the item fingerprint is unchanged, time/source eligibility can
-      // change which story deserves the lead position.
+      // Do not rebuild the entire DOM for a manual/entry refresh when the visible
+      // newsroom snapshot is byte-for-byte equivalent. Re-evaluate only the lead,
+      // whose eligibility may change with time/source freshness.
       try { renderLeadStory(); } catch (error) { console.warn("Lead reevaluation failed", error); }
     }
     setDataStatus(state.dataDelayed, true, state.dataDelaySeverity);
@@ -3141,6 +3146,34 @@ function render(options = {}) {
   else setTimeout(hydrate, 40);
 }
 
+async function renderResponsive(options = {}) {
+  // Same newsroom render pipeline as render(), but cooperative: each major
+  // section gets its own browser turn so pointer/touch/scroll events are never
+  // starved by a refresh. Functional output remains identical.
+  try { annotateStoryIntelligence(); } catch (error) { console.warn("Story intelligence render failed", error); }
+  await yieldToBrowser();
+  const renderSteps = [
+    ...(!options.skipLead ? [["lead", renderLeadStory]] : []),
+    ["latest", renderFlashDeck],
+    ["feed", renderFeed],
+    ["sources", renderSources],
+    ["breaking", renderBreaking],
+    ["trending", renderTrending],
+    ["smart-dashboard", renderSmartDashboard]
+  ];
+  for (const [name, step] of renderSteps) {
+    try { step(); } catch (error) { console.error(`Render block failed: ${name}`, error); }
+    await yieldToBrowser();
+  }
+  try { renderPremiumIntelligence(); } catch (error) { console.warn("Premium intelligence render failed", error); }
+  await yieldToBrowser();
+  const hydrate = () => {
+    try { hydrateSafeMediaSlots(); } catch (error) { console.warn("Media hydration failed", error); }
+  };
+  if ("requestIdleCallback" in window) requestIdleCallback(hydrate, { timeout: 900 });
+  else setTimeout(hydrate, 40);
+}
+
 function renderStats(data = null) {
   const now = Date.now();
   const hourItems = state.items.filter((item) => now - Date.parse(item.latestReportAt || item.publishedAt) <= 60 * 60 * 1000);
@@ -4204,7 +4237,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=192.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=194.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4274,7 +4307,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=192.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=194.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
