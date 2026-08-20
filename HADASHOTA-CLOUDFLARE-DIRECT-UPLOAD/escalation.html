@@ -3,67 +3,88 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <script id="kp-entry-top-v173">
+  <script id="kp-entry-top-v180">
     (function(){
-      if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-      var active = false, timers = [], armedAt = 0;
+      try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
+      var active = false, timers = [], scrollRaf = 0;
 
       function clearTimers(){
         timers.forEach(clearTimeout);
         timers = [];
+        if (scrollRaf) { try { cancelAnimationFrame(scrollRaf); } catch (_) {} scrollRaf = 0; }
       }
 
-      function topNow(){
-        if (!active) return;
+      function stripEntryHash(){
+        try {
+          if (location.hash) history.replaceState(history.state, "", location.pathname + location.search);
+        } catch (_) {}
+      }
+
+      function topNow(force){
+        if (!active && !force) return;
         try { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); }
-        catch (_) { window.scrollTo(0, 0); }
-        if (document.documentElement) document.documentElement.scrollTop = 0;
-        if (document.body) document.body.scrollTop = 0;
+        catch (_) { try { window.scrollTo(0, 0); } catch (__){ } }
+        try { document.documentElement.scrollTop = 0; } catch (_) {}
+        try { if (document.body) document.body.scrollTop = 0; } catch (_) {}
       }
 
       function release(){
         if (!active) return;
         active = false;
         clearTimers();
-        document.documentElement.classList.remove("kp-force-entry-top");
+        try { document.documentElement.classList.remove("kp-force-entry-top"); } catch (_) {}
       }
 
       function arm(){
         clearTimers();
         active = true;
-        armedAt = Date.now();
-        document.documentElement.classList.add("kp-force-entry-top");
+        stripEntryHash();
+        try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
+        try { document.documentElement.classList.add("kp-force-entry-top"); } catch (_) {}
         topNow();
-        [0, 30, 90, 180, 320, 520, 800, 1200, 1800, 2600, 3600].forEach(function(ms){
+        try {
+          requestAnimationFrame(function(){ topNow(); requestAnimationFrame(topNow); });
+        } catch (_) {}
+        [0,20,60,120,240,420,700,1050,1500,2200,3200,4500,6500,9000,12000,16000].forEach(function(ms){
           timers.push(setTimeout(topNow, ms));
         });
         if (document.fonts && document.fonts.ready) {
-          document.fonts.ready.then(function(){
-            if (!active) return;
-            topNow();
-            timers.push(setTimeout(topNow, 80));
-          }).catch(function(){});
+          document.fonts.ready.then(function(){ if (active) topNow(); }).catch(function(){});
         }
-        timers.push(setTimeout(release, 3950));
       }
 
-      function releaseForRealUserScroll(){
+      function keepTopUntilUserActs(){
         if (!active) return;
-        if (Date.now() - armedAt < 450) return;
+        var y = Math.max(window.scrollY || 0, window.pageYOffset || 0, document.documentElement.scrollTop || 0, document.body ? document.body.scrollTop || 0 : 0);
+        if (y <= 1) return;
+        if (scrollRaf) return;
+        try {
+          scrollRaf = requestAnimationFrame(function(){ scrollRaf = 0; topNow(); });
+        } catch (_) { topNow(); }
+      }
+
+      function releaseForRealUserAction(event){
+        if (!active) return;
+        if (event && event.isTrusted === false) return;
         release();
       }
 
-      ["touchmove", "wheel", "keydown"].forEach(function(type){
-        window.addEventListener(type, releaseForRealUserScroll, { passive: type !== "keydown" });
+      window.addEventListener("scroll", keepTopUntilUserActs, { passive: true });
+      ["pointerdown","touchstart","wheel","keydown"].forEach(function(type){
+        window.addEventListener(type, releaseForRealUserAction, { passive: type !== "keydown", capture: true });
       });
+
+      function resetStoredPositionBeforeLeaving(){
+        try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
+        topNow(true);
+      }
 
       arm();
       document.addEventListener("DOMContentLoaded", arm, { once: true });
       window.addEventListener("pageshow", arm);
-      window.addEventListener("load", function(){
-        if (!active) arm();
-        else { topNow(); timers.push(setTimeout(topNow, 120)); timers.push(setTimeout(topNow, 700)); }
-      }, { once: true });
+      window.addEventListener("load", function(){ if (active) topNow(); else arm(); }, { once: true });
+      window.addEventListener("pagehide", resetStoredPositionBeforeLeaving);
+      window.addEventListener("beforeunload", resetStoredPositionBeforeLeaving);
     })();
   </script>
   <meta name="theme-color" content="#05070a">
@@ -83,8 +104,8 @@
   <meta property="og:title" content="דופק ההסלמה – כמה אנחנו קרובים למלחמה? | כותרת פלוס">
   <meta property="og:description" content="דופק ההסלמה של כותרת פלוס: תמונת מצב חיה בזמן אמת של המתיחות בין איראן לישראל.">
   <meta property="og:url" content="__SITE_URL__/escalation">
-  <meta property="og:image" content="__SITE_URL__/escalation-share.png?v=178.0.0">
-  <meta property="og:image:secure_url" content="__SITE_URL__/escalation-share.png?v=178.0.0">
+  <meta property="og:image" content="__SITE_URL__/escalation-share.png?v=180.0.0">
+  <meta property="og:image:secure_url" content="__SITE_URL__/escalation-share.png?v=180.0.0">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -92,15 +113,15 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="דופק ההסלמה – כמה אנחנו קרובים למלחמה? | כותרת פלוס">
   <meta name="twitter:description" content="דופק ההסלמה של כותרת פלוס מציג בזמן אמת את מצב המתיחות ואת תמונת המצב האזורית.">
-  <meta name="twitter:image" content="__SITE_URL__/escalation-share.png?v=178.0.0">
+  <meta name="twitter:image" content="__SITE_URL__/escalation-share.png?v=180.0.0">
   <meta name="twitter:image:alt" content="דופק ההסלמה של כותרת פלוס">
   <title>דופק ההסלמה איראן–ישראל | מצב המתיחות בזמן אמת | כותרת פלוס</title>
-  <link rel="icon" href="/favicon.svg?v=178.0.0" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=178.0.0">
+  <link rel="icon" href="/favicon.svg?v=180.0.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=180.0.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/escalation.css?v=178.0.0">
+  <link rel="stylesheet" href="/escalation.css?v=180.0.0">
   <script type="application/ld+json">
   {
     "@context":"https://schema.org",
@@ -363,9 +384,10 @@
       <div><p>רוצים לראות את הדיווחים שמאחורי המדד? באתר המלא כותרת פלוס מרכז את החדשות, המבזקים והמקורות שהמערכת מצליבה בזמן אמת.</p><a class="esc-main-cta" href="https://koteretplus.com/">לכותרת פלוס — כל החדשות בזמן אמת</a></div>
     </div>
     <div class="esc-shell esc-visit-counter" aria-label="מונה כניסות למדד"><span>צפיות במדד מאז הפעלת המונה</span><strong id="escVisitCount">—</strong></div>
-    <div class="esc-shell esc-legal">דופק ההסלמה הוא שירות של כותרת פלוס · מידע גלוי בלבד · אין לראות במדד תחזית, התרעה רשמית או תחליף להנחיות פיקוד העורף. · גרסה V178</div>
+    <div class="esc-shell esc-legal">דופק ההסלמה הוא שירות של כותרת פלוס · מידע גלוי בלבד · אין לראות במדד תחזית, התרעה רשמית או תחליף להנחיות פיקוד העורף. · גרסה V180</div>
   </footer>
 
+  <div class="esc-push-backdrop" id="escPushBackdrop" hidden aria-hidden="true"></div>
   <div class="esc-push-offer" id="escPushOffer" hidden aria-live="polite">
     <button class="esc-push-close" id="escPushClose" type="button" aria-label="סגירה">×</button>
     <div class="esc-push-icon">🔔</div>
@@ -408,6 +430,6 @@
   </div>
 
   <div class="esc-toast" id="escToast" role="status" aria-live="polite"></div>
-  <script src="/escalation.js?v=178.0.0" defer></script>
+  <script src="/escalation.js?v=180.0.0" defer></script>
 </body>
 </html>

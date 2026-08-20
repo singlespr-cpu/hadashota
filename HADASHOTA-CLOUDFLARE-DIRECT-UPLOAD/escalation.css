@@ -300,7 +300,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V178 — support replaces the escalation back-to-top button
+   V180 — support replaces the escalation back-to-top button
    ========================================================= */
 @keyframes escSupportBeat{
   0%,100%{transform:scale(1)}
@@ -370,7 +370,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V178 — larger support + viewport-fixed mobile action layer
+   V180 — larger support + viewport-fixed mobile action layer
    ========================================================= */
 /* Desktop: ~20% larger support control with a clearer red rim. */
 .esc-support-float{
@@ -411,9 +411,9 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V178 — desktop-only escalation floating controls
+   V180 — desktop-only escalation floating controls
    Desktop: support on right, back-to-top on left.
-   Mobile keeps V178/V176 support + full-site bridge only.
+   Mobile keeps V180/V176 support + full-site bridge only.
    ========================================================= */
 @media (min-width:701px){
   .esc-support-float{
@@ -427,4 +427,24 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 }
 @media (max-width:700px){
   .esc-floating-controls .esc-to-top{display:none !important;}
+}
+
+
+/* V180 — mobile Push offer centered with a light background dim */
+.esc-push-backdrop{display:none}
+@media(max-width:700px){
+  .esc-push-backdrop:not([hidden]){
+    display:block;position:fixed;inset:0;z-index:94;
+    background:rgba(0,0,0,.20);
+    -webkit-backdrop-filter:blur(.6px);backdrop-filter:blur(.6px);
+  }
+  .esc-push-offer{
+    position:fixed!important;
+    top:50%!important;left:50%!important;right:auto!important;bottom:auto!important;
+    transform:translate(-50%,-50%)!important;
+    width:min(430px,calc(100vw - 28px))!important;
+    max-height:min(82dvh,560px);overflow:auto;overscroll-behavior:contain;
+    z-index:95!important;
+    box-shadow:0 22px 64px rgba(0,0,0,.58)!important;
+  }
 }

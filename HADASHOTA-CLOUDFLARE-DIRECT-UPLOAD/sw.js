@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "178.0.0";
+const HADASHOTA_SW_VERSION = "180.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -29,7 +29,39 @@ async function writePushDeviceId(deviceId) {
 }
 
 const PUSH_DISPLAY_DEDUPE_MS=24*60*60*1000;
+const PUSH_CONTENT_DEDUPE_MS=3*60*1000;
 const pushDisplayClaims=new Set();
+const pushContentClaims=new Set();
+function pushContentSignature(payload={}){
+  const raw=[payload.kind||"push",payload.title||"",payload.body||"",payload.url||"/"].join("|").replace(/\s+/g," ").trim();
+  let hash=2166136261;
+  for(let i=0;i<raw.length;i++){hash^=raw.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  return `${raw.length}-${(hash>>>0).toString(36)}`;
+}
+function pushContentCacheRequest(signature){
+  return new Request(`${self.location.origin}/.__kp_push_content/${encodeURIComponent(String(signature||"").slice(0,160))}`);
+}
+async function claimPushContent(payload){
+  const signature=pushContentSignature(payload);
+  if(!signature)return {ok:true,signature:""};
+  if(pushContentClaims.has(signature))return {ok:false,signature};
+  pushContentClaims.add(signature);
+  try{
+    const cache=await caches.open("koteret-plus-push-content-v1");
+    const key=pushContentCacheRequest(signature),hit=await cache.match(key);
+    if(hit){
+      const at=Number(await hit.text());
+      if(Number.isFinite(at)&&Date.now()-at<PUSH_CONTENT_DEDUPE_MS){pushContentClaims.delete(signature);return {ok:false,signature};}
+    }
+    await cache.put(key,new Response(String(Date.now()),{headers:{"Content-Type":"text/plain","Cache-Control":"no-store"}}));
+    return {ok:true,signature};
+  }catch{return {ok:true,signature};}
+}
+async function finishPushContentClaim(signature,shown=true){
+  if(!signature)return;
+  if(!shown){try{const cache=await caches.open("koteret-plus-push-content-v1");await cache.delete(pushContentCacheRequest(signature));}catch{}}
+  pushContentClaims.delete(signature);
+}
 function pushDisplayCacheRequest(fingerprint){
   return new Request(`${self.location.origin}/.__kp_push_seen/${encodeURIComponent(String(fingerprint||"").slice(0,220))}`);
 }
@@ -74,6 +106,8 @@ self.addEventListener("push", (event) => {
       }
       if (!payload?.fingerprint || !payload?.title) return;
       if (!(await claimPushDisplay(payload.fingerprint))) return;
+      const contentClaim=await claimPushContent(payload);
+      if(!contentClaim.ok){await finishPushDisplayClaim(payload.fingerprint,true);return;}
 
       let shown=false;
       try {
@@ -82,8 +116,8 @@ self.addEventListener("push", (event) => {
           tag: `koteret-${payload.kind||"push"}-${payload.fingerprint}`,
           renotify: true,
           requireInteraction: payload.kind === "escalation",
-          icon: "/icon-192.png?v=178.0.0",
-          badge: "/favicon-32.png?v=178.0.0",
+          icon: "/icon-192.png?v=180.0.0",
+          badge: "/favicon-32.png?v=180.0.0",
           data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
           timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
         });
@@ -91,6 +125,7 @@ self.addEventListener("push", (event) => {
         try { await fetch("/api/push/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"display",fingerprint:payload.fingerprint,deviceId})}); } catch {}
       } finally {
         await finishPushDisplayClaim(payload.fingerprint,shown);
+        await finishPushContentClaim(contentClaim.signature,shown);
       }
 
       if (self.registration.setAppBadge) { try { await self.registration.setAppBadge(1); } catch {} }

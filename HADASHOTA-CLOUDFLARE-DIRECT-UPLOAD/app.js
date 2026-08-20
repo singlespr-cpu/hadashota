@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "178.0.0";
+const KOTERET_CLIENT_BUILD = "180.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -469,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V178 · API ${apiVersion}` : "גרסה V178 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V180 · API ${apiVersion}` : "גרסה V180 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V178 · API לא מחובר";
+    marker.textContent = "גרסה V180 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3133,7 +3133,7 @@ function renderFeed() {
     return;
   }
 
-  // V178: the sponsored rectangle lives directly after "האחרונים החשובים"
+  // V180: the sponsored rectangle lives directly after "האחרונים החשובים"
   // instead of consuming the first position inside "כל העדכונים".
   captureVisibleFeedImages();
   el.feed.innerHTML = items.map(newsCardHtml).join("");
@@ -4161,7 +4161,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=178.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=180.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4231,7 +4231,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=178.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=180.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
