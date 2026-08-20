@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "172.0.0";
+const KOTERET_CLIENT_BUILD = "173.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -467,9 +467,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V172 · API ${apiVersion}` : "גרסה V172 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V173 · API ${apiVersion}` : "גרסה V173 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V172 · API לא מחובר";
+    marker.textContent = "גרסה V173 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3129,7 +3129,7 @@ function renderFeed() {
     return;
   }
 
-  // V172: the sponsored rectangle lives directly after "האחרונים החשובים"
+  // V173: the sponsored rectangle lives directly after "האחרונים החשובים"
   // instead of consuming the first position inside "כל העדכונים".
   captureVisibleFeedImages();
   el.feed.innerHTML = items.map(newsCardHtml).join("");
@@ -4157,7 +4157,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=172.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=173.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4227,7 +4227,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=172.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=173.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -5322,9 +5322,25 @@ function trackAdEvent(slot, promo, type="view") {
   fetch("/api/ad/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slot,id,type}),keepalive:true}).catch(()=>{});
 }
 
+function bindSpotlightPromoInteractions(slot) {
+  if (!slot || slot.dataset.kpPromoBound === "1") return;
+  slot.dataset.kpPromoBound = "1";
+  slot.addEventListener("click", (event) => {
+    const adContact = event.target.closest("[data-open-ad-contact]");
+    if (adContact) {
+      event.preventDefault();
+      openContactModal("פרסום", adContact);
+      return;
+    }
+    const adLink = event.target.closest("a[data-ad-slot][data-ad-id]");
+    if (adLink) trackAdEvent(adLink.dataset.adSlot, { id: adLink.dataset.adId }, "click");
+  });
+}
+
 function renderSpotlightPromo() {
   const slot = document.querySelector("#spotlightPromoSlot");
   if (!slot) return;
+  bindSpotlightPromoInteractions(slot);
   slot.innerHTML = feedPromoCardHtml(feedPromoData);
 }
 
