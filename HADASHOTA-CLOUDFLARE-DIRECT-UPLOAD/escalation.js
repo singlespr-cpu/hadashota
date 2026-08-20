@@ -3,9 +3,10 @@ const HOT_STORY_API="/api/hot-story";
 const OFFICIAL_SITE_URL="https://koteretplus.com/";
 const OFFICIAL_ESCALATION_URL="https://koteretplus.com/escalation";
 const HOT_STORY_LOCAL_KEY="hadashota.publicLead.v1";
-const ESC_FALLBACK_KEY="koteretPlus.escalation.lastGood.v146";
+const ESC_FALLBACK_KEY="koteretPlus.escalation.lastGood.v187";
 const ESC_SIGNAL_META={
   news:{icon:"📰",label:"מודיעין חדשותי",source:"כותרת פלוס",href:OFFICIAL_SITE_URL},
+  intlnews:{icon:"🌐",label:"הצלבת חדשות בינלאומית",source:"BBC + Al Jazeera",href:"https://feeds.bbci.co.uk/news/topics/cjnwl8q4ggwt/rss.xml"},
   official:{icon:"🚨",label:"פיקוד העורף + רשמי",source:"OREF + צה״ל + Gov.il",href:"https://www.oref.org.il/"},
   aviation:{icon:"✈️",label:"תעופה אזרחית מעל איראן",source:"ADSB.lol",href:"https://www.adsb.lol/"},
   military:{icon:"🛰️",label:"נוכחות צבאית גלויה",source:"ADSB.lol",href:"https://www.adsb.lol/"},

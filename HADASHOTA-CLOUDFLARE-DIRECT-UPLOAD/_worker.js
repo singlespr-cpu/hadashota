@@ -2695,11 +2695,11 @@ function cors(response) {
    Calibrated multi-signal OSINT situational-awareness index.
    The score is 0–100 intensity, NOT a probability of war.
    ========================================================= */
-const ESCALATION_MODEL_VERSION = "146.0";
-const ESCALATION_WEIGHTS = Object.freeze({news:17,official:11,aviation:15,military:3,notam:7,airrisk:9,oil:9,us:8,maritime:10,nuclear:3,market:4,diplomatic:4});
-const ESCALATION_LABELS = Object.freeze({news:"מודיעין חדשותי",official:"פיקוד העורף + רשמי",aviation:"תעופה אזרחית מעל איראן",military:"נוכחות צבאית גלויה",notam:"NOTAM ישראל ומרחב אווירי",airrisk:"אזהרות תעופה אזוריות",oil:"Brent",us:"עמדת ארה״ב",maritime:"הורמוז והמפרץ",nuclear:"איראן והגרעין",market:"שוק חיזוי",diplomatic:"אזהרות בינלאומיות"});
+const ESCALATION_MODEL_VERSION = "187.0";
+const ESCALATION_WEIGHTS = Object.freeze({news:16,intlnews:4,official:14,aviation:16,military:1,notam:6,airrisk:8,oil:8,us:10,maritime:9,nuclear:3,market:3,diplomatic:2});
+const ESCALATION_LABELS = Object.freeze({news:"מודיעין חדשותי",intlnews:"הצלבת חדשות בינלאומית",official:"פיקוד העורף + רשמי",aviation:"תעופה אזרחית מעל איראן",military:"נוכחות צבאית גלויה",notam:"NOTAM ישראל ומרחב אווירי",airrisk:"אזהרות תעופה אזוריות",oil:"Brent",us:"עמדת ארה״ב",maritime:"הורמוז והמפרץ",nuclear:"איראן והגרעין",market:"שוק חיזוי",diplomatic:"אזהרות בינלאומיות"});
 const ESCALATION_SOURCE_URLS = Object.freeze({
-  news:"/", official:"https://www.oref.org.il/", aviation:"https://www.adsb.lol/", military:"https://www.adsb.lol/",
+  news:"/", intlnews:"https://feeds.bbci.co.uk/news/topics/cjnwl8q4ggwt/rss.xml", official:"https://www.oref.org.il/", aviation:"https://www.adsb.lol/", military:"https://www.adsb.lol/",
   notam:"https://ext.iaa.gov.il/aeroinfo/AeroInfo.aspx?msgType=Notam",
   airrisk:"https://www.easa.europa.eu/en/domains/air-operations/czibs",
   oil:"https://fred.stlouisfed.org/series/DCOILBRENTEU",
@@ -2714,9 +2714,11 @@ const ESCALATION_PUBLIC_REFRESH_MS = 55*1000;
 const ESCALATION_LOCK_MS = 40*1000;
 const ESCALATION_SHARDS = ["sites-1","sites-2","sites-3","telegram-1","telegram-2","telegram-3"];
 const ESCALATION_REGION_RX = /(?:ישראל|ישראלי|צה["״']?ל|איראן|איראני|טהרן|משמרות המהפכה|גרעין|כור גרעיני|הורמוז|המפרץ|כווית|בחריין|קטאר|איחוד האמירויות|אבו דאבי|דובאי|עומאן|סעודיה|עיראק|ירדן|לבנון|חיזבאללה|סוריה|דמשק|תימן|חות['’״]?ים|ארה["״']?ב|וושינגטון|CENTCOM|Israel|Israeli|IDF|iran|iranian|tehran|irgc|nuclear|hormuz|gulf|uae|united arab emirates|oman|saudi|iraq|jordan|lebanon|hezbollah|syria|yemen|houthi|centcom|united states|u\.s\.)/i;
-const ESCALATION_HARD_RX = /(?:תקיפ|מתקפה|הפצצ|שיגור|טיל|טילים|רקט|כטב|כטב.?ם|רחפ|יירוט|אזעק|התרע|כוננות|פינוי|אולטימטום|תגובה צבאית|פעולה צבאית|היערכות|גיוס|strike|attack|bomb|missile|rocket|drone|intercept|alert|evacuat|ultimatum|retaliat|military action|deploy|readiness|imminent)/i;
-const ESCALATION_SOFT_RX = /(?:איום|מתיחות|אזהר|לחץ|סנקציות|חסימה|סגר ימי|threat|tension|warning|pressure|sanction|blockade)/i;
+const ESCALATION_CORE_RX = /(?:איראן|איראני|טהרן|משמרות המהפכה|נתנז|פורדו|בושהר|הורמוז|המפרץ הפרסי|מפרץ עומאן|Iran|Iranian|Tehran|IRGC|Natanz|Fordow|Bushehr|Hormuz|Persian Gulf|Gulf of Oman)/i;
+const ESCALATION_HARD_RX = /(?:תקיפ|מתקפה|הפצצ|שיגור|טיל|טילים|רקט|כטב|כטב.?ם|רחפ|יירוט|אזעק|התרע|כוננות|פינוי|אולטימטום|תגובה צבאית|פעולה צבאית|היערכות|גיוס|מלחמה|מצור|סגר ימי|חסימה ימית|strike|attack|bomb|missile|rocket|drone|intercept|alert|evacuat|ultimatum|retaliat|military action|deploy|readiness|imminent|\bwar\b|blockade|mobiliz|carrier strike|bomber|airspace.{0,40}(?:closed|closure)|ordered departure)/i;
+const ESCALATION_SOFT_RX = /(?:איום|מתיחות|אזהר|לחץ|סנקציות|threat|tension|warning|pressure|sanction|heightened|concern)/i;
 const ESCALATION_DEESC_RX = /(?:הפסקת אש|רגיעה|הרגעה|הסכם|שיחות|מו["״']?מ|משא ומתן|דיפלומט|עסקה|הבנות|ceasefire|de-?escalat|talks|negotiat|agreement|deal|diplomac|truce)/i;
+const ESCALATION_NEWS_BOILERPLATE_RX = /(?:war of words|מלחמת מילים|anniversary|live updates?|live blog|explainer|what we know)/i;
 function escClamp(value,min=0,max=100){const n=Number(value);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):min;}
 function escMedian(values){const a=values.map(Number).filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;}
 function escSignal(key,score,available,reason,extra={}){return {key,label:ESCALATION_LABELS[key]||key,weight:ESCALATION_WEIGHTS[key]||0,score:escClamp(score),available:available!==false,reason:String(reason||""),source:extra.source||"",sourceUrl:extra.sourceUrl||ESCALATION_SOURCE_URLS[key]||"/",checkedAt:extra.checkedAt||new Date().toISOString(),freshness:extra.freshness||"עדכני",...extra};}
@@ -2739,21 +2741,32 @@ async function readEscalationNewsCache(request){
   }
   return {rows,sources,freshestAt:freshest?new Date(freshest).toISOString():null};
 }
+function escNewsSourceTrust(row){
+  const src=SOURCES.find(s=>s.id===row?.sourceId);if(src?.official)return 1.25;if(src?.verified)return 1;return .58;
+}
 function scoreKoteretNews(cacheData){
-  const now=Date.now(),windowMs=12*3600000,one=3600000;
+  const now=Date.now(),windowMs=12*3600000,twoHours=2*3600000;
   const rows=(cacheData?.rows||[]).filter(r=>{const t=Date.parse(r?.publishedAt||0);return Number.isFinite(t)&&now-t>=-600000&&now-t<=windowMs;});
-  const relevant=rows.filter(r=>ESCALATION_REGION_RX.test(`${r?.title||""} ${r?.summary||r?.description||""}`));
-  const classified=relevant.map(r=>{const text=`${r?.title||""} ${r?.summary||r?.description||""}`,age=Math.max(0,now-Date.parse(r?.publishedAt||now));return {...r,_hard:ESCALATION_HARD_RX.test(text),_soft:ESCALATION_SOFT_RX.test(text),_deesc:ESCALATION_DEESC_RX.test(text),_recent:age<=6*3600000};});
-  let weighted=0,deesc=0;for(const r of classified){const decay=r._recent?1:.55;if(r._hard)weighted+=decay;else if(r._soft)weighted+=.45*decay;if(r._deesc)deesc+=decay;}
-  const denom=Math.max(1,classified.length),ratio=weighted/denom,deRatio=deesc/denom;
-  const current=classified.filter(r=>now-Date.parse(r.publishedAt||0)<=one).length;
-  const previous=classified.filter(r=>{const age=now-Date.parse(r.publishedAt||0);return age>one&&age<=windowMs;}).length;
-  const baseline=previous/11,velocity=baseline>.45?current/baseline:(current>=4?2:1);
-  const publishers=new Set(classified.filter(r=>r._hard).map(r=>r.publisher||r.sourceId).filter(Boolean)).size;
-  let score=8+Math.pow(Math.min(1,ratio),1.4)*64+Math.min(14,Math.max(0,velocity-1)*8)+Math.min(8,Math.max(0,publishers-2)*2)-deRatio*22;
-  if(classified.length<4)score=Math.min(score,28);score=escClamp(Math.round(score));
-  const reason=classified.length?`${classified.length} דיווחים אזוריים ב־12 שעות; ${current} בשעה האחרונה; ${publishers} מקורות דיווחו על אינדיקציות הסלמה.`:"לא זוהתה כרגע מסה מספקת של דיווחים אזוריים במטמון החדשות.";
-  return escSignal("news",score,true,reason,{source:"45 מקורות כותרת פלוס",sourceUrl:"/",freshness:cacheData?.freshestAt?`מטמון ${new Date(cacheData.freshestAt).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"})}`:"מטמון חדשות",stats:{relevant:classified.length,currentHour:current,hardSources:publishers,velocity:Number(velocity.toFixed(2)),windowHours:12}});
+  // V187: the Iran-Israel pulse should not be diluted by unrelated regional news.
+  // Only Iran/Hormuz-core items drive the primary news ratio; the wider region is
+  // covered by the official/air/maritime/posture families independently.
+  const relevant=rows.filter(r=>ESCALATION_CORE_RX.test(`${r?.title||""} ${r?.summary||r?.description||""}`));
+  let weightedAlerts=0,weightedDenom=0,weightedDeesc=0,currentWeight=0,olderWeight=0;const hardPublishers=new Set(),trustedHard=new Set();
+  for(const r of relevant){
+    const text=`${r?.title||""} ${r?.summary||r?.description||""}`,title=String(r?.title||"");
+    const age=Math.max(0,now-Date.parse(r?.publishedAt||now)),decay=Math.pow(.5,age/(6*3600000)),trust=escNewsSourceTrust(r),base=trust*decay;
+    const hard=ESCALATION_HARD_RX.test(text),soft=ESCALATION_SOFT_RX.test(text),deesc=ESCALATION_DEESC_RX.test(text),boiler=ESCALATION_NEWS_BOILERPLATE_RX.test(title)&&!/(?:strike|attack|missile|תקיפ|טיל|שיגור|blockade|סגר ימי)/i.test(title);
+    let alertWeight=hard?(deesc ? .36 : 1):(soft?(deesc ? .18 : .38):0);if(boiler)alertWeight=Math.min(alertWeight,.18);
+    weightedDenom+=base;weightedAlerts+=base*alertWeight;if(deesc)weightedDeesc+=base;
+    if(age<=twoHours)currentWeight+=base;else olderWeight+=base;
+    if(hard&&!deesc){const pub=String(r.publisher||r.sourceId||"");if(pub)hardPublishers.add(pub);const src=SOURCES.find(s=>s.id===r?.sourceId);if(pub&&(src?.verified||src?.official))trustedHard.add(pub);}
+  }
+  const ratio=weightedDenom?weightedAlerts/weightedDenom:0,deRatio=weightedDenom?weightedDeesc/weightedDenom:0;
+  const olderPer2h=olderWeight/5,velocity=olderPer2h>.35?currentWeight/olderPer2h:(currentWeight>=2.2?2:1);
+  let score=5+Math.pow(Math.min(1,ratio),1.5)*72+Math.min(10,Math.max(0,velocity-1)*6)+Math.min(8,Math.max(0,hardPublishers.size-1)*2)-deRatio*18;
+  if(relevant.length<3)score=Math.min(score,32);if(hardPublishers.size<2)score=Math.min(score,48);if(trustedHard.size<2)score=Math.min(score,60);score=escClamp(Math.round(score));
+  const reason=relevant.length?`${relevant.length} דיווחים ממוקדי איראן/הורמוז ב־12 שעות; ${hardPublishers.size} מקורות שונים דיווחו על אינדיקציות הסלמה, ${trustedHard.size} מהם מקורות מאומתים; קצב השעתיים האחרונות פי ${Number(velocity.toFixed(1))} מקו הבסיס.`:"לא זוהתה כרגע מסה מספקת של דיווחים ממוקדי איראן/הורמוז במטמון החדשות.";
+  return escSignal("news",score,true,reason,{source:"כותרת פלוס — מקורות ישראליים ורשמיים",sourceUrl:"/",freshness:cacheData?.freshestAt?`מטמון ${new Date(cacheData.freshestAt).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"})}`:"מטמון חדשות",stats:{relevant:relevant.length,hardSources:hardPublishers.size,trustedHardSources:trustedHard.size,alertRatio:Number(ratio.toFixed(3)),deescalationRatio:Number(deRatio.toFixed(3)),velocity:Number(velocity.toFixed(2)),windowHours:12}});
 }
 async function fetchOrefForEscalation(){
   try{const parsed=await escFetch("https://www.oref.org.il/WarningMessages/alert/alerts.json",{timeout:3500,type:"text",headers:{Accept:"application/json,text/plain,*/*",Referer:"https://www.oref.org.il/","X-Requested-With":"XMLHttpRequest","Cache-Control":"no-cache"},cf:{cacheEverything:true,cacheTtl:2}});const raw=String(parsed||"").replace(/^\uFEFF/,"").trim();const data=raw&&raw!=="null"?JSON.parse(raw):null;return {ok:true,alerts:normalizeOrefCurrentAlerts(data)};}catch(error){return {ok:false,alerts:[],error:String(error?.message||error)};}
@@ -2783,7 +2796,7 @@ function scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb){
   const escalation=rows.filter(r=>ESCALATION_HARD_RX.test(`${r?.title||""} ${r?.summary||""}`)&&ESCALATION_REGION_RX.test(`${r?.title||""} ${r?.summary||""}`));
   const deesc=rows.filter(r=>ESCALATION_DEESC_RX.test(`${r?.title||""} ${r?.summary||""}`));const active=(oref?.alerts||[]).length;
   const directHard=Number(idfWeb?.hard)||0,directDeesc=Number(idfWeb?.deesc)||0,nscHard=Number(nscWeb?.hard)||0,nscDeesc=Number(nscWeb?.deesc)||0;
-  let score=10+Math.min(40,escalation.length*9)+Math.min(16,directHard*4)+Math.min(12,nscHard*4)-Math.min(20,deesc.length*5+directDeesc*3+nscDeesc*3);if(active){const alertFloor=(escalation.length||directHard||nscHard)?Math.min(96,80+active*3):Math.min(74,58+active*3);score=Math.max(score,alertFloor);}
+  let score=10+Math.min(40,escalation.length*9)+Math.min(16,directHard*4)+Math.min(12,nscHard*4)-Math.min(20,deesc.length*5+directDeesc*3+nscDeesc*3);if(active){const iranLinked=escalation.length||directHard||nscHard;const alertFloor=iranLinked?Math.min(96,82+active*2):Math.min(62,48+active*2);score=Math.max(score,alertFloor);}
   const available=oref?.ok||rows.length>0||idfWeb?.ok||nscWeb?.ok;const reason=active?`${active} התרעות פעילות של פיקוד העורף כעת; בנוסף נבדקו עדכוני צה״ל, המל״ל, ממשלה ורשות שדות התעופה.`:`אין התרעה פעילה ברגע הבדיקה; ${escalation.length} עדכונים רשמיים אזוריים במטמון${idfWeb?.ok?` · צה״ל: ${directHard} אינדיקציות מבצעיות`:""}${nscWeb?.ok?` · מל״ל: ${nscHard} אינדיקציות חריגות`:""}.`;
   const freshness=[oref?.ok?"פיקוד העורף חי":null,idfWeb?.ok?"אתר צה״ל ישיר":null,nscWeb?.ok?"המל״ל ישיר":null,rows.length?"מקורות רשמיים במטמון":null].filter(Boolean).join(" · ")||"לא זמין";
   return escSignal("official",score,available,reason,{source:"פיקוד העורף + צה״ל + המל״ל + Gov.il + רשות שדות התעופה",sourceUrl:"https://www.oref.org.il/",freshness,stats:{activeAlerts:active,officialEscalation:escalation.length,deescalation:deesc.length,idfDirectHard:directHard,idfDirectRecent:Number(idfWeb?.recent)||0,nscHard,nscRecent:Number(nscWeb?.recent)||0}});
@@ -2874,6 +2887,23 @@ function mergeAirRiskWithFaa(base,faa){
   const bonus=faa.recent?8:0;
   if(base?.available===false)return escSignal("airrisk",faa.recent?24:10,true,`EASA לא זמין ברענון זה; FAA מציגה מגבלות/אזהרות פעילות למרחבים אזוריים${faa.recent?" והעמוד עודכן ב־14 הימים האחרונים":""}.`,{source:"FAA Prohibitions & Restrictions",sourceUrl:faa.url,freshness:faa.recent?"FAA עודכן לאחרונה":"FAA זמין",stats:{faaRelevant:faa.relevant,faaRecent:faa.recent}});
   return {...base,score:escClamp(Number(base.score||0)+bonus),source:`${base.source||"EASA"} + FAA`,reason:`${base.reason} FAA משמשת מקור הצלבה נוסף למגבלות טיסה; ${faa.recent?"עמוד המגבלות עודכן לאחרונה ולכן נוסף חיזוק מתון.":"לא זוהה עדכון FAA חדש מספיק כדי לשנות את הציון."}`,stats:{...(base.stats||{}),faaRelevant:faa.relevant,faaRecent:faa.recent}};
+}
+async function fetchInternationalIranNewsSignal(){
+  const sources=[
+    {id:"esc-bbc",publisher:"bbc",name:"BBC Middle East",kind:"site",adapter:"rss",url:"https://feeds.bbci.co.uk/news/topics/cjnwl8q4ggwt/rss.xml",home:"https://www.bbc.com/news/world/middle_east",language:"en",verified:true},
+    {id:"esc-aj",publisher:"aljazeera",name:"Al Jazeera",kind:"site",adapter:"rss",url:"https://www.aljazeera.com/xml/rss/all.xml",home:"https://www.aljazeera.com/",language:"en",verified:true}
+  ];
+  const settled=await Promise.allSettled(sources.map(src=>escFetch(src.url,{timeout:6000,headers:{Accept:"application/rss+xml,application/xml,text/xml,*/*"}})));
+  const now=Date.now(),items=[];let reached=0;
+  settled.forEach((res,i)=>{if(res.status!=="fulfilled")return;reached++;try{items.push(...parseRss(String(res.value||""),sources[i]));}catch{}});
+  if(!reached)return escSignal("intlnews",0,false,"BBC ו-Al Jazeera אינם זמינים כרגע להצלבת חדשות בינלאומית.",{source:"BBC + Al Jazeera",sourceUrl:sources[0].home,freshness:"לא זמין"});
+  const relevant=items.filter(r=>{const t=Date.parse(r?.publishedAt||0),text=`${r?.title||""} ${r?.preview||""}`;return Number.isFinite(t)&&now-t>=-600000&&now-t<=24*3600000&&ESCALATION_CORE_RX.test(text);});
+  let denom=0,alerts=0,deescWeight=0,recentHard=0;const hardSources=new Set();
+  for(const r of relevant){const text=`${r?.title||""} ${r?.preview||""}`,age=Math.max(0,now-Date.parse(r.publishedAt||now)),base=Math.pow(.5,age/(8*3600000));const hard=ESCALATION_HARD_RX.test(text),soft=ESCALATION_SOFT_RX.test(text),deesc=ESCALATION_DEESC_RX.test(text),boiler=ESCALATION_NEWS_BOILERPLATE_RX.test(String(r?.title||""));let a=hard?(deesc ? .35 : 1):(soft?(deesc ? .15 : .35):0);if(boiler)a=Math.min(a,.15);denom+=base;alerts+=base*a;if(deesc)deescWeight+=base;if(hard&&!deesc){hardSources.add(r.publisher||r.sourceId);if(age<=4*3600000)recentHard++;}}
+  const ratio=denom?alerts/denom:0,deRatio=denom?deescWeight/denom:0;let score=5+Math.pow(Math.min(1,ratio),1.55)*76+Math.min(8,hardSources.size*4)+Math.min(8,recentHard*2)-deRatio*18;
+  if(relevant.length<3)score=Math.min(score,35);if(hardSources.size<2)score=Math.min(score,58);score=escClamp(Math.round(score));
+  const reason=relevant.length?`BBC ו-Al Jazeera: ${relevant.length} פריטים ממוקדי איראן ב־24 שעות; ${hardSources.size} מערכות חדשות בינלאומיות עם דיווחי הסלמה; ${recentHard} דיווחים קשים בארבע השעות האחרונות.`:"שני המקורות הבינלאומיים זמינים, אך לא אותרה מסה חדשה וממוקדת איראן ב־24 השעות האחרונות.";
+  return escSignal("intlnews",score,true,reason,{source:"BBC World + Al Jazeera English",sourceUrl:sources[0].home,freshness:`${reached}/2 פידים בינלאומיים`,stats:{reached,relevant:relevant.length,hardSources:hardSources.size,recentHard,alertRatio:Number(ratio.toFixed(3)),deescalationRatio:Number(deRatio.toFixed(3))}});
 }
 function oilScoreFromContext({move24=0,move7=0,premium20=0,latest=null,source="Yahoo Finance / FRED"}={}){
   const up24=Math.max(0,Number(move24)||0),up7=Math.max(0,Number(move7)||0),premium=Math.max(0,Number(premium20)||0);
@@ -3013,9 +3043,9 @@ async function fetchPizzaExperimental(){
   const url="https://www.pizzint.watch/";try{const html=await escFetch(url,{timeout:6000});const text=normalizeSpace(stripHtml(html));const m=text.match(/DOUGHCON\s*([1-5])/i);if(!m)return {available:false,weight:0,experimental:true,reason:"PizzINT נטען אך רמת DOUGHCON לא זוהתה.",source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};const level=Number(m[1]),mapping={5:10,4:30,3:55,2:78,1:94};return {available:true,weight:0,experimental:true,level:`DOUGHCON ${level}`,score:mapping[level],reason:`PizzINT מציג DOUGHCON ${level}. מוצג לניטור OSINT בלבד ואינו משפיע על דופק ההסלמה.`,source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};}catch(error){return {available:false,weight:0,experimental:true,reason:`מדד הפיצה אינו זמין כרגע: ${String(error?.message||error).slice(0,80)}`,source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};}
 }
 async function collectExternalEscalationSignals(){
-  const [airBundle,notam,airriskBase,faa,oil,us,maritime,nuclear,market,diplomatic,pizza]=await Promise.all([fetchAviationSignals(),fetchNotamSignal(),fetchEasaAirRiskSignal(),fetchFaaAirRiskCorroboration(),fetchOilSignal(),fetchUSPostureSignal(),fetchMaritimeSignal(),fetchNuclearSignal(),fetchPredictionMarketSignal(),fetchDiplomaticRiskSignal(),fetchPizzaExperimental()]);
+  const [airBundle,notam,airriskBase,faa,oil,us,maritime,nuclear,market,diplomatic,intlnews,pizza]=await Promise.all([fetchAviationSignals(),fetchNotamSignal(),fetchEasaAirRiskSignal(),fetchFaaAirRiskCorroboration(),fetchOilSignal(),fetchUSPostureSignal(),fetchMaritimeSignal(),fetchNuclearSignal(),fetchPredictionMarketSignal(),fetchDiplomaticRiskSignal(),fetchInternationalIranNewsSignal(),fetchPizzaExperimental()]);
   const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
-  return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic},experimental:{pizza},updatedAt:new Date().toISOString()};
+  return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic,intlnews},experimental:{pizza},updatedAt:new Date().toISOString()};
 }
 // V167 background calibration refresh: split the external OSINT set into three
 // independent five-minute batches. Each signal family still refreshes roughly
@@ -3031,12 +3061,12 @@ async function collectExternalEscalationSignalGroup(groupIndex=0){
     const [us,maritime,nuclear]=await Promise.all([fetchUSPostureSignal(),fetchMaritimeSignal(),fetchNuclearSignal()]);
     return {signals:{us,maritime,nuclear},experimental:{},updatedAt:new Date().toISOString(),group};
   }
-  const [market,diplomatic,pizza]=await Promise.all([fetchPredictionMarketSignal(),fetchDiplomaticRiskSignal(),fetchPizzaExperimental()]);
-  return {signals:{market,diplomatic},experimental:{pizza},updatedAt:new Date().toISOString(),group};
+  const [market,diplomatic,intlnews,pizza]=await Promise.all([fetchPredictionMarketSignal(),fetchDiplomaticRiskSignal(),fetchInternationalIranNewsSignal(),fetchPizzaExperimental()]);
+  return {signals:{market,diplomatic,intlnews},experimental:{pizza},updatedAt:new Date().toISOString(),group};
 }
 function mergeEscalationExternal(previous,fresh){
   const now=Date.now(),out={signals:{},experimental:{},updatedAt:fresh?.updatedAt||previous?.updatedAt||new Date().toISOString()};
-  for(const k of ["aviation","military","notam","airrisk","oil","us","maritime","nuclear","market","diplomatic"]){
+  for(const k of ["aviation","military","notam","airrisk","oil","us","maritime","nuclear","market","diplomatic","intlnews"]){
     const n=fresh?.signals?.[k],p=previous?.signals?.[k];
     if(n===undefined&&p){out.signals[k]={...p};continue;}
     if(n?.available!==false){out.signals[k]={...n,stale:false,staleAgeMinutes:0};continue;}
@@ -3086,36 +3116,61 @@ async function escUpdateSeriesBaseline(storage,signal,{storageKey,rawField,mode}
     else{signal.score=Math.min(34,Number(signal.score)||6);signal.reason=`זוהו ${current} מטוסים צבאיים גלויים. המערכת עדיין לומדת קו בסיס (${comparable.length}/12 דגימות מינימום); הכיסוי חלקי ולכן הסיגנל נשאר במשקל נמוך.`;}
   }
 }
+function escSignalQualityFactor(s){
+  if(!s||s.available===false)return 0;const st=s.stats||{};let q=1;
+  if(s.key==="aviation")q=Math.max(.70,Math.min(1,Number(st.samplePoints||0)/4));
+  else if(s.key==="military")q=Math.max(.45,Math.min(.75,Number(st.samplePoints||0)/2));
+  else if(s.key==="us")q=Math.max(.60,Math.min(1,Number(st.reached||0)/5));
+  else if(s.key==="diplomatic")q=Math.max(.60,Math.min(1,Number(st.reached||0)/6));
+  else if(s.key==="intlnews")q=Math.max(.65,Math.min(1,Number(st.reached||0)/2));
+  else if(s.key==="market"){const liq=Number(st.liquidity||0);q=liq>=100000?1:liq>=25000?.85:liq>=5000?.68:.55;}
+  return q;
+}
+function escSignalSmoothingProfile(key){
+  const map={official:[6*60,90*60],news:[15*60,3*3600],intlnews:[25*60,4*3600],aviation:[25*60,6*3600],military:[30*60,3*3600],notam:[15*60,4*3600],airrisk:[35*60,8*3600],oil:[40*60,8*3600],us:[25*60,6*3600],maritime:[25*60,8*3600],nuclear:[45*60,12*3600],market:[20*60,2*3600],diplomatic:[45*60,12*3600]};return map[key]||[30*60,6*3600];
+}
+function escSmoothSignalScore(signal,prevSignal,previousSnapshot,now){
+  const raw=escClamp(signal?.score);if(!prevSignal||previousSnapshot?.modelVersion!==ESCALATION_MODEL_VERSION||signal?.available===false||prevSignal?.available===false||signal?.stale)return {...signal,rawSignalScore:raw,score:raw};
+  // Active Home Front alerts are verified real-time evidence and must register immediately.
+  if(signal.key==="official"&&Number(signal?.stats?.activeAlerts||0)>0)return {...signal,rawSignalScore:raw,score:raw};
+  const prev=escClamp(prevSignal.score),dt=Math.max(15,Math.min(15*60,(now-Date.parse(previousSnapshot?.updatedAt||now))/1000));const [upHalf,downHalf]=escSignalSmoothingProfile(signal.key),half=raw>prev?upHalf:downHalf,alpha=1-Math.exp(-Math.LN2*dt/half);const score=prev+alpha*(raw-prev);return {...signal,rawSignalScore:raw,score:Number(escClamp(score).toFixed(1))};
+}
+function escWeightedDomainScore(signals,keys){const rows=signals.filter(s=>keys.includes(s.key)&&s.available!==false&&!s.stale);const w=rows.reduce((a,s)=>a+Number(s.weight||0)*escSignalQualityFactor(s),0);return w?rows.reduce((a,s)=>a+Number(s.score||0)*Number(s.weight||0)*escSignalQualityFactor(s),0)/w:0;}
 async function buildEscalationSnapshot(storage,payload){
   const now=Date.now(),previous=await storage.get("escalation.latest"),history=escPublicHistory(await storage.get("escalation.history"));let signals=Object.values(payload?.signals||{}).filter(Boolean).map(s=>({...s,weight:ESCALATION_WEIGHTS[s.key]||Number(s.weight)||0,label:ESCALATION_LABELS[s.key]||s.label}));
   await escUpdateSeriesBaseline(storage,signals.find(s=>s.key==="aviation"),{storageKey:"escalation.aviation.samples",rawField:"rawCount",mode:"aviation"});
   await escUpdateSeriesBaseline(storage,signals.find(s=>s.key==="military"),{storageKey:"escalation.military.samples",rawField:"rawCount",mode:"military"});
   signals=Object.keys(ESCALATION_WEIGHTS).map(k=>signals.find(s=>s.key===k)||escSignal(k,0,false,"המקור אינו זמין כרגע.",{freshness:"לא זמין"}));
+  const prevByKey=new Map((previous?.signals||[]).map(s=>[s.key,s]));signals=signals.map(s=>escSmoothSignalScore(s,prevByKey.get(s.key),previous,now));
   const available=signals.filter(s=>s.available!==false);
   const staleFactor=s=>{if(!s.stale)return 1;const age=Number(s.staleAgeMinutes??((now-Date.parse(s.checkedAt||0))/60000));if(!Number.isFinite(age))return 0;if(age<=15)return .65;if(age<=30)return .35;if(age<=60)return .15;return 0;};
-  const effectiveWeight=s=>Number(s.weight||0)*staleFactor(s),availableWeight=available.reduce((a,s)=>a+effectiveWeight(s),0);
+  const effectiveWeight=s=>Number(s.weight||0)*staleFactor(s)*escSignalQualityFactor(s),availableWeight=available.reduce((a,s)=>a+effectiveWeight(s),0);
   let raw=availableWeight?available.reduce((a,s)=>a+escClamp(s.score)*effectiveWeight(s),0)/availableWeight:0;
   const live=available.filter(s=>!s.stale),elevated=live.filter(s=>Number(s.score)>=65).length;
-  const groups={information:["news","official","us","diplomatic"],air:["aviation","notam","airrisk"],maritime:["maritime"],market:["oil","market"],nuclear:["nuclear"],military:["military"]};
-  const domainScores=Object.fromEntries(Object.entries(groups).map(([g,keys])=>[g,Math.max(0,...live.filter(s=>keys.includes(s.key)).map(s=>Number(s.score)||0))]));
-  const corroboratingDomains=Object.values(domainScores).filter(v=>v>=55).length;
-  const multiplier=corroboratingDomains>=5?1.22:corroboratingDomains===4?1.16:corroboratingDomains===3?1.10:corroboratingDomains===2?1.05:1;raw=escClamp(raw*multiplier);
+  // V187: independent-domain convergence. Correlated sources are grouped so a
+  // media echo cannot count as multiple confirmations, while genuinely different
+  // evidence families (official, aviation, maritime, posture, markets...) can.
+  const groups={news:["news","intlnews"],official:["official"],air:["aviation","notam","airrisk"],posture:["us","diplomatic"],maritime:["maritime"],market:["oil","market"],nuclear:["nuclear"],military:["military"]};
+  const domainScores=Object.fromEntries(Object.entries(groups).map(([g,keys])=>[g,Number(escWeightedDomainScore(live,keys).toFixed(1))]));
+  const corroboratingDomains=Object.values(domainScores).filter(v=>v>=60).length,strongDomains=Object.values(domainScores).filter(v=>v>=75).length;
+  const hardDomainElevated=["official","air","posture","maritime","nuclear"].some(k=>Number(domainScores[k]||0)>=60);
+  let multiplier=corroboratingDomains>=5?1.24:corroboratingDomains===4?1.18:corroboratingDomains===3?1.12:corroboratingDomains===2?1.06:1;
+  // News + market enthusiasm alone must never create a large escalation premium.
+  if(!hardDomainElevated)multiplier=Math.min(multiplier,1.03);
+  raw=escClamp(raw*multiplier);
+  // Do not report extreme certainty when a large part of the sensor set is down.
+  if(availableWeight<30)raw=Math.min(raw,45);else if(availableWeight<45)raw=Math.min(raw,60);else if(availableWeight<60)raw=Math.min(raw,75);
   let score=raw,calibrationReset=false;
-  if(previous&&Number.isFinite(Number(previous.score))){const prev=Number(previous.score);if(previous.modelVersion!==ESCALATION_MODEL_VERSION){score=raw;calibrationReset=true;}else{const dt=Math.max(5,Math.min(3600,(now-Date.parse(previous.updatedAt||now))/1000)),half=raw>prev?60*60:8*3600,alpha=1-Math.exp(-Math.LN2*dt/half);score=prev+alpha*(raw-prev);if(raw>=88&&prev<70)score=Math.max(score,prev+4);}}
+  if(previous&&Number.isFinite(Number(previous.score))){const prev=Number(previous.score);if(previous.modelVersion!==ESCALATION_MODEL_VERSION){score=raw;calibrationReset=true;}else{const dt=Math.max(5,Math.min(3600,(now-Date.parse(previous.updatedAt||now))/1000));const riseHalf=corroboratingDomains>=4?15*60:corroboratingDomains===3?25*60:corroboratingDomains===2?40*60:60*60,half=raw>prev?riseHalf:10*3600,alpha=1-Math.exp(-Math.LN2*dt/half);score=prev+alpha*(raw-prev);if(raw>=88&&strongDomains>=3)score=Math.max(score,prev+6);}}
   score=Number(escClamp(score).toFixed(1));const level=escLevel(score);let newHistory=history;const last=history[history.length-1];if(!last||now-Date.parse(last.at)>=5*60000)newHistory=[...history,{at:new Date().toISOString(),score:Number(score.toFixed(1)),raw:Number(raw.toFixed(1)),modelVersion:ESCALATION_MODEL_VERSION}].filter(x=>now-Date.parse(x.at)<73*3600000).slice(-900);else{newHistory=[...history.slice(0,-1),{...last,score:Number(score.toFixed(1)),raw:Number(raw.toFixed(1)),at:new Date().toISOString(),modelVersion:ESCALATION_MODEL_VERSION}];}
   const score6=escClosestScore(newHistory,now-6*3600000),delta6h=Number((score-(Number.isFinite(score6)?score6:(previous?.score??score))).toFixed(1)),coverage=Math.round(availableWeight),confidenceLabel=coverage>=88?"גבוה":coverage>=68?"בינוני":"נמוך";
-  const prevByKey=new Map((previous?.signals||[]).map(s=>[s.key,s]));const ranked=available.map(s=>({s,delta:Number(s.score)-Number(prevByKey.get(s.key)?.score??s.score),impact:Number(s.score)*Number(s.weight)/100})).sort((a,b)=>Math.abs(b.delta)*.8+b.impact*.2-(Math.abs(a.delta)*.8+a.impact*.2));const changes=ranked.slice(0,5).map(({s,delta})=>`${s.label}: ${delta>3?`עלה בכ־${Math.round(delta)} נק׳ — `:delta<-3?`ירד בכ־${Math.round(Math.abs(delta))} נק׳ — `:""}${s.reason}`);
-  if(calibrationReset)changes.unshift("כיול V146: המדד אותחל מחדש לפי המודל המתוקן, כדי לא להחליק ציון ישן שנמדד במשקלים ובקו בסיס שונים.");
+  const ranked=available.map(s=>({s,delta:Number(s.score)-Number(prevByKey.get(s.key)?.score??s.score),impact:Number(s.score)*Number(s.weight)/100})).sort((a,b)=>Math.abs(b.delta)*.8+b.impact*.2-(Math.abs(a.delta)*.8+a.impact*.2));const changes=ranked.slice(0,5).map(({s,delta})=>`${s.label}: ${delta>3?`עלה בכ־${Math.round(delta)} נק׳ — `:delta<-3?`ירד בכ־${Math.round(Math.abs(delta))} נק׳ — `:""}${s.reason}`);
+  if(calibrationReset)changes.unshift("כיול V187: המדד אותחל למודל הצלבה חדש שמפריד בין תחומים תלויים, מחזק התכנסות של מקורות בלתי־תלויים ומוסיף הצלבת חדשות בינלאומית — ללא העלאה מלאכותית של הציון.");
   const sourceHealth={live:live.length,stale:available.filter(s=>s.stale).length,unavailable:signals.filter(s=>s.available===false).length,coverage};
-  const latest={modelVersion:ESCALATION_MODEL_VERSION,score,rawScore:Number(raw.toFixed(1)),level:level.label,levelKey:level.key,updatedAt:new Date().toISOString(),delta6h,coverage,confidenceLabel,availableSignals:available.length,totalSignals:Object.keys(ESCALATION_WEIGHTS).length,elevatedSignals:elevated,corroboratingDomains,multiplier,domainScores,sourceHealth,calibrationReset,signals,changes:changes.slice(0,6),experimental:payload?.experimental||{},disclaimer:"מדד 0–100 של עוצמת המתיחות; אינו הסתברות למלחמה ואינו תחזית מודיעינית."};
+  const latest={modelVersion:ESCALATION_MODEL_VERSION,score,rawScore:Number(raw.toFixed(1)),level:level.label,levelKey:level.key,updatedAt:new Date().toISOString(),delta6h,coverage,confidenceLabel,availableSignals:available.length,totalSignals:Object.keys(ESCALATION_WEIGHTS).length,elevatedSignals:elevated,corroboratingDomains,strongDomains,multiplier,domainScores,sourceHealth,calibrationReset,signals,changes:changes.slice(0,6),experimental:payload?.experimental||{},disclaimer:"מדד 0–100 של עוצמת המתיחות; אינו הסתברות למלחמה ואינו תחזית מודיעינית."};
   let _pushCandidate=null;
-  if(previous&&previous.modelVersion===ESCALATION_MODEL_VERSION&&Number.isFinite(Number(previous.score))){
-    const prevScore=Number(previous.score),score1h=escClosestScore(newHistory,now-60*60000),delta1h=Number((score-(Number.isFinite(score1h)?score1h:prevScore)).toFixed(1));
-    const threshold=[85,70,50].find((t)=>prevScore<t&&score>=t)||0;
-    const rapid=delta1h>=10&&score>=40&&corroboratingDomains>=2;
-    if(threshold||rapid){_pushCandidate={fingerprint:`escalation:${threshold||"rapid"}:${Math.round(score)}:${Math.floor(now/(15*60000))}`,kind:"escalation",title:`📡 דופק ההסלמה עלה ל-${Math.round(score)}/100`,body:threshold?`${level.label} · המדד חצה את רף ${threshold}. כמה אינדיקציות ציבוריות מתחזקות במקביל.`:`${level.label} · עלייה של ${Math.round(delta1h)} נק׳ בשעה האחרונה.`,url:"/escalation",score,threshold:threshold||null,delta1h,at:new Date().toISOString()};}
-  }
-  await storage.put("escalation.latest",latest);await storage.put("escalation.history",newHistory);if(payload?.external){await storage.put("escalation.external",payload.external);await storage.put("escalation.external.updatedAt",payload?.externalUpdatedAt||payload.external?.updatedAt||new Date().toISOString());}await storage.delete("escalation.lock");return {ok:true,latest,history:newHistory,experimental:latest.experimental,_pushCandidate,methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length,corroborationThreshold:55}};
+  if(previous&&previous.modelVersion===ESCALATION_MODEL_VERSION&&Number.isFinite(Number(previous.score))){const prevScore=Number(previous.score),score1h=escClosestScore(newHistory,now-60*60000),delta1h=Number((score-(Number.isFinite(score1h)?score1h:prevScore)).toFixed(1));const threshold=[85,70,50].find(t=>prevScore<t&&score>=t)||0;const rapid=delta1h>=10&&score>=40&&corroboratingDomains>=2;if(threshold||rapid){_pushCandidate={fingerprint:`escalation:${threshold||"rapid"}:${Math.round(score)}:${Math.floor(now/(15*60000))}`,kind:"escalation",title:`📡 דופק ההסלמה עלה ל-${Math.round(score)}/100`,body:threshold?`${level.label} · המדד חצה את רף ${threshold}. כמה אינדיקציות ציבוריות מתחזקות במקביל.`:`${level.label} · עלייה של ${Math.round(delta1h)} נק׳ בשעה האחרונה.`,url:"/escalation",score,threshold:threshold||null,delta1h,at:new Date().toISOString()};}}
+  await storage.put("escalation.latest",latest);await storage.put("escalation.history",newHistory);if(payload?.external){await storage.put("escalation.external",payload.external);await storage.put("escalation.external.updatedAt",payload?.externalUpdatedAt||payload.external?.updatedAt||new Date().toISOString());}await storage.delete("escalation.lock");return {ok:true,latest,history:newHistory,experimental:latest.experimental,_pushCandidate,methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length+2,corroborationThreshold:60}};
 }
 
 
@@ -3993,8 +4048,8 @@ export class PushHub {
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
       const latest=await storage.get("escalation.latest");
       const history=escPublicHistory(await storage.get("escalation.history"));
-      if(!latest)return json({ok:false,latest:null,history,methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length,corroborationThreshold:55}},200,{"Cache-Control":"no-store"});
-      return json({ok:true,latest,history,experimental:latest.experimental||{},methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length,corroborationThreshold:55}},200,{"Cache-Control":"no-store"});
+      if(!latest)return json({ok:false,latest:null,history,methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length+2,corroborationThreshold:60}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,latest,history,experimental:latest.experimental||{},methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length+2,corroborationThreshold:60}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/claim"&&request.method==="POST") {
@@ -4006,7 +4061,7 @@ export class PushHub {
       const now=Date.now();
       const latestAge=latest?now-Date.parse(latest.updatedAt||0):Infinity;
       const lockAge=lock?now-Date.parse(lock.at||0):Infinity;
-      const publicState={ok:!!latest,latest:latest||null,history,experimental:latest?.experimental||{},methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length,corroborationThreshold:55}};
+      const publicState={ok:!!latest,latest:latest||null,history,experimental:latest?.experimental||{},methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length+2,corroborationThreshold:60}};
       if(latest&&Number.isFinite(latestAge)&&latestAge<ESCALATION_PUBLIC_REFRESH_MS)return json({claimed:false,reason:"fresh",public:publicState,external,externalUpdatedAt},200,{"Cache-Control":"no-store"});
       if(lock&&Number.isFinite(lockAge)&&lockAge<ESCALATION_LOCK_MS)return json({claimed:false,reason:"locked",public:publicState,external,externalUpdatedAt},200,{"Cache-Control":"no-store"});
       const token=crypto.randomUUID();
