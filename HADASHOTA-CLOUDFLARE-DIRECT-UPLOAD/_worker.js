@@ -261,7 +261,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "191.0.0",
+          version: "192.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -274,7 +274,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "191.0.0",
+        version: "192.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1524,7 +1524,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "191.0.0"
+      "X-Hadashota-Version": "192.0.0"
     }));
   }
 
@@ -1534,7 +1534,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "191.0.0",
+    "X-Hadashota-Version": "192.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1575,7 +1575,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "191.0.0",
+          "X-Hadashota-Version": "192.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1698,13 +1698,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "191.0.0",
+      "X-Hadashota-Version": "192.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "191.0.0",
+      "X-Hadashota-Version": "192.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1738,7 +1738,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "191.0.0"
+        "X-Hadashota-Version": "192.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1760,7 +1760,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "191.0.0"
+    "X-Hadashota-Version": "192.0.0"
   });
 }
 
@@ -2695,8 +2695,9 @@ function cors(response) {
    Calibrated multi-signal OSINT situational-awareness index.
    The score is 0–100 intensity, NOT a probability of war.
    ========================================================= */
-const ESCALATION_MODEL_VERSION = "189.0";
+const ESCALATION_MODEL_VERSION = "192.0";
 const ESCALATION_WEIGHTS = Object.freeze({news:16,intlnews:4,official:14,aviation:16,military:1,notam:6,airrisk:8,oil:8,us:10,maritime:9,nuclear:3,market:3,diplomatic:2});
+const ESCALATION_DOMAIN_WEIGHTS = Object.freeze({news:18,official:18,air:16,posture:14,maritime:16,market:8,nuclear:6,military:4});
 const ESCALATION_LABELS = Object.freeze({news:"מודיעין חדשותי",intlnews:"הצלבת חדשות בינלאומית",official:"פיקוד העורף + רשמי",aviation:"תעופה אזרחית מעל איראן",military:"נוכחות צבאית גלויה",notam:"NOTAM ישראל ומרחב אווירי",airrisk:"אזהרות תעופה אזוריות",oil:"Brent",us:"עמדת ארה״ב",maritime:"הורמוז והמפרץ",nuclear:"איראן והגרעין",market:"שוק חיזוי",diplomatic:"אזהרות בינלאומיות"});
 const ESCALATION_SOURCE_URLS = Object.freeze({
   news:"/", intlnews:"https://feeds.bbci.co.uk/news/topics/cjnwl8q4ggwt/rss.xml", official:"https://www.oref.org.il/", aviation:"https://www.adsb.lol/", military:"https://www.adsb.lol/",
@@ -2749,7 +2750,7 @@ function scoreKoteretNews(cacheData){
   const now=Date.now(),windowMs=12*3600000,contextMs=48*3600000,twoHours=2*3600000;
   const allRows=(cacheData?.rows||[]).filter(r=>{const t=Date.parse(r?.publishedAt||0);return Number.isFinite(t)&&now-t>=-600000&&now-t<=contextMs;});
   const rows=allRows.filter(r=>now-Date.parse(r?.publishedAt||0)<=windowMs);
-  // V191: immediate news momentum is measured over 12h, while a separate 48h
+  // V192: immediate news momentum is measured over 12h, while a separate 48h
   // conflict-context memory prevents a sustained verified crisis from becoming
   // "normal" merely because the most recent few hours were quieter.
   const relevant=rows.filter(r=>ESCALATION_CORE_RX.test(`${r?.title||""} ${r?.summary||r?.description||""}`));
@@ -2920,7 +2921,7 @@ function oilScoreFromContext({move24=0,move7=0,premium20=0,latest=null,source="Y
   let s24=8;if(up24>=1)s24=16;if(up24>=2)s24=28;if(up24>=4)s24=48;if(up24>=7)s24=68;if(up24>=10)s24=84;
   let s7=8;if(up7>=3)s7=20;if(up7>=6)s7=34;if(up7>=10)s7=52;if(up7>=15)s7=68;if(up7>=22)s7=82;
   let s20=8;if(premium>=4)s20=16;if(premium>=8)s20=27;if(premium>=12)s20=40;if(premium>=18)s20=56;if(premium>=25)s20=72;
-  // V191: absolute Brent stress is deliberately only a partial floor. Oil can be
+  // V192: absolute Brent stress is deliberately only a partial floor. Oil can be
   // expensive for non-war reasons, so it cannot create a high index by itself;
   // it merely prevents a long-lived $90-$120 regime from normalising back to 8.
   let absolute=8;if(Number.isFinite(price)){if(price>=75)absolute=16;if(price>=80)absolute=24;if(price>=85)absolute=34;if(price>=90)absolute=46;if(price>=100)absolute=60;if(price>=115)absolute=74;if(price>=130)absolute=86;}
@@ -3096,14 +3097,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"191.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"191.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"191.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"191.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"192.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3112,7 +3113,7 @@ async function escUpdateSeriesBaseline(storage,signal,{storageKey,rawField,mode}
   samples=samples.filter(x=>Number.isFinite(Number(x?.count))&&Number.isFinite(Date.parse(x?.at))&&now-Date.parse(x.at)<180*86400000);
   if(signal?.available===false||!Number.isFinite(Number(signal?.[rawField])))return;
   const current=Number(signal[rawField]),last=samples[samples.length-1];
-  // V191: one hourly sample is enough for time-of-day baselines and lets us keep
+  // V192: one hourly sample is enough for time-of-day baselines and lets us keep
   // roughly six months of history without growing the Durable Object value.
   if(!last||now-Date.parse(last.at)>55*60000){samples.push({at:new Date().toISOString(),count:current});samples=samples.slice(-4600);await storage.put(storageKey,samples);}
   const hour=new Date().getUTCHours();let comparable=samples.filter(x=>now-Date.parse(x.at)>36*3600000&&Math.min((new Date(x.at).getUTCHours()-hour+24)%24,(hour-new Date(x.at).getUTCHours()+24)%24)<=1).map(x=>Number(x.count));
@@ -3151,34 +3152,68 @@ function escSmoothSignalScore(signal,prevSignal,previousSnapshot,now){
   if(signal.key==="official"&&Number(signal?.stats?.activeAlerts||0)>0)return {...signal,rawSignalScore:raw,score:raw};
   const prev=escClamp(prevSignal.score),dt=Math.max(15,Math.min(15*60,(now-Date.parse(previousSnapshot?.updatedAt||now))/1000));const [upHalf,downHalf]=escSignalSmoothingProfile(signal.key),half=raw>prev?upHalf:downHalf,alpha=1-Math.exp(-Math.LN2*dt/half);const score=prev+alpha*(raw-prev);return {...signal,rawSignalScore:raw,score:Number(escClamp(score).toFixed(1))};
 }
-function escWeightedDomainScore(signals,keys){const rows=signals.filter(s=>keys.includes(s.key)&&s.available!==false&&!s.stale);const w=rows.reduce((a,s)=>a+Number(s.weight||0)*escSignalQualityFactor(s),0);return w?rows.reduce((a,s)=>a+Number(s.score||0)*Number(s.weight||0)*escSignalQualityFactor(s),0)/w:0;}
+function escWeightedDomainScore(signals,keys,field="score"){
+  const rows=signals.filter(s=>keys.includes(s.key)&&s.available!==false&&!s.stale);if(!rows.length)return 0;
+  const weighted=rows.map(s=>{const q=escSignalQualityFactor(s),w=Number(s.weight||0)*q,v=escClamp(field==="raw"?(s.rawSignalScore??s.score):s.score);return {w,v};}).filter(x=>x.w>0);
+  const total=weighted.reduce((a,x)=>a+x.w,0);if(!total)return 0;
+  const mean=weighted.reduce((a,x)=>a+x.v*x.w,0)/total;
+  const rms=Math.sqrt(weighted.reduce((a,x)=>a+x.v*x.v*x.w,0)/total);
+  // V192: a domain is a blend of average stress and RMS stress. RMS lets a
+  // genuinely severe sub-signal register without allowing a single source to
+  // become the whole domain.
+  return escClamp(mean*.72+rms*.28);
+}
+function escDomainNowcast(signals,groups,field="score"){
+  const scores={},available={};
+  for(const [name,keys] of Object.entries(groups)){
+    const rows=signals.filter(s=>keys.includes(s.key)&&s.available!==false&&!s.stale);
+    available[name]=rows.length>0;scores[name]=Number(escWeightedDomainScore(signals,keys,field).toFixed(1));
+  }
+  const rows=Object.entries(ESCALATION_DOMAIN_WEIGHTS).filter(([k])=>available[k]).map(([k,w])=>({key:k,w:Number(w),v:escClamp(scores[k])}));
+  const total=rows.reduce((a,x)=>a+x.w,0);if(!total)return {score:0,mean:0,rms:0,top3:0,multiplier:1,corroborating:0,strong:0,scores,available};
+  const mean=rows.reduce((a,x)=>a+x.v*x.w,0)/total;
+  const rms=Math.sqrt(rows.reduce((a,x)=>a+x.v*x.v*x.w,0)/total);
+  const sorted=[...rows].sort((a,b)=>b.v-a.v),top=sorted.slice(0,Math.min(3,sorted.length));
+  const top3=top.length?top.reduce((a,x)=>a+x.v,0)/top.length:mean;
+  const corroborating=rows.filter(x=>x.v>=60).length,strong=rows.filter(x=>x.v>=75).length;
+  const hardElevated=rows.some(x=>["official","air","posture","maritime","nuclear"].includes(x.key)&&x.v>=60);
+  // Convergence bonus is deliberately mild. It rewards independent confirmation,
+  // not repeated headlines. Without a hard domain it is essentially disabled.
+  let multiplier=1+Math.max(0,corroborating-1)*.025+strong*.0125;multiplier=Math.min(1.16,multiplier);if(!hardElevated)multiplier=Math.min(multiplier,1.02);
+  const blended=(mean*.58+rms*.27+top3*.15)*multiplier;
+  return {score:Number(escClamp(blended).toFixed(1)),mean:Number(mean.toFixed(1)),rms:Number(rms.toFixed(1)),top3:Number(top3.toFixed(1)),multiplier:Number(multiplier.toFixed(3)),corroborating,strong,scores,available};
+}
 function escStrategicFlags(signals){
   const byKey=new Map((signals||[]).map(s=>[s.key,s]));const maritime=byKey.get("maritime")?.stats||{},us=byKey.get("us")?.stats||{};
   return {
     maritime:!!(maritime.severeLevel||maritime.reducedTraffic||maritime.blockade||maritime.maradAlert||maritime.maradAdvisory),
     posture:Number(us.persistentWarnings||0)>0||Number(us.severeMentions||0)>0,
     official:Number(byKey.get("official")?.score||0)>=55,
-    air:Number(byKey.get("airrisk")?.score||0)>=55||Number(byKey.get("notam")?.score||0)>=55,
+    air:Number(byKey.get("airrisk")?.score||0)>=55||Number(byKey.get("notam")?.score||0)>=55||Number(byKey.get("aviation")?.score||0)>=60,
     nuclear:Number(byKey.get("nuclear")?.score||0)>=55,
     verifiedNews:Number(byKey.get("news")?.stats?.contextTrustedHardSources||0)>=3||Number(byKey.get("intlnews")?.stats?.hardSources||0)>=2
   };
 }
-async function escUpdateStrategicRegime(storage,{domainScores,signals,previous,now}){
-  const coreKeys=["news","official","air","posture","maritime","nuclear"],values=coreKeys.map(k=>escClamp(domainScores?.[k]||0)).sort((a,b)=>b-a),market=escClamp(domainScores?.market||0);
-  const supporting=values.filter(v=>v>=50).length,strong=values.filter(v=>v>=65).length;
-  let instant=(values[0]||0)*.30+(values[1]||0)*.27+(values[2]||0)*.20+(values[3]||0)*.13+market*.10;
-  if(supporting<2)instant=Math.min(instant,38);else if(supporting===2)instant=Math.min(instant,52);
+async function escUpdateStrategicRegime(storage,{contextNowcast,domainScores,signals,previous,now}){
   const flags=escStrategicFlags(signals),flagCount=Object.values(flags).filter(Boolean).length;
-  if(supporting>=3&&strong>=2)instant=Math.max(instant,58);if(flagCount>=3)instant=Math.max(instant,64);if(flagCount>=4)instant=Math.max(instant,72);if(flagCount>=5)instant=Math.max(instant,80);
-  instant=escClamp(instant);
-  const key="escalation.strategicRegime.v189";const prevState=await storage.get(key);let score=instant;
-  if(prevState&&previous?.modelVersion===ESCALATION_MODEL_VERSION&&Number.isFinite(Number(prevState.score))){const prevScore=escClamp(prevState.score),dt=Math.max(30,Math.min(3600,(now-Date.parse(prevState.updatedAt||now))/1000)),half=instant>prevScore?90*60:60*3600,alpha=1-Math.exp(-Math.LN2*dt/half);score=prevScore+alpha*(instant-prevScore);}
-  score=Number(escClamp(score).toFixed(1));
-  let floor=0;if(score>=45)floor=30+(score-45)*.55;if(flagCount>=3)floor=Math.max(floor,44);if(flagCount>=4)floor=Math.max(floor,52);if(flagCount>=5)floor=Math.max(floor,58);
-  // A remembered regime may slow an artificial collapse, but without any current
-  // hard confirmation it is not allowed to hold the public index above "elevated".
-  if(supporting<2&&flagCount<2)floor=Math.min(floor,38);
-  floor=Number(escClamp(floor,0,68).toFixed(1));const out={score,instant:Number(instant.toFixed(1)),floor,supportingDomains:supporting,strongDomains:strong,flagCount,flags,updatedAt:new Date().toISOString()};await storage.put(key,out);return out;
+  const values=["news","official","air","posture","maritime","nuclear"].map(k=>escClamp(domainScores?.[k]||0));
+  const supporting=values.filter(v=>v>=50).length,strong=values.filter(v=>v>=65).length;
+  // The regime score comes from current evidence. There is no fixed "war floor".
+  // Memory only slows normalization while the present sensor set still confirms
+  // structural stress.
+  const top4=[...values].sort((a,b)=>b-a).slice(0,4),top4Mean=top4.length?top4.reduce((a,v)=>a+v,0)/top4.length:0;
+  const instant=escClamp(contextNowcast*.78+top4Mean*.22);
+  const key="escalation.strategicRegime.v192";const prevState=await storage.get(key);let memory=instant;
+  if(prevState&&previous?.modelVersion===ESCALATION_MODEL_VERSION&&Number.isFinite(Number(prevState.score))){
+    const prevScore=escClamp(prevState.score),dt=Math.max(30,Math.min(3600,(now-Date.parse(prevState.updatedAt||now))/1000));
+    const downHalf=flagCount>=4?24*3600:flagCount===3?16*3600:flagCount===2?8*3600:3*3600,half=instant>prevScore?20*60:downHalf,alpha=1-Math.exp(-Math.LN2*dt/half);memory=prevScore+alpha*(instant-prevScore);
+  }
+  memory=Number(escClamp(memory).toFixed(1));
+  const persistence=flagCount>=5?.90:flagCount===4?.84:flagCount===3?.76:flagCount===2?.62:flagCount===1?.42:.20;
+  let floor=memory*persistence;
+  if(supporting<2)floor=Math.min(floor,36);if(flagCount===0)floor=Math.min(floor,24);
+  floor=Number(escClamp(floor,0,78).toFixed(1));
+  const out={score:memory,instant:Number(instant.toFixed(1)),floor,supportingDomains:supporting,strongDomains:strong,flagCount,flags,persistence:Number(persistence.toFixed(2)),updatedAt:new Date().toISOString()};await storage.put(key,out);return out;
 }
 async function buildEscalationSnapshot(storage,payload){
   const now=Date.now(),previous=await storage.get("escalation.latest"),history=escPublicHistory(await storage.get("escalation.history"));let signals=Object.values(payload?.signals||{}).filter(Boolean).map(s=>({...s,weight:ESCALATION_WEIGHTS[s.key]||Number(s.weight)||0,label:ESCALATION_LABELS[s.key]||s.label}));
@@ -3189,35 +3224,46 @@ async function buildEscalationSnapshot(storage,payload){
   const available=signals.filter(s=>s.available!==false);
   const staleFactor=s=>{if(!s.stale)return 1;const age=Number(s.staleAgeMinutes??((now-Date.parse(s.checkedAt||0))/60000));if(!Number.isFinite(age))return 0;if(age<=15)return .65;if(age<=30)return .35;if(age<=60)return .15;return 0;};
   const effectiveWeight=s=>Number(s.weight||0)*staleFactor(s)*escSignalQualityFactor(s),availableWeight=available.reduce((a,s)=>a+effectiveWeight(s),0);
-  let raw=availableWeight?available.reduce((a,s)=>a+escClamp(s.score)*effectiveWeight(s),0)/availableWeight:0;
+  const signalInstantBase=availableWeight?available.reduce((a,s)=>a+escClamp(s.rawSignalScore??s.score)*effectiveWeight(s),0)/availableWeight:0;
+  const signalContextBase=availableWeight?available.reduce((a,s)=>a+escClamp(s.score)*effectiveWeight(s),0)/availableWeight:0;
   const live=available.filter(s=>!s.stale),elevated=live.filter(s=>Number(s.score)>=65).length;
-  // V191: independent-domain convergence + strategic-regime calibration. Correlated sources are grouped so a
-  // media echo cannot count as multiple confirmations, while genuinely different
-  // evidence families (official, aviation, maritime, posture, markets...) can.
+  // V192 REALITY NOWCAST: raw/current evidence and persistent context are kept
+  // separate. Independent domains are aggregated before they are fused, so one
+  // noisy family cannot dominate and unavailable sources do not count as calm.
   const groups={news:["news","intlnews"],official:["official"],air:["aviation","notam","airrisk"],posture:["us","diplomatic"],maritime:["maritime"],market:["oil","market"],nuclear:["nuclear"],military:["military"]};
-  const domainScores=Object.fromEntries(Object.entries(groups).map(([g,keys])=>[g,Number(escWeightedDomainScore(live,keys).toFixed(1))]));
-  const corroboratingDomains=Object.values(domainScores).filter(v=>v>=60).length,strongDomains=Object.values(domainScores).filter(v=>v>=75).length;
-  const hardDomainElevated=["official","air","posture","maritime","nuclear"].some(k=>Number(domainScores[k]||0)>=60);
-  let multiplier=corroboratingDomains>=5?1.24:corroboratingDomains===4?1.18:corroboratingDomains===3?1.12:corroboratingDomains===2?1.06:1;
-  // News + market enthusiasm alone must never create a large escalation premium.
-  if(!hardDomainElevated)multiplier=Math.min(multiplier,1.03);
-  raw=escClamp(raw*multiplier);
-  // V191 strategic-regime memory: this does not add points for a war label. It
-  // only prevents independently verified, persistent structural stress from
-  // disappearing because short-window baselines adapted to the crisis.
-  const strategicRegime=await escUpdateStrategicRegime(storage,{domainScores,signals:live,previous,now});
+  const instantDomains=escDomainNowcast(live,groups,"raw"),contextDomains=escDomainNowcast(live,groups,"score");
+  const domainInstantScores=instantDomains.scores,domainScores=contextDomains.scores;
+  const corroboratingDomains=instantDomains.corroborating,strongDomains=instantDomains.strong,multiplier=instantDomains.multiplier;
+  const immediateScore=escClamp(signalInstantBase*.42+instantDomains.score*.58);
+  const contextualScore=escClamp(signalContextBase*.35+contextDomains.score*.65);
+  let raw=escClamp(immediateScore*.72+contextualScore*.28);
+  const strategicRegime=await escUpdateStrategicRegime(storage,{contextNowcast:contextualScore,domainScores,signals:live,previous,now});
   const preRegimeRaw=raw;raw=escClamp(Math.max(raw,strategicRegime.floor));
-  // Do not report extreme certainty when a large part of the sensor set is down.
-  if(availableWeight<30)raw=Math.min(raw,45);else if(availableWeight<45)raw=Math.min(raw,60);else if(availableWeight<60)raw=Math.min(raw,75);
+  // Low sensor coverage limits confidence, not by pretending missing sensors are zero.
+  if(availableWeight<30)raw=Math.min(raw,45);else if(availableWeight<45)raw=Math.min(raw,60);else if(availableWeight<60)raw=Math.min(raw,78);
   let score=raw,calibrationReset=false;
-  if(previous&&Number.isFinite(Number(previous.score))){const prev=Number(previous.score);if(previous.modelVersion!==ESCALATION_MODEL_VERSION){score=raw;calibrationReset=true;}else{const dt=Math.max(5,Math.min(3600,(now-Date.parse(previous.updatedAt||now))/1000));const riseHalf=corroboratingDomains>=4?15*60:corroboratingDomains===3?25*60:corroboratingDomains===2?40*60:60*60,half=raw>prev?riseHalf:10*3600,alpha=1-Math.exp(-Math.LN2*dt/half);score=prev+alpha*(raw-prev);if(raw>=88&&strongDomains>=3)score=Math.max(score,prev+6);}}
+  if(previous&&Number.isFinite(Number(previous.score))){
+    const prev=Number(previous.score);
+    if(previous.modelVersion!==ESCALATION_MODEL_VERSION){score=raw;calibrationReset=true;}
+    else{
+      // Confidence-adaptive minute nowcast: strong independent confirmation reaches
+      // the public dial quickly; quiet/noisy changes are damped. Downward movement
+      // is slower only while structural evidence is still present.
+      const gap=raw-prev,alphaUp=corroboratingDomains>=4?.72:corroboratingDomains===3?.58:corroboratingDomains===2?.42:.28;
+      const alphaDown=strategicRegime.flagCount>=4?.08:strategicRegime.flagCount===3?.12:strategicRegime.flagCount===2?.18:.30;
+      const alpha=gap>=0?alphaUp:alphaDown;score=prev+gap*alpha;
+      if(Math.abs(gap)<1.2)score=raw;
+      const officialRaw=Number(signals.find(s=>s.key==="official")?.rawSignalScore||0);
+      if(officialRaw>=85&&corroboratingDomains>=2)score=Math.max(score,prev+Math.max(4,gap*.75));
+    }
+  }
   score=Number(escClamp(score).toFixed(1));const level=escLevel(score);let newHistory=history;const last=history[history.length-1];if(!last||now-Date.parse(last.at)>=5*60000)newHistory=[...history,{at:new Date().toISOString(),score:Number(score.toFixed(1)),raw:Number(raw.toFixed(1)),modelVersion:ESCALATION_MODEL_VERSION}].filter(x=>now-Date.parse(x.at)<73*3600000).slice(-900);else{newHistory=[...history.slice(0,-1),{...last,score:Number(score.toFixed(1)),raw:Number(raw.toFixed(1)),at:new Date().toISOString(),modelVersion:ESCALATION_MODEL_VERSION}];}
   const score6=escClosestScore(newHistory,now-6*3600000),delta6h=Number((score-(Number.isFinite(score6)?score6:(previous?.score??score))).toFixed(1)),coverage=Math.round(availableWeight),confidenceLabel=coverage>=88?"גבוה":coverage>=68?"בינוני":"נמוך";
   const ranked=available.map(s=>({s,delta:Number(s.score)-Number(prevByKey.get(s.key)?.score??s.score),impact:Number(s.score)*Number(s.weight)/100})).sort((a,b)=>Math.abs(b.delta)*.8+b.impact*.2-(Math.abs(a.delta)*.8+a.impact*.2));const changes=ranked.slice(0,5).map(({s,delta})=>`${s.label}: ${delta>3?`עלה בכ־${Math.round(delta)} נק׳ — `:delta<-3?`ירד בכ־${Math.round(Math.abs(delta))} נק׳ — `:""}${s.reason}`);
-  if(strategicRegime.floor>preRegimeRaw+1)changes.unshift(`מצב בסיס אסטרטגי: כמה משפחות מידע בלתי־תלויות מצביעות על משבר מתמשך; רצפת הכיול היא ${Math.round(strategicRegime.floor)} כדי למנוע נרמול שגוי של מצב חריג.`);
-  if(calibrationReset)changes.unshift("כיול V189: המדד אותחל למודל מצב־בסיס אסטרטגי, baseline תעופה ארוך יותר והקשר מתמשך לחדשות ולנפט — ללא תוספת נקודות ידנית.");
+  if(strategicRegime.floor>preRegimeRaw+1)changes.unshift(`מצב בסיס אסטרטגי: כמה משפחות מידע בלתי־תלויות עדיין מאשרות לחץ מבני מתמשך; רכיב הזיכרון הנתוני מונע נרמול מהיר מדי של מצב חריג.`);
+  if(calibrationReset)changes.unshift("כיול V192: המדד אותחל למודל Reality Nowcast שמפריד בין תמונת מצב מיידית להקשר מתמשך ומצליב תחומים בלתי־תלויים — ללא תוספת נקודות ידנית.");
   const sourceHealth={live:live.length,stale:available.filter(s=>s.stale).length,unavailable:signals.filter(s=>s.available===false).length,coverage};
-  const latest={modelVersion:ESCALATION_MODEL_VERSION,score,rawScore:Number(raw.toFixed(1)),preRegimeRaw:Number(preRegimeRaw.toFixed(1)),level:level.label,levelKey:level.key,updatedAt:new Date().toISOString(),delta6h,coverage,confidenceLabel,availableSignals:available.length,totalSignals:Object.keys(ESCALATION_WEIGHTS).length,elevatedSignals:elevated,corroboratingDomains,strongDomains,multiplier,domainScores,strategicRegime,sourceHealth,calibrationReset,signals,changes:changes.slice(0,6),experimental:payload?.experimental||{},disclaimer:"מדד 0–100 של עוצמת המתיחות; אינו הסתברות למלחמה ואינו תחזית מודיעינית."};
+  const latest={modelVersion:ESCALATION_MODEL_VERSION,score,rawScore:Number(raw.toFixed(1)),preRegimeRaw:Number(preRegimeRaw.toFixed(1)),level:level.label,levelKey:level.key,updatedAt:new Date().toISOString(),delta6h,coverage,confidenceLabel,availableSignals:available.length,totalSignals:Object.keys(ESCALATION_WEIGHTS).length,elevatedSignals:elevated,corroboratingDomains,strongDomains,multiplier,domainScores,domainInstantScores,strategicRegime,nowcast:{signalInstantBase:Number(signalInstantBase.toFixed(1)),signalContextBase:Number(signalContextBase.toFixed(1)),instantDomains:instantDomains.score,contextDomains:contextDomains.score,immediateScore:Number(immediateScore.toFixed(1)),contextualScore:Number(contextualScore.toFixed(1))},sourceHealth,calibrationReset,signals,changes:changes.slice(0,6),experimental:payload?.experimental||{},disclaimer:"מדד 0–100 של עוצמת המתיחות בזמן אמת; אינו הסתברות למלחמה ואינו תחזית מודיעינית."};
   let _pushCandidate=null;
   if(previous&&previous.modelVersion===ESCALATION_MODEL_VERSION&&Number.isFinite(Number(previous.score))){const prevScore=Number(previous.score),score1h=escClosestScore(newHistory,now-60*60000),delta1h=Number((score-(Number.isFinite(score1h)?score1h:prevScore)).toFixed(1));const threshold=[85,70,50].find(t=>prevScore<t&&score>=t)||0;const rapid=delta1h>=10&&score>=40&&corroboratingDomains>=2;if(threshold||rapid){_pushCandidate={fingerprint:`escalation:${threshold||"rapid"}:${Math.round(score)}:${Math.floor(now/(15*60000))}`,kind:"escalation",title:`📡 דופק ההסלמה עלה ל-${Math.round(score)}/100`,body:threshold?`${level.label} · המדד חצה את רף ${threshold}. כמה אינדיקציות ציבוריות מתחזקות במקביל.`:`${level.label} · עלייה של ${Math.round(delta1h)} נק׳ בשעה האחרונה.`,url:"/escalation",score,threshold:threshold||null,delta1h,at:new Date().toISOString()};}}
   await storage.put("escalation.latest",latest);await storage.put("escalation.history",newHistory);if(payload?.external){await storage.put("escalation.external",payload.external);await storage.put("escalation.external.updatedAt",payload?.externalUpdatedAt||payload.external?.updatedAt||new Date().toISOString());}await storage.delete("escalation.lock");return {ok:true,latest,history:newHistory,experimental:latest.experimental,_pushCandidate,methodology:{modelVersion:ESCALATION_MODEL_VERSION,weights:ESCALATION_WEIGHTS,refreshSeconds:60,externalRefreshMinutes:15,scoreMeaning:"intensity-not-probability",signalFamilies:Object.keys(ESCALATION_WEIGHTS).length,sourcesConfigured:SOURCES.length+2,corroborationThreshold:60}};
@@ -3852,7 +3898,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"191.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"192.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4059,7 +4105,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"191.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"192.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4092,7 +4138,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"191.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"192.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
