@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "174.0.0";
+const KOTERET_CLIENT_BUILD = "175.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -272,6 +272,8 @@ const el = {
   contactSubmit: document.querySelector("#contactSubmit"),
   contactStatus: document.querySelector("#contactStatus"),
   backToTop: document.querySelector("#backToTop"),
+  supportBtn: document.querySelector("#supportFloatBtn"),
+  supportModal: document.querySelector("#supportModal"),
   alertCenter: document.querySelector("#alertCenter"),
   alertCenterCard: document.querySelector("#alertCenterCard"),
   alertStateLabel: document.querySelector("#alertStateLabel"),
@@ -467,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V174 · API ${apiVersion}` : "גרסה V174 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V175 · API ${apiVersion}` : "גרסה V175 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V174 · API לא מחובר";
+    marker.textContent = "גרסה V175 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -592,6 +594,7 @@ function bindEvents() {
   });
   el.installAppBtn?.addEventListener("click", () => maybeShowInstallOffer("manual"));
   el.backToTop?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  el.supportBtn?.addEventListener("click", () => openSiteModal(el.supportModal, el.supportBtn));
   el.alertSettingsBtn?.addEventListener("click", () => openSiteModal(el.alertSettingsModal, el.alertSettingsBtn));
   el.homepageBtn?.addEventListener("click", openHomepageGuide);
   el.googleSearchForm?.addEventListener("submit", (event) => {
@@ -1098,7 +1101,7 @@ let modalReturnFocus = null;
 let alertSettingsScrollLockY = null;
 
 function lockAlertSettingsPageScroll(modal) {
-  if (modal !== el.alertSettingsModal || alertSettingsScrollLockY !== null) return;
+  if (![el.alertSettingsModal, el.supportModal].includes(modal) || alertSettingsScrollLockY !== null) return;
   const y = Math.max(0, window.scrollY || window.pageYOffset || 0);
   alertSettingsScrollLockY = y;
   document.documentElement.classList.add("alert-modal-page-lock");
@@ -1111,7 +1114,7 @@ function lockAlertSettingsPageScroll(modal) {
 }
 
 function unlockAlertSettingsPageScroll(modal) {
-  if (modal !== el.alertSettingsModal || alertSettingsScrollLockY === null) return;
+  if (![el.alertSettingsModal, el.supportModal].includes(modal) || alertSettingsScrollLockY === null) return;
   const y = alertSettingsScrollLockY;
   alertSettingsScrollLockY = null;
   document.documentElement.classList.remove("alert-modal-page-lock");
@@ -3129,7 +3132,7 @@ function renderFeed() {
     return;
   }
 
-  // V174: the sponsored rectangle lives directly after "האחרונים החשובים"
+  // V175: the sponsored rectangle lives directly after "האחרונים החשובים"
   // instead of consuming the first position inside "כל העדכונים".
   captureVisibleFeedImages();
   el.feed.innerHTML = items.map(newsCardHtml).join("");
@@ -4157,7 +4160,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=174.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=175.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4227,7 +4230,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=174.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=175.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
