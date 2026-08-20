@@ -9559,7 +9559,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V195 — visible lead-story loading state
+   V196 — visible lead-story loading state
    ========================================================= */
 .lead-story-loading{display:none;position:relative;z-index:2;min-height:150px;width:100%;box-sizing:border-box;align-items:center;justify-content:center;flex-direction:column;gap:13px;text-align:center;padding:20px 22px;color:var(--text)}
 .lead-story.is-initializing .lead-story-loading{display:flex!important}
