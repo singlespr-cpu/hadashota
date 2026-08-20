@@ -265,3 +265,33 @@ html[data-theme="dark"] .about-process strong,html[data-theme="dark"] .about-fea
   .info-final-cta h2{font-size:24px}
   .info-final-cta p{font-size:12.5px}
 }
+
+
+/* V183 — clear Google landing-page handoff to the live news site */
+.info-landing-notice{
+  width:min(1040px,calc(100% - 32px));margin:14px auto 0;
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:15px 18px;border:1px solid #ffd4d9;border-radius:16px;
+  background:linear-gradient(135deg,#fff7f8 0%,#fff 58%,#fff5f6 100%);
+  box-shadow:0 10px 28px rgba(217,43,59,.07);color:#344054;
+}
+.info-landing-notice>div{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.info-landing-notice strong{font-size:14px;color:#101828}
+.info-landing-notice span{font-size:12.5px;color:#667085}
+.info-landing-notice-btn{
+  flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:44px;padding:10px 17px;border-radius:12px;text-decoration:none!important;
+  color:#fff!important;font-weight:900;font-size:13px;
+  background:linear-gradient(135deg,#f04452,#d92b3b);
+  border:1px solid transparent;box-shadow:0 9px 22px rgba(217,43,59,.22);
+  transition:transform .18s ease,box-shadow .18s ease;
+}
+.info-landing-notice-btn:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(217,43,59,.29)}
+.info-landing-notice-btn span{color:#fff;font-size:17px;line-height:1}
+@media(max-width:640px){
+  .info-landing-notice{align-items:stretch;flex-direction:column;gap:10px;padding:13px 14px;margin-top:10px}
+  .info-landing-notice>div{display:block}
+  .info-landing-notice strong{display:block;font-size:13px;margin-bottom:3px}
+  .info-landing-notice span{font-size:11.5px}
+  .info-landing-notice-btn{width:100%;min-height:45px;font-size:13px}
+}
