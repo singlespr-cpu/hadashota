@@ -4597,7 +4597,7 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
   .feed-promo-copy h3 { font-size:15px; }
 }
 
-/* V177 — premium ad placement: immediately after "האחרונים החשובים" */
+/* V178 — premium ad placement: immediately after "האחרונים החשובים" */
 .spotlight-promo-slot {
   margin: 12px 0 18px;
   width: 100%;
@@ -9252,7 +9252,7 @@ html[data-theme="dark"] #alertSettingsModal .alert-settings-intro{
 
 
 /* =========================================================
-   V177 — optional site support: floating heart + Bit/PayBox
+   V178 — optional site support: floating heart + Bit/PayBox
    ========================================================= */
 @keyframes kpSupportHeartBeat{
   0%,100%{transform:scale(1)}
@@ -9353,7 +9353,7 @@ html[data-theme="dark"] .support-card>p{color:#aeb8c5!important}
 
 
 /* =========================================================
-   V177 — floating controls sizing/stability + mobile About
+   V178 — floating controls sizing/stability + mobile About
    ========================================================= */
 /* Desktop: support is deliberately ~20% larger and the red outline is stronger. */
 .support-float{
@@ -9418,7 +9418,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V177 — mobile house-ad contrast + desktop OREF/escalation position swap
+   V178 — mobile house-ad contrast + desktop OREF/escalation position swap
    House ad is slightly stronger on mobile, without using the saturated red
    of the upper promo tile. Desktop dimensions are preserved while the two
    existing panels exchange positions.
@@ -9432,5 +9432,17 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
   html[data-theme="dark"] .spotlight-promo-slot .feed-promo-house{
     background:linear-gradient(135deg,#321b22 0%,#211923 50%,#172233 100%)!important;
     border-color:rgba(255,91,107,.30)!important;
+  }
+}
+
+
+/* =========================================================
+   V178 — desktop-only floating control positions
+   Main site: back-to-top on the left. Mobile remains unchanged.
+   ========================================================= */
+@media (min-width:701px){
+  .kp-floating-controls .back-to-top{
+    left:max(16px,env(safe-area-inset-left)) !important;
+    right:auto !important;
   }
 }

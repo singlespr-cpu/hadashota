@@ -300,7 +300,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V177 — support replaces the escalation back-to-top button
+   V178 — support replaces the escalation back-to-top button
    ========================================================= */
 @keyframes escSupportBeat{
   0%,100%{transform:scale(1)}
@@ -370,7 +370,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V177 — larger support + viewport-fixed mobile action layer
+   V178 — larger support + viewport-fixed mobile action layer
    ========================================================= */
 /* Desktop: ~20% larger support control with a clearer red rim. */
 .esc-support-float{
@@ -407,4 +407,24 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 @media(max-width:350px){
   .esc-floating-controls .esc-support-float{width:53px !important;min-width:53px !important;padding:6px !important;justify-content:center !important}
   .esc-floating-controls .esc-support-float span:last-child{display:none !important}
+}
+
+
+/* =========================================================
+   V178 — desktop-only escalation floating controls
+   Desktop: support on right, back-to-top on left.
+   Mobile keeps V178/V176 support + full-site bridge only.
+   ========================================================= */
+@media (min-width:701px){
+  .esc-support-float{
+    right:max(18px,env(safe-area-inset-right)) !important;
+    left:auto !important;
+  }
+  .esc-to-top{
+    left:max(18px,env(safe-area-inset-left)) !important;
+    right:auto !important;
+  }
+}
+@media (max-width:700px){
+  .esc-floating-controls .esc-to-top{display:none !important;}
 }
