@@ -300,7 +300,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V185 — support replaces the escalation back-to-top button
+   V186 — support replaces the escalation back-to-top button
    ========================================================= */
 @keyframes escSupportBeat{
   0%,100%{transform:scale(1)}
@@ -370,7 +370,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V185 — larger support + viewport-fixed mobile action layer
+   V186 — larger support + viewport-fixed mobile action layer
    ========================================================= */
 /* Desktop: ~20% larger support control with a clearer red rim. */
 .esc-support-float{
@@ -411,9 +411,9 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V185 — desktop-only escalation floating controls
+   V186 — desktop-only escalation floating controls
    Desktop: support on right, back-to-top on left.
-   Mobile keeps V185/V176 support + full-site bridge only.
+   Mobile keeps V186/V176 support + full-site bridge only.
    ========================================================= */
 @media (min-width:701px){
   .esc-support-float{
@@ -430,7 +430,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 }
 
 
-/* V185 — mobile Push offer centered with a light background dim */
+/* V186 — mobile Push offer centered with a light background dim */
 .esc-push-backdrop{display:none}
 @media(max-width:700px){
   .esc-push-backdrop:not([hidden]){
@@ -451,7 +451,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 
 
 /* =========================================================
-   V185 — desktop-only escalation floating actions cluster
+   V186 — desktop-only escalation floating actions cluster
    Back-to-top sits above-left of the support banner.
    Mobile is intentionally unchanged.
    ========================================================= */
@@ -492,7 +492,7 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
 }
 
 /* =========================================================
-   V185 — desktop contact dialog: compact, balanced, no needless inner scroll
+   V186 — desktop contact dialog: compact, balanced, no needless inner scroll
    Mobile remains unchanged.
    ========================================================= */
 @media (min-width: 701px) {

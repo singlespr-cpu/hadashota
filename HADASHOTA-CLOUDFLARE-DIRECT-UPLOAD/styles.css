@@ -4597,7 +4597,7 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
   .feed-promo-copy h3 { font-size:15px; }
 }
 
-/* V185 — premium ad placement: immediately after "האחרונים החשובים" */
+/* V186 — premium ad placement: immediately after "האחרונים החשובים" */
 .spotlight-promo-slot {
   margin: 12px 0 18px;
   width: 100%;
@@ -9252,7 +9252,7 @@ html[data-theme="dark"] #alertSettingsModal .alert-settings-intro{
 
 
 /* =========================================================
-   V185 — optional site support: floating heart + Bit/PayBox
+   V186 — optional site support: floating heart + Bit/PayBox
    ========================================================= */
 @keyframes kpSupportHeartBeat{
   0%,100%{transform:scale(1)}
@@ -9353,7 +9353,7 @@ html[data-theme="dark"] .support-card>p{color:#aeb8c5!important}
 
 
 /* =========================================================
-   V185 — floating controls sizing/stability + mobile About
+   V186 — floating controls sizing/stability + mobile About
    ========================================================= */
 /* Desktop: support is deliberately ~20% larger and the red outline is stronger. */
 .support-float{
@@ -9418,7 +9418,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V185 — mobile house-ad contrast + desktop OREF/escalation position swap
+   V186 — mobile house-ad contrast + desktop OREF/escalation position swap
    House ad is slightly stronger on mobile, without using the saturated red
    of the upper promo tile. Desktop dimensions are preserved while the two
    existing panels exchange positions.
@@ -9437,7 +9437,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V185 — desktop-only floating control positions
+   V186 — desktop-only floating control positions
    Main site: back-to-top on the left. Mobile remains unchanged.
    ========================================================= */
 @media (min-width:701px){
@@ -9449,7 +9449,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V185 — desktop-only floating actions cluster
+   V186 — desktop-only floating actions cluster
    Back-to-top sits above-left of the support banner.
    Mobile is intentionally unchanged.
    ========================================================= */
@@ -9487,7 +9487,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 }
 
 /* =========================================================
-   V185 — desktop contact dialog: compact, balanced, no needless inner scroll
+   V186 — desktop contact dialog: compact, balanced, no needless inner scroll
    Mobile remains unchanged.
    ========================================================= */
 @media (min-width: 701px) {

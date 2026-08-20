@@ -192,6 +192,12 @@ export default {
       return handleAdminContact(request, env);
     }
 
+    if (url.pathname === "/api/news-bundle") {
+      if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return handleNewsBundle(request, env, ctx);
+    }
+
     if (url.pathname === "/api/news") {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
@@ -255,7 +261,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "185.0.0",
+          version: "186.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -268,7 +274,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "185.0.0",
+        version: "186.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -590,6 +596,13 @@ function escapeXml(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[ch]));
 }
 
+function loggedWaitUntil(ctx, promise, label = "background task") {
+  if (!ctx?.waitUntil) return;
+  ctx.waitUntil(Promise.resolve(promise).catch((error) => {
+    console.warn(`${label} failed`, error);
+  }));
+}
+
 async function handleEmergencyAlerts(env, ctx) {
   const endpoint = "https://www.oref.org.il/WarningMessages/alert/alerts.json";
   const cache = caches.default;
@@ -629,8 +642,8 @@ async function handleEmergencyAlerts(env, ctx) {
     const sharedResponse = json(payload, 200, {
       "Cache-Control":"public, max-age=0, s-maxage=2"
     });
-    ctx?.waitUntil(cache.put(cacheKey, sharedResponse));
-    if(payload.alerts.length)ctx?.waitUntil(queueOrefAlerts(env,payload.alerts));
+    loggedWaitUntil(ctx, cache.put(cacheKey, sharedResponse), "OREF cache write");
+    if(payload.alerts.length)loggedWaitUntil(ctx, queueOrefAlerts(env,payload.alerts), "OREF push queue");
     return clientResponse;
   } catch (error) {
     return json({ ok:false, source:"פיקוד העורף", official:true, checkedAt:new Date().toISOString(), alerts:[], error:String(error?.message || error) }, 502, { "Cache-Control":"no-store" });
@@ -1130,7 +1143,7 @@ async function handleSourceArticleImage(url, ctx) {
 
   const ttl = payload.image ? ARTICLE_IMAGE_CACHE_TTL_SECONDS : ARTICLE_IMAGE_NEGATIVE_TTL_SECONDS;
   const response = json(payload, 200, { "Cache-Control": `public, max-age=0, s-maxage=${ttl}` });
-  ctx?.waitUntil(cache.put(cacheKey, response.clone()));
+  loggedWaitUntil(ctx, cache.put(cacheKey, response.clone()), "media cache write");
   return cors(response);
 }
 
@@ -1164,7 +1177,7 @@ async function handleOpenMedia(url, ctx) {
   } : { image: null };
   const ttl = chosen ? 1800 : 300;
   const response = json(payload, 200, { "Cache-Control": `public, max-age=0, s-maxage=${ttl}` });
-  ctx?.waitUntil(cache.put(cacheKey, response.clone()));
+  loggedWaitUntil(ctx, cache.put(cacheKey, response.clone()), "source image cache write");
   return response;
 }
 
@@ -1481,6 +1494,51 @@ function summarizeSourceHealth(settled, now, cutoff) {
   );
 }
 
+const NEWS_BUNDLE_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
+
+async function handleNewsBundle(request, env, ctx) {
+  const requestUrl = new URL(request.url);
+  const presenceDeviceId = String(requestUrl.searchParams.get("presenceDeviceId") || "").replace(/[^a-zA-Z0-9._:-]/g, "").slice(0, 120);
+  if (presenceDeviceId) {
+    loggedWaitUntil(ctx, adminHubCall(env, "/presence", { deviceId: presenceDeviceId, page: "home" }), "presence update");
+  }
+
+  const cache = caches.default;
+  const payloads = await Promise.all(NEWS_BUNDLE_SHARDS.map(async (shard) => {
+    const cacheKey = new Request(`${PUBLIC_SITE_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&v=119`, { method: "GET" });
+    const hit = await cache.match(cacheKey);
+    if (!hit) return null;
+    try {
+      const payload = await hit.json();
+      if (!payload || !Array.isArray(payload.items)) return null;
+      payload.servedFromCache = true;
+      payload.servedAt = new Date().toISOString();
+      return payload;
+    } catch (error) {
+      console.warn(`news bundle parse ${shard} failed`, error);
+      return null;
+    }
+  }));
+
+  const missing = NEWS_BUNDLE_SHARDS.filter((_, index) => !payloads[index]);
+  if (missing.length) {
+    return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
+      "Cache-Control": "no-store",
+      "X-Hadashota-Version": "186.0.0"
+    }));
+  }
+
+  return cors(json({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    payloads
+  }, 200, {
+    "Cache-Control": "no-store, max-age=0",
+    "X-Hadashota-Version": "186.0.0",
+    "X-Hadashota-Bundle": "HIT"
+  }));
+}
+
 async function handleNews(request, env, ctx) {
   const requestUrl = new URL(request.url);
   const requestedShard = String(requestUrl.searchParams.get("shard") || "sites-1");
@@ -1517,7 +1575,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "185.0.0",
+          "X-Hadashota-Version": "186.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1640,23 +1698,23 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "185.0.0",
+      "X-Hadashota-Version": "186.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "185.0.0",
+      "X-Hadashota-Version": "186.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=7200"
     });
 
-    ctx.waitUntil(Promise.all([
+    loggedWaitUntil(ctx, Promise.all([
       cache.put(cacheKey, sharedSnapshotResponse),
       cache.put(lastGoodKey, lastGoodResponse)
-    ]));
+    ]), `news cache write ${shard}`);
     return response;
   } catch (error) {
     return await lastGoodOrError(cache, lastGoodKey, shard, String(error?.message || error));
@@ -1680,7 +1738,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "185.0.0"
+        "X-Hadashota-Version": "186.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1702,7 +1760,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "185.0.0"
+    "X-Hadashota-Version": "186.0.0"
   });
 }
 
@@ -2994,14 +3052,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"186.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"186.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"185.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"186.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"186.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3455,7 +3513,7 @@ async function ensurePushStats(storage) {
   let stats=await storage.get("subscription.stats");
   if(stats?.schema==="v184"&&Number.isFinite(Number(stats.count)))return stats;
   const rows=await storage.list({prefix:"sub:"});
-  // V185 repair: rebuild device -> subscription mappings from the actual rows.
+  // V186 repair: rebuild device -> subscription mappings from the actual rows.
   // This fixes stale pointers left after an endpoint expired and keeps only the
   // newest endpoint for the same installation/device id.
   const byDevice=new Map(),remove=[];
@@ -3689,7 +3747,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"185.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"186.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -3729,7 +3787,7 @@ export class PushHub {
       if(deviceId)await storage.put(`device:${deviceId}`,key);
       if(!existing)stats=await updatePushStats(storage,1,platform);
       else if(existing?.platform&&existing.platform!==platform){await updatePushStats(storage,-1,existing.platform);stats=await updatePushStats(storage,1,platform);}
-      // V185: both / and /escalation share hadashota.pushDeviceId.  Older
+      // V186: both / and /escalation share hadashota.pushDeviceId.  Older
       // releases could nevertheless leave more than one stored subscription for
       // that same browser.  Remove every stale row now, not only the row pointed
       // to by device:<id>, so enabling Push on both pages can never double-send.
@@ -3896,7 +3954,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"185.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"186.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -3929,7 +3987,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"185.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"186.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -4030,7 +4088,7 @@ export class PushHub {
       const notification=await storage.get(`notification:${job.notificationFingerprint}`);
       const eligible=[],skipped=[];
       for(const [key,row] of batch){
-        // V185: repair stale device mappings instead of blindly deleting the
+        // V186: repair stale device mappings instead of blindly deleting the
         // current subscription. A stale device:<id> pointer could previously
         // remove the only valid iPhone endpoint during fanout.
         const rowDeviceId=String(row?.deviceId||"");

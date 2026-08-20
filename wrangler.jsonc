@@ -6,7 +6,20 @@
   "assets": {
     "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
     "binding": "ASSETS",
-    "run_worker_first": true,
+    "run_worker_first": [
+      "/api/*",
+      "/", "/index.html",
+      "/escalation", "/escalation.html", "/%D7%9E%D7%93%D7%93-%D7%94%D7%94%D7%A1%D7%9C%D7%9E%D7%94",
+      "/about", "/about.html",
+      "/how-it-works", "/how-it-works.html",
+      "/contact", "/contact.html",
+      "/privacy", "/privacy.html",
+      "/copyright", "/copyright.html",
+      "/manage-kp-7538", "/admin.html",
+      "/robots.txt", "/sitemap.xml",
+      "/sw.js", "/app.js", "/styles.css",
+      "/escalation.js", "/escalation.css", "/site.webmanifest"
+    ],
     "html_handling": "none",
     "not_found_handling": "none"
   },

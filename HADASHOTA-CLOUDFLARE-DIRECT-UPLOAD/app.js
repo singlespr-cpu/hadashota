@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "185.0.0";
+const KOTERET_CLIENT_BUILD = "186.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -469,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V185 · API ${apiVersion}` : "גרסה V185 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V186 · API ${apiVersion}` : "גרסה V186 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V185 · API לא מחובר";
+    marker.textContent = "גרסה V186 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1204,6 +1204,31 @@ function refreshNewsOnForeground(reason = "foreground") {
   loadNews(false, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
+async function fetchNewsBundle() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("bundle_timeout"), CLIENT_NEWS_TIMEOUT_MS);
+  try {
+    const params = new URLSearchParams({
+      presenceDeviceId: getPushDeviceId(),
+      _: String(Math.floor(Date.now() / 15000))
+    });
+    const response = await fetch(`/api/news-bundle?${params}`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+      cache: "no-store",
+      credentials: "same-origin"
+    });
+    if (!response.ok) throw new Error(`BUNDLE_HTTP_${response.status}`);
+    const data = await response.json();
+    if (!data?.ok || !Array.isArray(data.payloads) || data.payloads.length !== NEWS_SHARDS.length) {
+      throw new Error("BUNDLE_INCOMPLETE");
+    }
+    return data.payloads;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function loadNews(force = false, fromRetry = false, silent = false) {
   if (state.loading) return null;
   const background = Boolean(silent && state.items.length);
@@ -1223,15 +1248,33 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     // slower than the other. Render the first usable network shard immediately,
     // then replace it with the fully merged snapshot when both requests settle.
     let progressiveRendered = false;
-    const shardRequests = NEWS_SHARDS.map((shard, index) =>
-      fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
-        if (!background && !progressiveRendered && Array.isArray(value?.items) && value.items.length) {
-          progressiveRendered = renderProgressiveShardPayload(shard, value);
-        }
-        return value;
-      })
-    );
-    const results = await Promise.allSettled(shardRequests);
+    let results = null;
+
+    // V186: silent auto-refresh/retry passes only need the six shared Worker
+    // snapshots. Read them in one invocation instead of issuing six separate
+    // /api/news requests. Cron/manual refresh cadence and all publisher fetches
+    // remain unchanged. On a cold/missing bundle, fall back to the exact legacy
+    // six-shard path below.
+    if (background && !force) {
+      try {
+        const bundledPayloads = await fetchNewsBundle();
+        results = bundledPayloads.map((value) => ({ status: "fulfilled", value }));
+      } catch (error) {
+        console.warn("News bundle unavailable; falling back to shard requests", error);
+      }
+    }
+
+    if (!results) {
+      const shardRequests = NEWS_SHARDS.map((shard, index) =>
+        fetchNewsShard(shard, force, index * NEWS_SHARD_STAGGER_MS).then((value) => {
+          if (!background && !progressiveRendered && Array.isArray(value?.items) && value.items.length) {
+            progressiveRendered = renderProgressiveShardPayload(shard, value);
+          }
+          return value;
+        })
+      );
+      results = await Promise.allSettled(shardRequests);
+    }
     const payloads = [];
     let delayed = false;
     let freshShards = 0;
@@ -3133,7 +3176,7 @@ function renderFeed() {
     return;
   }
 
-  // V185: the sponsored rectangle lives directly after "האחרונים החשובים"
+  // V186: the sponsored rectangle lives directly after "האחרונים החשובים"
   // instead of consuming the first position inside "כל העדכונים".
   captureVisibleFeedImages();
   el.feed.innerHTML = items.map(newsCardHtml).join("");
@@ -4161,7 +4204,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=185.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=186.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4231,7 +4274,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=185.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=186.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4267,10 +4310,10 @@ async function ensureServerPushSubscription() {
 
   const applicationServerKey = await urlBase64ToUint8Array(config.publicKey);
   let subscription = await registration.pushManager.getSubscription();
-  // V185 one-time iOS repair: refresh the PushSubscription endpoint without a
+  // V186 one-time iOS repair: refresh the PushSubscription endpoint without a
   // new permission prompt. This recovers Home-Screen apps whose Apple endpoint
   // expired while Notification.permission still remained "granted".
-  const iosRepair=isIOSDevice()&&isStandaloneMode()&&localStorage.getItem("hadashota.iosPushRepairV185")!=="1";
+  const iosRepair=isIOSDevice()&&isStandaloneMode()&&localStorage.getItem("hadashota.iosPushRepairV186")!=="1";
   if(subscription&&iosRepair){
     await fetch("/api/push/unsubscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:subscription.endpoint})}).catch(()=>{});
     await subscription.unsubscribe().catch(()=>{});
@@ -4297,7 +4340,7 @@ async function ensureServerPushSubscription() {
     }
   }
   if (!response.ok) throw new Error(`push_subscribe_${response.status}`);
-  if(iosRepair)localStorage.setItem("hadashota.iosPushRepairV185","1");
+  if(iosRepair)localStorage.setItem("hadashota.iosPushRepairV186","1");
   syncPushDeviceIdToServiceWorker(registration);
   return subscription;
 }
