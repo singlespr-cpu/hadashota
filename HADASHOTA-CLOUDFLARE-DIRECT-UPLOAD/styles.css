@@ -4597,7 +4597,7 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
   .feed-promo-copy h3 { font-size:15px; }
 }
 
-/* V175 — premium ad placement: immediately after "האחרונים החשובים" */
+/* V177 — premium ad placement: immediately after "האחרונים החשובים" */
 .spotlight-promo-slot {
   margin: 12px 0 18px;
   width: 100%;
@@ -8564,9 +8564,9 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 @media (min-width:701px) {
   #alertCenter .kp-desktop-triple-strip {
     display:grid !important;
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr) !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr) !important;
     grid-template-rows:64px !important;
-    grid-template-areas:"google escalation oref" !important;
+    grid-template-areas:"google oref escalation" !important;
     grid-auto-flow:column !important;
     align-items:stretch !important;
     gap:8px !important;
@@ -8587,7 +8587,7 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 
   #alertCenter .kp-escalation-box {
     grid-area:escalation !important;
-    grid-column:2 !important;
+    grid-column:3 !important;
     grid-row:1 !important;
     order:0 !important;
     align-self:stretch !important;
@@ -8598,7 +8598,7 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 
   #alertCenter .kp-oref-box.alert-center-card {
     grid-area:oref !important;
-    grid-column:3 !important;
+    grid-column:2 !important;
     grid-row:1 !important;
     order:0 !important;
     align-self:stretch !important;
@@ -8611,7 +8611,7 @@ html[data-theme="dark"] .escalation-nav-link b{background:#171f29;border-color:#
 /* Keep the one-line desktop strip usable even on narrower desktop windows. */
 @media (min-width:701px) and (max-width:930px) {
   #alertCenter .kp-desktop-triple-strip {
-    grid-template-columns:minmax(0,.92fr) minmax(0,.96fr) minmax(0,1.12fr) !important;
+    grid-template-columns:minmax(0,.92fr) minmax(0,1.12fr) minmax(0,.96fr) !important;
     gap:6px !important;
   }
   #alertCenter .kp-google-box { padding:7px 8px !important; }
@@ -9252,7 +9252,7 @@ html[data-theme="dark"] #alertSettingsModal .alert-settings-intro{
 
 
 /* =========================================================
-   V175 — optional site support: floating heart + Bit/PayBox
+   V177 — optional site support: floating heart + Bit/PayBox
    ========================================================= */
 @keyframes kpSupportHeartBeat{
   0%,100%{transform:scale(1)}
@@ -9350,3 +9350,87 @@ html[data-theme="dark"] .support-card>p{color:#aeb8c5!important}
 }
 @media(max-width:350px){.support-float-label{display:none}.support-float{width:43px;padding:5px;justify-content:center}.support-payment-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.support-float-heart,.support-float-heart::after,.support-modal-heart{animation:none!important}.support-float,.support-payment{transition:none!important}}
+
+
+/* =========================================================
+   V177 — floating controls sizing/stability + mobile About
+   ========================================================= */
+/* Desktop: support is deliberately ~20% larger and the red outline is stronger. */
+.support-float{
+  min-height:55px !important;
+  padding:7px 16px 7px 8px !important;
+  gap:9px !important;
+  border-width:2px !important;
+  font-size:12px !important;
+}
+.support-float-heart{
+  width:41px !important;height:41px !important;flex-basis:41px !important;font-size:21px !important;
+}
+.support-float-heart::after{border-width:2px !important}
+
+.about-modal-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px 13px;margin-top:11px}
+.about-modal-actions .about-more-link{margin-top:0 !important}
+.about-contact-cta{
+  min-height:39px;padding:0 14px;border:1px solid rgba(220,38,70,.22);border-radius:11px;
+  background:linear-gradient(135deg,#fff3f5,#fff);color:#c92547;font:inherit;font-size:10.5px;font-weight:900;
+  cursor:pointer;touch-action:manipulation;box-shadow:0 5px 16px rgba(201,37,71,.07)
+}
+.about-contact-cta:hover{border-color:rgba(220,38,70,.38);background:#fff0f3;transform:translateY(-1px)}
+html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d3b;color:#ff8ba0;box-shadow:none}
+
+@media(max-width:700px){
+  /* Bring About back to the phone header and trade the low-value hamburger for it. */
+  .topbar #aboutBtn{display:inline-flex !important}
+  .topbar #filtersToggle{display:none !important}
+
+  /* One fixed viewport layer keeps both floating actions attached while iOS scrolls. */
+  .kp-floating-controls{
+    position:fixed !important;
+    left:max(10px,env(safe-area-inset-left));
+    right:max(10px,env(safe-area-inset-right));
+    bottom:calc(max(11px,env(safe-area-inset-bottom)) + 1px);
+    height:52px;z-index:96;pointer-events:none;
+    transform:translateZ(0);-webkit-transform:translateZ(0);
+  }
+  .kp-floating-controls .back-to-top,
+  .kp-floating-controls .support-float{
+    position:absolute !important;top:auto !important;bottom:0 !important;margin:0 !important;pointer-events:auto;
+  }
+  .kp-floating-controls .back-to-top{
+    left:0 !important;right:auto !important;
+  }
+  .kp-floating-controls .support-float{
+    right:0 !important;left:auto !important;
+    min-height:49px !important;padding:6px 12px 6px 7px !important;gap:7px !important;
+    border-width:2px !important;font-size:11.3px !important;
+  }
+  .kp-floating-controls .support-float-heart{
+    width:37px !important;height:37px !important;flex-basis:37px !important;font-size:19px !important;
+  }
+  .about-modal-actions{display:grid;grid-template-columns:1fr;gap:8px}
+  .about-contact-cta{width:100%;min-height:42px;font-size:11px}
+  .about-modal-actions .about-more-link{justify-content:center;text-align:center;padding:4px 0}
+}
+@media(max-width:350px){
+  .kp-floating-controls .support-float{width:51px !important;min-width:51px !important;padding:6px !important;justify-content:center !important}
+  .kp-floating-controls .support-float-label{display:none !important}
+}
+
+
+/* =========================================================
+   V177 — mobile house-ad contrast + desktop OREF/escalation position swap
+   House ad is slightly stronger on mobile, without using the saturated red
+   of the upper promo tile. Desktop dimensions are preserved while the two
+   existing panels exchange positions.
+   ========================================================= */
+@media (max-width:700px){
+  .spotlight-promo-slot .feed-promo-house{
+    background:linear-gradient(135deg,#ffe7eb 0%,#fff2f4 48%,#edf3ff 100%)!important;
+    border-color:rgba(201,31,49,.30)!important;
+    box-shadow:0 8px 22px rgba(201,31,49,.10)!important;
+  }
+  html[data-theme="dark"] .spotlight-promo-slot .feed-promo-house{
+    background:linear-gradient(135deg,#321b22 0%,#211923 50%,#172233 100%)!important;
+    border-color:rgba(255,91,107,.30)!important;
+  }
+}
