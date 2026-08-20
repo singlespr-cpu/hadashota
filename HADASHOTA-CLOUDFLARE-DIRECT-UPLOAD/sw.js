@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "168.0.0";
+const HADASHOTA_SW_VERSION = "172.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -10,10 +10,10 @@ self.addEventListener("activate", (event) => {
 
 
 
-// V123 — true Web Push. The push service wakes this Service Worker even when
-// no Koteret Plus tab is open. The push itself is intentionally payload-free;
-// the latest verified lead is fetched from our own Worker to avoid Web Push
-// payload-encryption dependencies and keep the stack fully self-hosted.
+// V170 — true payload-first Web Push. The push service wakes this Service Worker
+// even when no Koteret Plus window is open. The encrypted payload already carries
+// the compact notification title and the full newsroom headline; fetching /notification
+// remains only a compatibility fallback.
 async function readPushDeviceId() {
   try {
     const cache=await caches.open("koteret-plus-sw-meta-v1");
@@ -62,9 +62,16 @@ self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
     try {
       const deviceId=await readPushDeviceId();
-      const response = await fetch(`/api/push/notification${deviceId?`?deviceId=${encodeURIComponent(deviceId)}`:""}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const payload = await response.json();
+      let payload=null;
+      // V170: encrypted Web Push carries the visible notification payload.
+      // This lets iOS show it immediately after waking the Service Worker,
+      // without depending on a second network request while the PWA is closed.
+      try{if(event.data)payload=event.data.json();}catch{}
+      if(!payload?.fingerprint||!payload?.title){
+        const response = await fetch(`/api/push/notification${deviceId?`?deviceId=${encodeURIComponent(deviceId)}`:""}`, { cache: "no-store" });
+        if (!response.ok) return;
+        payload = await response.json();
+      }
       if (!payload?.fingerprint || !payload?.title) return;
       if (!(await claimPushDisplay(payload.fingerprint))) return;
 
@@ -75,8 +82,8 @@ self.addEventListener("push", (event) => {
           tag: `koteret-${payload.kind||"push"}-${payload.fingerprint}`,
           renotify: true,
           requireInteraction: payload.kind === "escalation",
-          icon: "/icon-192.png?v=168.0.0",
-          badge: "/favicon-32.png?v=168.0.0",
+          icon: "/icon-192.png?v=172.0.0",
+          badge: "/favicon-32.png?v=172.0.0",
           data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
           timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
         });

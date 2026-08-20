@@ -4597,6 +4597,17 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
   .feed-promo-copy h3 { font-size:15px; }
 }
 
+/* V172 — premium ad placement: immediately after "האחרונים החשובים" */
+.spotlight-promo-slot {
+  margin: 12px 0 18px;
+  width: 100%;
+}
+.spotlight-promo-slot:empty { display:none; }
+.spotlight-promo-slot .feed-promo-card { margin:0; width:100%; }
+@media(max-width:700px){
+  .spotlight-promo-slot { margin: 9px 0 13px; }
+}
+
 
 /* V92 — technical refresh/retry information stays internal */
 #dataStatus,
@@ -8986,7 +8997,7 @@ html[data-theme="dark"] .feed-show-more{background:#151b24;border-color:#303947;
 
 
 /* =========================================================
-   V168 — Home Front mobile strip + settings modal hardening
+   V170 — Home Front mobile strip + settings modal hardening
    ========================================================= */
 html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!important;overflow-anchor:none!important;}
 .contact-form-status[data-state="success"]{display:block!important;min-height:22px!important;padding:6px 8px!important;border-radius:9px!important;background:rgba(8,116,67,.08)!important;text-align:center!important;font-size:11px!important;line-height:1.45!important;}
@@ -9139,4 +9150,102 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
   #alertSettingsModal .alert-settings-card{max-height:calc(100dvh - 8px)!important;border-radius:16px!important;padding-top:10px!important;}
   #alertSettingsModal .alert-settings-intro{margin-block:5px 8px!important;}
   #alertSettingsModal .alert-setting-block{margin-top:6px!important;padding-block:7px!important;}
+}
+
+
+/* =========================================================
+   V170 — Home Front modal hard background isolation
+   ========================================================= */
+html.alert-modal-page-lock,body.alert-modal-page-lock{overflow:hidden!important;overscroll-behavior:none!important;}
+#alertSettingsModal.site-modal{overscroll-behavior:none!important;touch-action:none!important;isolation:isolate!important;}
+#alertSettingsModal .modal-backdrop{touch-action:none!important;overscroll-behavior:none!important;}
+#alertSettingsModal .alert-settings-card{overscroll-behavior:contain!important;touch-action:pan-y!important;}
+
+
+/* =========================================================
+   V170 — final dark-mode readability audit
+   Late components introduced after the original theme block must never retain
+   light-theme ink/background values when the site is switched to dark mode.
+   ========================================================= */
+html[data-theme="dark"] .section-head{
+  border-bottom-color:#29323e!important;
+}
+html[data-theme="dark"] .section-head h2,
+html[data-theme="dark"] #feedTitle,
+html[data-theme="dark"] .section-actions,
+html[data-theme="dark"] #resultsCount{
+  color:#eef2f7!important;
+}
+html[data-theme="dark"] .section-kicker{color:#8f9baa!important;}
+html[data-theme="dark"] .text-button{color:#c2cad5!important;}
+html[data-theme="dark"] .text-button:hover{color:#fff!important;}
+
+html[data-theme="dark"] .quick-brief-card,
+html[data-theme="dark"] .smart-explain-card,
+html[data-theme="dark"] .near-you-card,
+html[data-theme="dark"] .settings-modal__card,
+html[data-theme="dark"] .settings-card-modal{
+  background:#151b24!important;
+  color:#eef2f7!important;
+  border-color:#303947!important;
+}
+html[data-theme="dark"] .brief-copy h3,
+html[data-theme="dark"] .about-process strong,
+html[data-theme="dark"] .about-feature-grid b,
+html[data-theme="dark"] .smart-now-status b,
+html[data-theme="dark"] .why-metrics strong,
+html[data-theme="dark"] .settings-modal__head h2,
+html[data-theme="dark"] .v105-activity,
+html[data-theme="dark"] .v105-brief-item{
+  color:#eef2f7!important;
+}
+html[data-theme="dark"] .brief-copy p,
+html[data-theme="dark"] .about-process small,
+html[data-theme="dark"] .about-feature-grid small,
+html[data-theme="dark"] .smart-now-status>strong,
+html[data-theme="dark"] .why-metrics span,
+html[data-theme="dark"] .why-explanation ul,
+html[data-theme="dark"] .why-note,
+html[data-theme="dark"] .near-you-panel p{
+  color:#9da9b8!important;
+}
+html[data-theme="dark"] .brief-meta span,
+html[data-theme="dark"] .why-metrics>div,
+html[data-theme="dark"] .why-explanation,
+html[data-theme="dark"] .near-you-panel,
+html[data-theme="dark"] .v105-brief-item{
+  background:#111821!important;
+  border-color:#2d3744!important;
+}
+html[data-theme="dark"] .google-search-form input{
+  color:#eef2f7!important;
+}
+html[data-theme="dark"] .homepage-modal-icon{
+  background:#111821!important;
+  color:#eef2f7!important;
+}
+html[data-theme="dark"] .contact-form-status[data-state="success"]{
+  color:#8de0b4!important;
+  background:rgba(36,160,98,.12)!important;
+}
+html[data-theme="dark"] .contact-form-status[data-state="error"]{
+  color:#ff9c98!important;
+}
+/* The Home Front settings dialog has sticky surfaces added late in the file. */
+html[data-theme="dark"] #alertSettingsModal .alert-settings-card{
+  background:#151b24!important;
+  color:#eef2f7!important;
+  border-color:#303947!important;
+}
+html[data-theme="dark"] #alertSettingsModal .alert-setting-block{
+  background:#111821!important;
+  border-color:#2d3744!important;
+}
+html[data-theme="dark"] #alertSettingsModal .alert-setting-row b,
+html[data-theme="dark"] #alertSettingsModal .alert-settings-heading h2{
+  color:#eef2f7!important;
+}
+html[data-theme="dark"] #alertSettingsModal .alert-setting-row small,
+html[data-theme="dark"] #alertSettingsModal .alert-settings-intro{
+  color:#9da9b8!important;
 }

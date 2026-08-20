@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "168.0.0";
+const KOTERET_CLIENT_BUILD = "172.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -51,7 +51,7 @@ const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 const LEAD_SESSION_LOCK_MS = 2 * 60 * 1000;
 const LEAD_BREAKOUT_SCORE_DELTA = 30;
 
-// V168: Home Front Push follows the first successful Push approval by default.
+// V170: Home Front Push follows the first successful Push approval by default.
 // An existing explicit alertDesktop choice (including OFF) is always preserved.
 const storedAlertDesktopPreference = localStorage.getItem("hadashota.alertDesktop");
 const shouldDefaultAlertDesktopOn = storedAlertDesktopPreference === null
@@ -467,9 +467,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V167 · API ${apiVersion}` : "גרסה V167 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V172 · API ${apiVersion}` : "גרסה V172 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V167 · API לא מחובר";
+    marker.textContent = "גרסה V172 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -809,7 +809,7 @@ function bindEvents() {
     const result = await toggleHeadlineNotifications(true, { quiet:true });
     if (result?.ok) {
       if (el.notificationOfferTitle) el.notificationOfferTitle.textContent = "ההתראות הופעלו ✓";
-      if (el.notificationOfferText) el.notificationOfferText.textContent = "חדשות חמות ומדד ההסלמה מחוברים לאותו Push. אפשר לשנות את הסינון בכל עת בהגדרות.";
+      if (el.notificationOfferText) el.notificationOfferText.textContent = "חדשות חמות ודופק ההסלמה מחוברים לאותו Push. אפשר לשנות את הסינון בכל עת בהגדרות.";
       el.notificationOfferAccept.textContent = "הופעל";
       window.setTimeout(() => closeSiteModal(el.notificationOfferModal, false), 1300);
       return;
@@ -1095,6 +1095,34 @@ async function handleInstallAccept() {
 }
 
 let modalReturnFocus = null;
+let alertSettingsScrollLockY = null;
+
+function lockAlertSettingsPageScroll(modal) {
+  if (modal !== el.alertSettingsModal || alertSettingsScrollLockY !== null) return;
+  const y = Math.max(0, window.scrollY || window.pageYOffset || 0);
+  alertSettingsScrollLockY = y;
+  document.documentElement.classList.add("alert-modal-page-lock");
+  document.body.classList.add("alert-modal-page-lock");
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${y}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+  document.body.style.width = "100%";
+}
+
+function unlockAlertSettingsPageScroll(modal) {
+  if (modal !== el.alertSettingsModal || alertSettingsScrollLockY === null) return;
+  const y = alertSettingsScrollLockY;
+  alertSettingsScrollLockY = null;
+  document.documentElement.classList.remove("alert-modal-page-lock");
+  document.body.classList.remove("alert-modal-page-lock");
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  document.body.style.width = "";
+  requestAnimationFrame(() => window.scrollTo({ top: y, left: 0, behavior: "auto" }));
+}
 
 function setModalBackgroundInert() { /* V167: modal backdrop + focus trap avoid costly body-wide inert writes. */ }
 
@@ -1134,6 +1162,7 @@ function openSiteModal(modal, trigger) {
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  lockAlertSettingsPageScroll(modal);
   setModalBackgroundInert(modal);
   requestAnimationFrame(() => {
     const focusable = modalFocusableElements(modal);
@@ -1145,6 +1174,7 @@ function closeSiteModal(modal, restoreFocus = true) {
   if (!modal) return;
   modal.classList.add("hidden");
   modal.setAttribute("aria-hidden", "true");
+  unlockAlertSettingsPageScroll(modal);
   if (!document.querySelector(".site-modal:not(.hidden)")) {
     document.body.classList.remove("modal-open");
     setModalBackgroundInert(null);
@@ -3099,11 +3129,10 @@ function renderFeed() {
     return;
   }
 
-  const feedPromoHtml = feedPromoCardHtml(feedPromoData);
-  // Preserve already loaded source images before the 30-second refresh rebuilds
-  // the feed DOM, then restore them immediately into the new cards.
+  // V172: the sponsored rectangle lives directly after "האחרונים החשובים"
+  // instead of consuming the first position inside "כל העדכונים".
   captureVisibleFeedImages();
-  el.feed.innerHTML = feedPromoHtml + items.map(newsCardHtml).join("");
+  el.feed.innerHTML = items.map(newsCardHtml).join("");
   hydrateDirectSourceImageSlotsNow();
   requestAnimationFrame(() => {
     try { if (typeof v106ReapplyActiveFilter === "function") v106ReapplyActiveFilter(); } catch {}
@@ -4128,7 +4157,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=168.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=172.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4198,7 +4227,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=168.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=172.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4365,7 +4394,7 @@ async function toggleHeadlineNotifications(desiredState = !state.notificationsEn
   localStorage.removeItem("hadashota.notificationSnoozeUntil");
   localStorage.setItem("hadashota.headlineNotifications", "1");
   syncControlsFromState();
-  if (!quiet) showToast("Push הופעל — חדשות חמות ומדד ההסלמה מחוברים");
+  if (!quiet) showToast("Push הופעל — חדשות חמות ודופק ההסלמה מחוברים");
   return { ok:true, enabled:true };
 }
 
@@ -5293,11 +5322,17 @@ function trackAdEvent(slot, promo, type="view") {
   fetch("/api/ad/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slot,id,type}),keepalive:true}).catch(()=>{});
 }
 
+function renderSpotlightPromo() {
+  const slot = document.querySelector("#spotlightPromoSlot");
+  if (!slot) return;
+  slot.innerHTML = feedPromoCardHtml(feedPromoData);
+}
+
 async function initFeedPromo() {
   const apply = (promo) => {
     feedPromoData = promo?.active && promo?.text && promo?.url ? promo : { active: false };
     if(feedPromoData.active)trackAdEvent("feed",feedPromoData,"view");
-    try { renderFeed(); } catch {}
+    try { renderSpotlightPromo(); } catch {}
   };
   try {
     const response = await fetch(`/api/feed-promo?_=${Date.now()}`, { cache: "no-store" });
