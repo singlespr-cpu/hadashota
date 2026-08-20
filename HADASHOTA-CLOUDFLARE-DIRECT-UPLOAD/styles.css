@@ -4597,7 +4597,7 @@ html[data-theme="dark"] .notification-offer-modal .notification-offer-actions {
   .feed-promo-copy h3 { font-size:15px; }
 }
 
-/* V180 — premium ad placement: immediately after "האחרונים החשובים" */
+/* V181 — premium ad placement: immediately after "האחרונים החשובים" */
 .spotlight-promo-slot {
   margin: 12px 0 18px;
   width: 100%;
@@ -9252,7 +9252,7 @@ html[data-theme="dark"] #alertSettingsModal .alert-settings-intro{
 
 
 /* =========================================================
-   V180 — optional site support: floating heart + Bit/PayBox
+   V181 — optional site support: floating heart + Bit/PayBox
    ========================================================= */
 @keyframes kpSupportHeartBeat{
   0%,100%{transform:scale(1)}
@@ -9353,7 +9353,7 @@ html[data-theme="dark"] .support-card>p{color:#aeb8c5!important}
 
 
 /* =========================================================
-   V180 — floating controls sizing/stability + mobile About
+   V181 — floating controls sizing/stability + mobile About
    ========================================================= */
 /* Desktop: support is deliberately ~20% larger and the red outline is stronger. */
 .support-float{
@@ -9418,7 +9418,7 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V180 — mobile house-ad contrast + desktop OREF/escalation position swap
+   V181 — mobile house-ad contrast + desktop OREF/escalation position swap
    House ad is slightly stronger on mobile, without using the saturated red
    of the upper promo tile. Desktop dimensions are preserved while the two
    existing panels exchange positions.
@@ -9437,12 +9437,51 @@ html[data-theme="dark"] .about-contact-cta{background:#25171d;border-color:#5c2d
 
 
 /* =========================================================
-   V180 — desktop-only floating control positions
+   V181 — desktop-only floating control positions
    Main site: back-to-top on the left. Mobile remains unchanged.
    ========================================================= */
 @media (min-width:701px){
   .kp-floating-controls .back-to-top{
     left:max(16px,env(safe-area-inset-left)) !important;
     right:auto !important;
+  }
+}
+
+
+/* =========================================================
+   V181 — desktop-only floating actions cluster
+   Back-to-top sits above-left of the support banner.
+   Mobile is intentionally unchanged.
+   ========================================================= */
+@media (min-width:701px){
+  .kp-floating-controls{
+    position:fixed !important;
+    right:max(16px,env(safe-area-inset-right)) !important;
+    left:auto !important;
+    bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px)) !important;
+    z-index:72 !important;
+    display:grid !important;
+    grid-template-columns:44px auto !important;
+    grid-template-rows:44px auto !important;
+    column-gap:8px !important;
+    row-gap:6px !important;
+    align-items:end !important;
+    pointer-events:none !important;
+  }
+  .kp-floating-controls .support-float{
+    position:relative !important;
+    inset:auto !important;
+    grid-column:2 !important;
+    grid-row:2 !important;
+    pointer-events:auto !important;
+  }
+  .kp-floating-controls .back-to-top{
+    position:relative !important;
+    inset:auto !important;
+    grid-column:1 !important;
+    grid-row:1 !important;
+    justify-self:end !important;
+    align-self:end !important;
+    pointer-events:auto !important;
   }
 }
