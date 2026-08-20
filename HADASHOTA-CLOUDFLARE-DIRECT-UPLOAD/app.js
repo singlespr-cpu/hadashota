@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "194.0.0";
+const KOTERET_CLIENT_BUILD = "195.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -469,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V194 · API ${apiVersion}` : "גרסה V194 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V195 · API ${apiVersion}` : "גרסה V195 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V194 · API לא מחובר";
+    marker.textContent = "גרסה V195 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1314,7 +1314,7 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
 
     if (!payloads.length) throw new Error("No news shard returned usable data");
 
-    // V194: every newsroom refresh (initial, manual and automatic) uses the
+    // V195: every newsroom refresh (initial, manual and automatic) uses the
     // cooperative merger. The old foreground/manual path used the synchronous
     // O(n×clusters) merger on the browser main thread, which could briefly make
     // taps, links and scrolling feel frozen while the refresh icon was spinning.
@@ -1349,7 +1349,7 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     renderStats(data);
     persistFastRenderSnapshot(data);
     if (materiallyChanged || !state.lastNewsFingerprint) {
-      // V194: rendering is also cooperative. Most blocks are small, but yielding
+      // V195: rendering is also cooperative. Most blocks are small, but yielding
       // between them prevents one complete newsroom rebuild from monopolising the
       // main thread on slower phones/desktops.
       await renderResponsive();
@@ -4237,7 +4237,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=194.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=195.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4307,7 +4307,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=194.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=195.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
