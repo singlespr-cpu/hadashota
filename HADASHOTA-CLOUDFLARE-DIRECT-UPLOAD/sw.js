@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "197.0.0";
+const HADASHOTA_SW_VERSION = "198.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -100,10 +100,22 @@ self.addEventListener("push", (event) => {
     try {
       const deviceId=await readPushDeviceId();
       let payload=null;
-      // V170: encrypted Web Push carries the visible notification payload.
-      // This lets iOS show it immediately after waking the Service Worker,
-      // without depending on a second network request while the PWA is closed.
-      try{if(event.data)payload=event.data.json();}catch{}
+      // V198: the encrypted message uses the Declarative Web Push envelope.
+      // Safari/iOS 18.4+ can therefore display the proposed notification even
+      // if this JavaScript fails or is not available. Older browsers continue
+      // through this handler, which normalizes the standard envelope back into
+      // the site's existing payload shape.
+      try{
+        if(event.data){
+          const raw=event.data.json();
+          if(raw?.web_push===8030&&raw?.notification){
+            const meta=raw?.koteret||{};
+            let path=String(meta?.url||"/");
+            if(!path.startsWith("/")){try{path=new URL(raw.notification.navigate,self.location.origin).pathname||"/";}catch{path="/";}}
+            payload={fingerprint:String(meta?.fingerprint||""),kind:String(meta?.kind||"push"),title:String(raw.notification.title||""),body:String(raw.notification.body||""),url:path,at:meta?.at||new Date().toISOString()};
+          }else payload=raw;
+        }
+      }catch{}
       if(!payload?.fingerprint||!payload?.title){
         const response = await fetch(`/api/push/notification${deviceId?`?deviceId=${encodeURIComponent(deviceId)}`:""}`, { cache: "no-store" });
         if (!response.ok) return;
@@ -121,8 +133,8 @@ self.addEventListener("push", (event) => {
           tag: payload.kind==="hot-story"?`koteret-hot-${contentClaim.signature}`:`koteret-${payload.kind||"push"}-${payload.fingerprint}`,
           renotify: payload.kind!=="hot-story",
           requireInteraction: payload.kind === "escalation",
-          icon: "/icon-192.png?v=197.0.0",
-          badge: "/favicon-32.png?v=197.0.0",
+          icon: "/icon-192.png?v=198.0.0",
+          badge: "/favicon-32.png?v=198.0.0",
           data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
           timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
         });
