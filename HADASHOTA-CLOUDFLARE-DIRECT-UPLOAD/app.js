@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "209.0.0";
+const KOTERET_CLIENT_BUILD = "210.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -452,12 +452,14 @@ function init() {
   // refreshes reuse the shared snapshot so one visitor cannot re-scan every
   // source just by opening or refocusing the page.
   loadNews(false).then(async () => {
-    // V209: the fully merged newsroom remains authoritative. If that round has
-    // no eligible lead, fall back to the latest server-verified lead instead of
-    // collapsing the entire hero into "waiting for more sources". This does not
-    // relax corroboration rules and does not touch Push delivery.
-    if (!state.currentLeadEntry && el.leadStory?.classList.contains("is-initializing")) {
-      const hydrated = await hydrateInitialLeadFromServer();
+    // V210: the fully merged newsroom remains authoritative. If that round has
+    // no eligible lead, the latest server-verified lead may hydrate BOTH the
+    // initial loading state and the temporary "waiting for more sources" state.
+    // V209 only allowed hydration while is-initializing was still present, so a
+    // render that reached the waiting state first could permanently block the
+    // fallback. Corroboration rules and Push delivery remain unchanged.
+    if (!state.currentLeadEntry) {
+      const hydrated = await hydrateInitialLeadFromServer({ allowWaitingState: true });
       if (!hydrated && el.leadStory?.classList.contains("is-initializing")) {
         el.leadStory.classList.remove("is-initializing");
         renderLeadStory();
@@ -471,7 +473,7 @@ function init() {
   syncInstallControl();
 }
 
-async function hydrateInitialLeadFromServer() {
+async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) {
   if (!el.leadStory || !el.leadStoryTitle) return false;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort("initial_lead_timeout"), 2600);
@@ -486,13 +488,23 @@ async function hydrateInitialLeadFromServer() {
     const data = await response.json();
     const title = cleanDisplayText(data?.title || "");
     const sourceCount = Math.max(0, Number(data?.sources) || 0);
-    const serverLeadAt = Date.parse(data?.at || data?.generatedAt || 0);
-    const serverLeadAge = Number.isFinite(serverLeadAt) ? Date.now() - serverLeadAt : Infinity;
+    const storyAt = Date.parse(data?.at || 0);
+    // Freshness of the fallback is based on when the server last accepted this
+    // verified lead, not only on the timestamp of the oldest report inside it.
+    // The background selector itself is capped at three hours, so this preserves
+    // the intended hard window without rejecting a recently re-verified lead.
+    const verifiedAt = Date.parse(data?.receivedAt || data?.generatedAt || data?.at || 0);
+    const serverLeadAge = Number.isFinite(verifiedAt) ? Date.now() - verifiedAt : Infinity;
     if (!title || sourceCount < 2 || serverLeadAge < -5 * 60 * 1000 || serverLeadAge > STORED_LEAD_HARD_MAX_AGE_MS) return false;
 
-    // A full newsroom render that finished first is authoritative; never let the
-    // lightweight bootstrap overwrite it afterwards.
-    if (state.currentLeadEntry || !el.leadStory.classList.contains("is-initializing")) return false;
+    // A real live newsroom winner is always authoritative. V210 additionally
+    // allows the server fallback to replace the explicit waiting placeholder;
+    // this is the V209 dead-end seen in production.
+    if (state.currentLeadEntry) return false;
+    const waitingTitle = cleanDisplayText(el.leadStoryTitle.textContent || "");
+    const isWaitingPlaceholder = /ממתין לאימות|מתחבר לעדכונים|הסיפור המרכזי נטען|אוספים ומצליבים/.test(waitingTitle);
+    const mayHydrate = el.leadStory.classList.contains("is-initializing") || (allowWaitingState && isWaitingPlaceholder);
+    if (!mayHydrate) return false;
 
     el.leadStoryTitle.textContent = title;
     applyLeadTitleSizing(title);
@@ -549,7 +561,8 @@ async function hydrateInitialLeadFromServer() {
     }
 
     el.leadStory.dataset.serverLead = "1";
-    el.leadStory.dataset.serverLeadAt = String(serverLeadAt);
+    el.leadStory.dataset.serverLeadAt = String(verifiedAt);
+    if (Number.isFinite(storyAt)) el.leadStory.dataset.serverStoryAt = String(storyAt);
     el.leadStory.classList.remove("hidden", "is-initializing");
     return true;
   } catch (error) {
@@ -574,9 +587,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V209 · API ${apiVersion}` : "גרסה V209 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V210 · API ${apiVersion}` : "גרסה V210 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V209 · API לא מחובר";
+    marker.textContent = "גרסה V210 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3878,6 +3891,19 @@ function renderLeadStory() {
   // doing so would reintroduce cross-device divergence and could revive a story
   // that no longer exists in the current merged feed.
 
+  // V210: a temporary merged round with no eligible replacement must not erase
+  // an already verified lead that this session is showing. Retain it for the same
+  // three-hour hard window used by the editorial selector. This avoids the
+  // verified story -> waiting placeholder regression during automatic refreshes.
+  if (!winner && state.currentLeadEntry) {
+    const previous = state.currentLeadEntry;
+    const previousAt = Date.parse(previous.latestAt || previous.item?.latestReportAt || previous.item?.publishedAt || 0);
+    const previousAge = Number.isFinite(previousAt) ? now - previousAt : Infinity;
+    if (previousAge >= -5 * 60 * 1000 && previousAge <= STORED_LEAD_HARD_MAX_AGE_MS && Number(previous.uniqueSources || 0) >= 2) {
+      winner = previous;
+    }
+  }
+
   if (!winner) {
     state.currentLeadEntry = null;
     state.forceLeadReevaluation = false;
@@ -3894,6 +3920,7 @@ function renderLeadStory() {
     if (el.leadStory) {
       delete el.leadStory.dataset.serverLead;
       delete el.leadStory.dataset.serverLeadAt;
+      delete el.leadStory.dataset.serverStoryAt;
     }
 
     const hasFeed = state.items.length > 0;
@@ -3942,6 +3969,7 @@ function renderLeadStory() {
   if (el.leadStory) {
     delete el.leadStory.dataset.serverLead;
     delete el.leadStory.dataset.serverLeadAt;
+    delete el.leadStory.dataset.serverStoryAt;
   }
 
   const winnerFingerprint = leadFingerprint(winner);
@@ -4365,7 +4393,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=209.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=210.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4435,7 +4463,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=209.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=210.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
