@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "204.0.0";
+const KOTERET_CLIENT_BUILD = "206.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -427,8 +427,12 @@ function init() {
   installInteractionSafetyNet();
   registerServiceWorker();
   verifyApiVersion();
-  const restoredInstantly = restoreFastRenderSnapshot();
-  if (!restoredInstantly) restoreLocalLastGood();
+  const restoredInstantly = restoreFastRenderSnapshot({ skipLead: true });
+  if (!restoredInstantly) restoreLocalLastGood({ skipLead: true });
+  // V206: never paint a device-local lead headline during first entry. The feed
+  // may still use its fast local snapshot, but the hero is bootstrapped from the
+  // autonomous server lead so an old story cannot flash before the live merge.
+  hydrateInitialLeadFromServer().catch(() => {});
   // Utilities are secondary to first paint. They fill in shortly afterwards.
   setTimeout(loadUtilities, restoredInstantly ? 650 : 150);
   initPromoCard();
@@ -455,6 +459,91 @@ function init() {
   syncInstallControl();
 }
 
+async function hydrateInitialLeadFromServer() {
+  if (!el.leadStory || !el.leadStoryTitle) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort("initial_lead_timeout"), 2600);
+  try {
+    const response = await fetch(`/api/push/latest?_=${Date.now()}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+      credentials: "same-origin"
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    const title = cleanDisplayText(data?.title || "");
+    const sourceCount = Math.max(0, Number(data?.sources) || 0);
+    if (!title || sourceCount < 2) return false;
+
+    // A full newsroom render that finished first is authoritative; never let the
+    // lightweight bootstrap overwrite it afterwards.
+    if (state.currentLeadEntry || !el.leadStory.classList.contains("is-initializing")) return false;
+
+    el.leadStoryTitle.textContent = title;
+    applyLeadTitleSizing(title);
+    el.leadStoryPreview.textContent = cleanDisplayText(data?.body || `${sourceCount} מקורות מדווחים`);
+    el.leadStorySource.textContent = "כותרת פלוס";
+    el.leadStoryAge.textContent = formatAge(data?.at || data?.generatedAt || new Date().toISOString());
+    el.leadStoryCount.textContent = `${sourceCount} ${sourceCount === 1 ? "מקור מדווח" : "מקורות מדווחים"}`;
+    el.leadStorySources.innerHTML = "";
+    if (el.leadHotScore) el.leadHotScore.textContent = "🔥 חום —";
+    if (el.leadVerification) {
+      el.leadVerification.textContent = `✓ ${sourceCount} מקורות${data?.official ? " · כולל מקור רשמי" : ""}`;
+    }
+    if (el.leadTimeline) {
+      el.leadTimeline.innerHTML = "";
+      el.leadTimeline.closest("details")?.classList.add("hidden");
+    }
+    el.leadChanges?.classList.add("hidden");
+    if (el.leadStoryLabelText) el.leadStoryLabelText.textContent = "הסיפור המרכזי עכשיו";
+    el.leadStoryLiveBadge?.classList.remove("hidden");
+    el.leadStorySignal?.classList.add("hidden");
+
+    // Reuse visual/link metadata only when it belongs to the exact same server
+    // fingerprint. A mismatched local snapshot is never allowed to flash.
+    let localVisual = null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem("hadashota.publicLead.v1") || "null");
+      if (parsed && String(parsed.fingerprint || "") === String(data?.fingerprint || "")) localVisual = parsed;
+    } catch {}
+
+    const localHref = safeHttpHref(localVisual?.link || "");
+    const localImage = safeHttpHref(localVisual?.image || "");
+    setOptionalLink(el.leadStoryLink, localHref);
+    if (localHref) {
+      el.leadStoryCta.href = localHref;
+      el.leadStoryCta.classList.remove("hidden");
+    } else {
+      el.leadStoryCta.removeAttribute("href");
+      el.leadStoryCta.classList.add("hidden");
+    }
+
+    if (localImage) {
+      setOptionalLink(el.leadStoryMedia, localHref);
+      el.leadStoryImage.onerror = () => {
+        el.leadStoryImage.removeAttribute("src");
+        el.leadStoryMedia.classList.add("image-unavailable");
+      };
+      el.leadStoryImage.src = localImage;
+      el.leadStoryMedia.classList.remove("hidden", "image-unavailable");
+      el.leadStory.classList.add("has-media");
+    } else {
+      el.leadStoryImage.removeAttribute("src");
+      el.leadStoryMedia.classList.add("hidden", "image-unavailable");
+      el.leadStory.classList.remove("has-media");
+    }
+
+    el.leadStory.classList.remove("hidden", "is-initializing");
+    return true;
+  } catch (error) {
+    if (error?.name !== "AbortError") console.warn("Initial server lead bootstrap failed", error);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function verifyApiVersion() {
   const marker = document.querySelector("#siteVersion");
   if (!marker) return;
@@ -469,9 +558,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V204 · API ${apiVersion}` : "גרסה V204 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V206 · API ${apiVersion}` : "גרסה V206 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V204 · API לא מחובר";
+    marker.textContent = "גרסה V206 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1495,7 +1584,7 @@ function persistFastRenderSnapshot(data) {
   }
 }
 
-function restoreFastRenderSnapshot() {
+function restoreFastRenderSnapshot(options = {}) {
   try {
     const raw = localStorage.getItem(FAST_RENDER_SNAPSHOT_KEY);
     if (!raw) return false;
@@ -1518,7 +1607,7 @@ function restoreFastRenderSnapshot() {
     state.delayedShards = [];
     if (el.lastUpdated) el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
     renderStats(data);
-    render();
+    render(options.skipLead ? { skipLead: true } : {});
     state.lastNewsFingerprint = newsSnapshotFingerprint(data);
     return true;
   } catch (error) {
@@ -1575,7 +1664,7 @@ function readShardLastGood(shard) {
   return null;
 }
 
-function restoreLocalLastGood() {
+function restoreLocalLastGood(options = {}) {
   const payloads = NEWS_SHARDS.map(readShardLastGood).filter(Boolean);
   if (!payloads.length) return false;
   const data = mergeNewsPayloads(payloads.map((payload) => ({ ...payload, stale: true, localFallback: true })));
@@ -1592,7 +1681,7 @@ function restoreLocalLastGood() {
     : { shard, reason: "unavailable", localFallback: false, generatedAt: null });
   el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
   renderStats(data);
-  render();
+  render(options.skipLead ? { skipLead: true } : {});
   state.lastNewsFingerprint = newsSnapshotFingerprint(data);
   setDataStatus(true, true, "major");
   return true;
@@ -3894,7 +3983,9 @@ function renderLeadStory() {
     savedAt:Date.now()
   };
   try { localStorage.setItem("hadashota.publicLead.v1", JSON.stringify(publicLeadSnapshot)); } catch {}
-  syncDisplayedHotStoryToServer(publicLeadSnapshot);
+  // V206: browser renders may update the public display snapshot, but must never
+  // trigger Push fan-out. Autonomous Cron/background is the sole Push decision source.
+  syncDisplayedHotStoryToServer(publicLeadSnapshot,{displayOnly:true});
   if (leadHref) {
     el.leadStoryCta.href = leadHref;
     el.leadStoryCta.classList.remove("hidden");
@@ -4238,7 +4329,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=204.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=206.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4308,7 +4399,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=204.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=206.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
