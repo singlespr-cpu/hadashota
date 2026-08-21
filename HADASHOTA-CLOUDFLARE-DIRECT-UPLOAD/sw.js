@@ -1,4 +1,4 @@
-const HADASHOTA_SW_VERSION = "198.0.0";
+const HADASHOTA_SW_VERSION = "199.0.0";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -100,7 +100,7 @@ self.addEventListener("push", (event) => {
     try {
       const deviceId=await readPushDeviceId();
       let payload=null;
-      // V198: the encrypted message uses the Declarative Web Push envelope.
+      // V199: the encrypted message uses the Declarative Web Push envelope.
       // Safari/iOS 18.4+ can therefore display the proposed notification even
       // if this JavaScript fails or is not available. Older browsers continue
       // through this handler, which normalizes the standard envelope back into
@@ -133,8 +133,8 @@ self.addEventListener("push", (event) => {
           tag: payload.kind==="hot-story"?`koteret-hot-${contentClaim.signature}`:`koteret-${payload.kind||"push"}-${payload.fingerprint}`,
           renotify: payload.kind!=="hot-story",
           requireInteraction: payload.kind === "escalation",
-          icon: "/icon-192.png?v=198.0.0",
-          badge: "/favicon-32.png?v=198.0.0",
+          icon: "/icon-192.png?v=199.0.0",
+          badge: "/favicon-32.png?v=199.0.0",
           data: { url: payload.url || "/", fingerprint: payload.fingerprint, kind:payload.kind||"push" },
           timestamp: Date.parse(payload.at || payload.createdAt || "") || Date.now()
         });

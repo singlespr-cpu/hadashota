@@ -261,7 +261,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "198.0.0",
+          version: "199.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -274,7 +274,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "198.0.0",
+        version: "199.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1525,7 +1525,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "198.0.0"
+      "X-Hadashota-Version": "199.0.0"
     }));
   }
 
@@ -1535,7 +1535,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "198.0.0",
+    "X-Hadashota-Version": "199.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1576,7 +1576,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "198.0.0",
+          "X-Hadashota-Version": "199.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1594,7 +1594,9 @@ async function handleNews(request, env, ctx) {
     // V70: every configured source gets one real attempt on every collection.
     // Retries happen only after that first complete pass, so late-list sources
     // (especially Telegram channels) can never be starved by an early timeout.
-    const settled = await fetchSourcesWithLimit(shardSources, 4, retryBudget, force);
+    const backgroundDirect=request.headers.get("X-Koteret-Background-Direct")==="1";
+    const collectorConcurrency=backgroundDirect?2:4;
+    const settled = await fetchSourcesWithLimit(shardSources, collectorConcurrency, retryBudget, force);
     const rawItems = settled.flatMap((result) => result.items);
     const now = Date.now();
     const cutoff = now - 30 * 60 * 60 * 1000;
@@ -1699,13 +1701,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "198.0.0",
+      "X-Hadashota-Version": "199.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "198.0.0",
+      "X-Hadashota-Version": "199.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1739,7 +1741,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "198.0.0"
+        "X-Hadashota-Version": "199.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1761,7 +1763,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "198.0.0"
+    "X-Hadashota-Version": "199.0.0"
   });
 }
 
@@ -3098,14 +3100,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"198.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"198.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"199.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"199.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"198.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"198.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"199.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"199.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3463,17 +3465,59 @@ async function readBackgroundShardPayload(shard){
   }catch{return null;}
 }
 
+async function fetchBackgroundShardIsolated(shard){
+  // V199: execute every publisher shard in its own Worker request context.
+  // A scheduled invocation that calls handleNews() for several shards directly
+  // shares one external-subrequest budget. Redirects/timeouts from a few origins
+  // can therefore starve another shard and leave PushHub with an incomplete view.
+  // A same-zone Worker fetch gives each shard an independent request/subrequest
+  // budget while still using the exact production /api/news collector.
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort("push_background_timeout"),28000);
+  try{
+    const url=`${BACKGROUND_NEWS_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&force=1&pushCron=1&_=${Date.now()}`;
+    const response=await fetch(url,{method:"GET",headers:{Accept:"application/json","X-Koteret-Background":"v199"},signal:controller.signal});
+    if(!response.ok)throw new Error(`HTTP_${response.status}`);
+    const payload=await response.json();
+    if(!Array.isArray(payload?.items))throw new Error("INVALID_PAYLOAD");
+    if(payload?.stale===true||payload?.servedFromCache===true)throw new Error("STALE_PAYLOAD");
+    const generated=Date.parse(payload?.generatedAt||0);
+    if(!Number.isFinite(generated)||Date.now()-generated>5*60*1000)throw new Error("OLD_PAYLOAD");
+    return payload;
+  }finally{clearTimeout(timeout);}
+}
+
 async function refreshBackgroundNewsShards(env,ctx,shards=[]){
-  const fresh=new Map();
+  const fresh=new Map(),failed=[];
+  // Fast path: each shard runs as its own Worker request, so the six publisher
+  // collectors do not compete for one invocation's six waiting connections.
   await Promise.all(shards.map(async(shard)=>{
     try{
-      const req=new Request(`${BACKGROUND_NEWS_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&force=1`,{method:"GET",headers:{Accept:"application/json","X-Koteret-Background":"1"}});
-      const response=await handleNews(req,env,ctx);
-      if(!response.ok)return;
-      const payload=await response.json();
-      if(Array.isArray(payload?.items))fresh.set(shard,payload);
-    }catch(error){console.warn(`V167 background shard ${shard} failed`,error);}
+      const payload=await fetchBackgroundShardIsolated(shard);
+      fresh.set(shard,payload);
+    }catch(error){
+      failed.push(shard);
+      console.warn(`V199 isolated background shard ${shard} failed`,String(error?.message||error));
+    }
   }));
+
+  // Safety fallback for accounts where the domain is configured as a Worker Route
+  // rather than a Custom Domain (same-zone global fetch can be unavailable there).
+  // Failed shards are collected DIRECTLY, one at a time, with internal concurrency
+  // capped at 2. This stays below Cloudflare's six waiting-connection limit and
+  // means Push never becomes dependent on a visitor merely because self-fetch is
+  // unavailable on a particular routing setup.
+  for(const shard of failed){
+    try{
+      const req=new Request(`${BACKGROUND_NEWS_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&force=1&pushCronFallback=1`,{method:"GET",headers:{Accept:"application/json","X-Koteret-Background-Direct":"1"}});
+      const response=await handleNews(req,env,ctx);
+      if(!response.ok)continue;
+      const payload=await response.json();
+      const generated=Date.parse(payload?.generatedAt||0);
+      if(!Array.isArray(payload?.items)||payload?.stale===true||payload?.servedFromCache===true||!Number.isFinite(generated)||Date.now()-generated>5*60*1000)continue;
+      fresh.set(shard,payload);
+    }catch(error){console.warn(`V199 direct fallback shard ${shard} failed`,String(error?.message||error));}
+  }
   return fresh;
 }
 
@@ -3527,34 +3571,41 @@ async function runBackgroundPushMonitor(env, ctx) {
   if(!stub)return;
   try {
     const minute=Math.floor(Date.now()/60000);
+    const tickStartedAt=new Date().toISOString();
+    // Diagnostic heartbeat is persisted before any publisher fetch. It lets the
+    // public /api/push/status distinguish "Cron did not run" from "Cron ran but a
+    // shard collector failed", without changing any newsroom/UI behavior.
+    await stub.fetch("https://push.internal/background-heartbeat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tickStartedAt})}).catch(()=>{});
 
-    // V198 — Push no longer reads caches.default as its source of truth.
-    // Cloudflare Cache API entries are data-center-local, so a Cron invocation
-    // in one PoP could see an older lead than a visitor in another PoP. Instead,
-    // refresh the same rotating news shards and persist every successful shard in
-    // the globally-consistent PushHub Durable Object. PushHub then selects the
-    // background lead from that single shared snapshot even when zero tabs/PWAs
-    // are open anywhere.
-    const activeTick=minute-Math.floor(minute/5);
-    const group=BACKGROUND_SHARD_GROUPS[((activeTick%2)+2)%2];
-    const fresh=minute%5!==0?await refreshBackgroundNewsShards(env,ctx,group):new Map();
+    // V199 — the scheduled monitor now refreshes ALL six news shards every minute
+    // through isolated Worker requests. This is intentionally not caches.default:
+    // the public Cache API is PoP-local, and it is intentionally not six direct
+    // handleNews() calls inside this scheduled invocation either: those calls share
+    // one external-subrequest budget and can silently leave PushHub behind the live
+    // site. Six isolated requests give the server the same complete snapshot a new
+    // visitor can receive, without requiring any browser/PWA to be open.
+    const fresh=await refreshBackgroundNewsShards(env,ctx,ESCALATION_SHARDS);
     const shardObject={};
     for(const [shard,payload] of fresh.entries())shardObject[shard]=payload;
-    const backgroundResponse=await stub.fetch("https://push.internal/background-news",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shards:shardObject,generatedAt:new Date().toISOString()})});
+    const backgroundResponse=await stub.fetch("https://push.internal/background-news",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shards:shardObject,generatedAt:new Date().toISOString(),tickStartedAt,expectedShards:ESCALATION_SHARDS.length})});
     if(backgroundResponse.ok){
       const background=await backgroundResponse.json().catch(()=>null);
-      if(background?.payload)await stub.fetch("https://push.internal/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(background.payload)});
+      if(background?.payload){
+        background.payload.backgroundComplete=background.completeFresh===true;
+        background.payload.backgroundFreshShards=Number(background.storedThisRun||0);
+        await stub.fetch("https://push.internal/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(background.payload)});
+      }
     }else{
-      console.warn("V198 global Push news state failed",backgroundResponse.status);
+      console.warn("V199 global Push news state failed",backgroundResponse.status);
     }
 
-    try{const r=await fetch("https://www.oref.org.il/WarningMessages/alert/alerts.json",{headers:{"Accept":"application/json,text/plain,*/*","Referer":"https://www.oref.org.il/","X-Requested-With":"XMLHttpRequest","User-Agent":"Mozilla/5.0 (compatible; KoteretPlus/198.0; +https://www.oref.org.il/)"},cf:{cacheEverything:true,cacheTtl:4}});if(r.ok){const raw=(await r.text()).replace(/^\uFEFF/,"").trim(),parsed=raw&&raw!=="null"?JSON.parse(raw):null,alerts=normalizeOrefCurrentAlerts(parsed);if(alerts.length)await queueOrefAlerts(env,alerts);}}catch(error){console.warn("Scheduled OREF push monitor failed",error);}
+    try{const r=await fetch("https://www.oref.org.il/WarningMessages/alert/alerts.json",{headers:{"Accept":"application/json,text/plain,*/*","Referer":"https://www.oref.org.il/","X-Requested-With":"XMLHttpRequest","User-Agent":"Mozilla/5.0 (compatible; KoteretPlus/199.0; +https://www.oref.org.il/)"},cf:{cacheEverything:true,cacheTtl:4}});if(r.ok){const raw=(await r.text()).replace(/^\uFEFF/,"").trim(),parsed=raw&&raw!=="null"?JSON.parse(raw):null,alerts=normalizeOrefCurrentAlerts(parsed);if(alerts.length)await queueOrefAlerts(env,alerts);}}catch(error){console.warn("Scheduled OREF push monitor failed",error);}
 
-    // Escalation keeps its existing collection path. V198 intentionally changes
-    // only the Push pipeline.
+    // Escalation stays on its existing cadence. V199 changes only Push/news
+    // monitoring; the escalation model itself remains untouched.
     if(minute%5===0){const escalationContext=await collectServerPushContext(env,ctx,{refresh:false});await runBackgroundEscalationFromNews(env,escalationContext.recent);}
   } catch(error) {
-    console.warn("V198 scheduled push monitor failed",error);
+    console.warn("V199 scheduled push monitor failed",error);
   }
 }
 
@@ -3641,7 +3692,7 @@ async function encryptWebPushPayload(subscription,payloadText) {
 }
 
 function compactPushPayload(notification={}) {
-  // V198: use the Declarative Web Push standard envelope. Safari/iOS 18.4+
+  // V199: use the Declarative Web Push standard envelope. Safari/iOS 18.4+
   // can display this notification even if Service Worker JavaScript is unable
   // to run in time. Older browsers still receive the same encrypted JSON and
   // sw.js reads the koteret metadata below, so this remains backwards compatible.
@@ -3687,7 +3738,7 @@ async function sendWebPush(subscription,keys,notification) {
     const response=await fetch(endpoint,{method:"POST",headers:{Authorization:authorization,TTL:"900",Urgency:"high",Topic:pushTopicHeader(notification),"Content-Encoding":"aes128gcm","Content-Type":"application/octet-stream"},body});
     return {ok:response.ok,status:response.status,mode:"payload"};
   }catch(error){
-    // V198: never downgrade a userVisibleOnly notification to an empty/silent
+    // V199: never downgrade a userVisibleOnly notification to an empty/silent
     // push. In particular WebKit can penalize silent pushes and an empty message
     // cannot use the declarative fallback when the PWA is closed. Keep the
     // failure explicit so the reliable sender can retry the encrypted payload.
@@ -4040,7 +4091,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"198.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"199.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4247,7 +4298,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"198.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"199.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4280,7 +4331,10 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"198.0.0"},200,{"Cache-Control":"no-store"});
+      const background=await storage.get("push.backgroundNews.status");
+      const heartbeat=await storage.get("push.backgroundHeartbeat");
+      const lastDecision=await storage.get("lead.lastDecision");
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"199.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -4321,6 +4375,13 @@ export class PushHub {
       catch(error){await storage.delete("escalation.lock");return json({error:String(error?.message||error)},500,{"Cache-Control":"no-store"});}
     }
 
+    if(url.pathname==="/background-heartbeat"&&request.method==="POST"){
+      const data=await request.json().catch(()=>({}));
+      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"199.0.0"};
+      await storage.put("push.backgroundHeartbeat",heartbeat);
+      return json({ok:true,...heartbeat},200,{"Cache-Control":"no-store"});
+    }
+
     if(url.pathname==="/background-news"&&request.method==="POST"){
       const data=await request.json().catch(()=>({}));
       const incoming=data?.shards&&typeof data.shards==="object"?data.shards:{};
@@ -4356,7 +4417,10 @@ export class PushHub {
       }).map((item)=>({...item,category:classify(item)})).sort((a,b)=>Date.parse(b.publishedAt)-Date.parse(a.publishedAt));
       const entry=recent.length?selectServerPushLead(clusterItems(recent),now):null;
       const payload=serverLeadPayload(entry);
-      const status={at:new Date(now).toISOString(),storedThisRun:storedCount,availableShards:payloads.length,shardAges,recentItems:recent.length,leadFingerprint:payload?.fingerprint||"",leadTitle:payload?.title||""};
+      const incomingShardNames=ESCALATION_SHARDS.filter((shard)=>incoming?.[shard]&&Array.isArray(incoming[shard]?.items));
+      const expectedShards=Math.max(1,Math.min(ESCALATION_SHARDS.length,Number(data?.expectedShards)||ESCALATION_SHARDS.length));
+      const completeFresh=storedCount>=expectedShards&&incomingShardNames.length>=expectedShards;
+      const status={at:new Date(now).toISOString(),tickStartedAt:String(data?.tickStartedAt||""),storedThisRun:storedCount,expectedShards,completeFresh,incomingShards:incomingShardNames,availableShards:payloads.length,shardAges,recentItems:recent.length,leadFingerprint:payload?.fingerprint||"",leadTitle:payload?.title||""};
       await storage.put("push.backgroundNews.status",status);
       return json({ok:true,payload, ...status},200,{"Cache-Control":"no-store"});
     }
@@ -4374,26 +4438,28 @@ export class PushHub {
         at:Number.isFinite(Date.parse(payload.at||0))?new Date(Date.parse(payload.at)).toISOString():new Date(now).toISOString(),
         firstAt:Number.isFinite(Date.parse(payload.firstAt||0))?new Date(Date.parse(payload.firstAt)).toISOString():"",
         origin:String(payload.origin||"background")==="site"?"site":"background",
+        backgroundComplete:payload.backgroundComplete===true,
+        backgroundFreshShards:Math.max(0,Math.min(ESCALATION_SHARDS.length,Number(payload.backgroundFreshShards)||0)),
         receivedAt:new Date(now).toISOString()
       };
 
-      // V198 — the newsroom lead is the Push hook.  Once the same editorial
+      // V199 — the newsroom lead is the Push hook.  Once the same editorial
       // selector that powers "הסיפור המרכזי עכשיו" replaces the lead, Push is
       // no longer allowed to veto that replacement with a second set of quality,
       // age or stability rules.  A browser render can trigger this immediately;
       // the scheduled Worker feeds the very same endpoint when every tab/PWA is
       // closed, so delivery never depends on a visitor being online.
       const previousLatest=await storage.get("lead.latest");
-      let observed=await storage.get("lead.observed.v198")||await storage.get("lead.observed.v197");
+      let observed=await storage.get("lead.observed.v199")||await storage.get("lead.observed.v198")||await storage.get("lead.observed.v197");
       if(!observed&&previousLatest?.fingerprint)observed=previousLatest;
       let lastState=await storage.get("lead.lastPushedState");
       await storage.put("lead.latest",payload);
 
       // First ever observation only establishes a baseline. The previous-release
       // lead.latest is reused during upgrade, preventing a deploy from replaying
-      // a headline that was already on screen before V198 became active.
+      // a headline that was already on screen before V199 became active.
       if(!observed?.fingerprint){
-        await storage.put("lead.observed.v198",payload);
+        await storage.put("lead.observed.v199",payload);
         await storage.delete("lead.candidate");
         return json({ok:true,primed:true,pushed:0,reason:"first-observation"});
       }
@@ -4411,23 +4477,25 @@ export class PushHub {
         // winner on two consecutive scheduled observations (~1 minute) so a
         // half-refreshed shard can never create a false Push. No quality/freshness
         // veto is applied after that confirmation.
-        if(payload.origin==="background"){
+        if(payload.origin==="background"&&payload.backgroundComplete!==true){
+          // Partial scheduled snapshots keep the safety gate. A complete V199
+          // six-shard snapshot is already deterministic and may fire immediately.
           const candidateKey=pushIdentityHash(payload.fingerprint);
-          let candidate=await storage.get("lead.backgroundCandidate.v198")||await storage.get("lead.backgroundCandidate.v197");
+          let candidate=await storage.get("lead.backgroundCandidate.v199")||await storage.get("lead.backgroundCandidate.v198")||await storage.get("lead.backgroundCandidate.v197");
           if(candidate?.payload&&leadPushSameStory(candidate.payload,payload)){
             candidate={...candidate,key:candidateKey,observations:Number(candidate.observations||1)+1,lastSeenAt:new Date(now).toISOString(),payload};
           }else{
             candidate={key:candidateKey,observations:1,firstSeenAt:new Date(now).toISOString(),lastSeenAt:new Date(now).toISOString(),payload};
           }
-          await storage.put("lead.backgroundCandidate.v198",candidate);
+          await storage.put("lead.backgroundCandidate.v199",candidate);
           const stableMs=now-Date.parse(candidate.firstSeenAt||now);
           if(candidate.observations<2||stableMs<45000){
-            await storage.put("lead.lastDecision",{at:new Date().toISOString(),origin:payload.origin,fingerprint:payload.fingerprint,title:payload.title,changeKind:null,reason:"background-confirmation",queued:false,observations:candidate.observations,stableSeconds:Math.round(stableMs/1000)});
-            return json({ok:true,changed:true,pending:true,queued:false,reason:"background-confirmation",observations:candidate.observations,stableSeconds:Math.round(stableMs/1000),subscriptions:Number((await ensurePushStats(storage)).count||0)});
+            await storage.put("lead.lastDecision",{at:new Date().toISOString(),origin:payload.origin,fingerprint:payload.fingerprint,title:payload.title,changeKind:null,reason:"background-partial-confirmation",queued:false,observations:candidate.observations,stableSeconds:Math.round(stableMs/1000),backgroundFreshShards:payload.backgroundFreshShards});
+            return json({ok:true,changed:true,pending:true,queued:false,reason:"background-partial-confirmation",observations:candidate.observations,stableSeconds:Math.round(stableMs/1000),backgroundFreshShards:payload.backgroundFreshShards,subscriptions:Number((await ensurePushStats(storage)).count||0)});
           }
         }
         changeKind="new-story";
-        changeReason=payload.origin==="site"?"lead-replaced":"background-lead-confirmed";
+        changeReason=payload.origin==="site"?"lead-replaced":payload.backgroundComplete===true?"background-complete-lead":"background-partial-confirmed";
       }else if(lastState){
         // The same story may legitimately receive another Push only when a new
         // report materially changes the headline. Small rewrites/source-count
@@ -4482,9 +4550,9 @@ export class PushHub {
       // Always remember what the newsroom currently shows. This state is about
       // detecting the NEXT replacement, not about deciding whether a prior Push
       // was delivered.
-      await storage.put("lead.observed.v198",payload);
+      await storage.put("lead.observed.v199",payload);
       await storage.delete("lead.candidate");
-      await storage.delete("lead.backgroundCandidate.v198");await storage.delete("lead.backgroundCandidate.v197");
+      await storage.delete("lead.backgroundCandidate.v199");await storage.delete("lead.backgroundCandidate.v198");await storage.delete("lead.backgroundCandidate.v197");
       await storage.put("lead.lastDecision",{at:new Date().toISOString(),origin:payload.origin,fingerprint:payload.fingerprint,title:payload.title,changeKind:changeKind||null,reason:changeReason||(!changeKind?"same-story":"queued"),queued:!!queued?.queued,duplicate:!!queued?.duplicate});
       return json({ok:queued?queued.ok:true,changed:!!changeKind,queued:!!queued?.queued,duplicate:!!queued?.duplicate,changeKind:changeKind||null,reason:changeReason||null,origin:payload.origin,subscriptions:Number((await ensurePushStats(storage)).count||0)});
     }
@@ -4517,7 +4585,7 @@ export class PushHub {
             if(updated.deviceId){const mapped=await storage.get(`device:${updated.deviceId}`);if(mapped===job.targetKey)await storage.delete(`device:${updated.deviceId}`);}
             await updatePushStats(storage,-1,updated.platform||pushPlatformFromUserAgent(updated.userAgent));job.removed=1;
           }else if(isTransientPushStatus(result?.status)&&Number(job.retryCount||0)<3){
-            // V198: a provider/network hiccup must not be lost just because the
+            // V199: a provider/network hiccup must not be lost just because the
             // first alarm finished. Keep this exact subscriber/event as the
             // active job and retry later. Topic + device fingerprint dedupe make
             // retries safe if the provider actually accepted an earlier attempt.
@@ -4596,7 +4664,7 @@ export class PushHub {
         else if(result.remove){const invalidId=String(result.key||"").replace(/^sub:/,"");if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:result.status||410});await storage.delete(result.key);if(result.row?.deviceId){const mapped=await storage.get(`device:${result.row.deviceId}`);if(mapped===result.key)await storage.delete(`device:${result.row.deviceId}`);}await updatePushStats(storage,-1,result.row?.platform||pushPlatformFromUserAgent(result.row?.userAgent));job.removed+=1;}
         else {
           job.failed+=1;
-          // V198: do not lose a subscriber on a temporary Apple/Chrome push
+          // V199: do not lose a subscriber on a temporary Apple/Chrome push
           // service/network failure. The initial fan-out continues for everyone
           // else and a targeted alarm retries this exact endpoint afterwards.
           if(isTransientPushStatus(result?.status))await queueTargetPushRetry(storage,job,result.key,1);
