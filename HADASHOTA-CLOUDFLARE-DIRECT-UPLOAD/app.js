@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "200.0.0";
+const KOTERET_CLIENT_BUILD = "211.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -427,8 +427,12 @@ function init() {
   installInteractionSafetyNet();
   registerServiceWorker();
   verifyApiVersion();
-  const restoredInstantly = restoreFastRenderSnapshot();
-  if (!restoredInstantly) restoreLocalLastGood();
+  const restoredInstantly = restoreFastRenderSnapshot({ skipLead: true });
+  if (!restoredInstantly) restoreLocalLastGood({ skipLead: true });
+  // V209: keep the lead module in its loading state for the entire initial
+  // newsroom collection. Do not paint a local snapshot or /api/push/latest
+  // bootstrap headline: only the fully merged live newsroom round may reveal
+  // the lead story. This guarantees a single transition: loading -> current lead.
   // Utilities are secondary to first paint. They fill in shortly afterwards.
   setTimeout(loadUtilities, restoredInstantly ? 650 : 150);
   initPromoCard();
@@ -447,12 +451,221 @@ function init() {
   // browser action that explicitly forces all publishers; automatic/lifecycle
   // refreshes reuse the shared snapshot so one visitor cannot re-scan every
   // source just by opening or refocusing the page.
-  loadNews(false).catch((error) => console.warn("Initial news load failed", error));
+  loadNews(false).then(async () => {
+    // V211: the fully merged newsroom remains authoritative. If that round has
+    // no eligible lead, the latest server-verified lead may hydrate BOTH the
+    // initial loading state and the temporary "waiting for more sources" state.
+    // V209 only allowed hydration while is-initializing was still present, so a
+    // render that reached the waiting state first could permanently block the
+    // fallback. Corroboration rules and Push delivery remain unchanged.
+    if (!state.currentLeadEntry) {
+      const hydrated = await hydrateInitialLeadFromServer({ allowWaitingState: true });
+      if (!hydrated && el.leadStory?.classList.contains("is-initializing")) {
+        el.leadStory.classList.remove("is-initializing");
+        renderLeadStory();
+      }
+    }
+  }).catch((error) => console.warn("Initial news load failed", error));
   restartAutoRefresh();
   // First-visit Push offer: wait for the first paint/news merge so the dialog is responsive,
   // but still show it automatically on a new visit. App installation itself is never auto-prompted.
   window.setTimeout(maybeShowNotificationOffer, 5000);
   syncInstallControl();
+}
+
+function findFullServerFallbackLeadEntry(data) {
+  const serverFingerprint = String(data?.fingerprint || "").trim().toLowerCase();
+  const serverTitle = cleanDisplayText(data?.title || "");
+  const serverTokens = clientTitleTokens(cleanDisplayTitle(serverTitle));
+  const serverAtMs = Date.parse(data?.at || 0);
+  const sourceCount = Math.max(2, Math.min(100, Number(data?.sources) || 0));
+  const serverNow = Date.parse(state.lastDataGeneratedAt || "");
+  const now = Number.isFinite(serverNow) ? serverNow : Date.now();
+  const corroborationWindowMs = 150 * 60 * 1000;
+
+  const candidates = state.items.map((item) => {
+    const reports = normalizeClusterReports(item);
+    const latestAt = clusterLatestAt(item);
+    const latestMs = Date.parse(latestAt);
+    const ageMinutes = Number.isFinite(latestMs) ? Math.max(0, (now - latestMs) / 60_000) : 9999;
+    const recentReports = reports.filter((report) => {
+      const reportMs = Date.parse(report.publishedAt || 0);
+      if (!Number.isFinite(reportMs) || !Number.isFinite(latestMs)) return false;
+      const delta = latestMs - reportMs;
+      return delta >= -5 * 60 * 1000 && delta <= corroborationWindowMs;
+    });
+
+    const candidateFingerprint = leadFingerprint({ item });
+    const exactFingerprint = !!serverFingerprint && candidateFingerprint === serverFingerprint;
+    const candidateTokens = new Set();
+    for (const title of [item?.title, ...reports.map((report) => report?.title)].filter(Boolean)) {
+      for (const token of clientTitleTokens(cleanDisplayTitle(title))) candidateTokens.add(token);
+    }
+    const overlap = [...serverTokens].filter((token) => candidateTokens.has(token)).length;
+    const overlapRatio = serverTokens.size ? overlap / serverTokens.size : 0;
+    const timeDistance = Number.isFinite(serverAtMs) && Number.isFinite(latestMs) ? Math.abs(serverAtMs - latestMs) : Infinity;
+    const strongTitleMatch = overlap >= 3 && overlapRatio >= 0.55 && timeDistance <= STORED_LEAD_HARD_MAX_AGE_MS;
+    if (!exactFingerprint && !strongTitleMatch) return null;
+
+    const uniqueSources = Math.max(sourceCount, recentReports.length);
+    const hasOfficial = data?.official === true || recentReports.some((report) => report.official);
+    const hasVerified = recentReports.some((report) => report.verified);
+    const reportTimes = recentReports.map((report) => Date.parse(report.publishedAt || 0)).filter(Number.isFinite);
+    const spreadMinutes = reportTimes.length > 1
+      ? Math.max(0, Math.round((Math.max(...reportTimes) - Math.min(...reportTimes)) / 60_000))
+      : 0;
+    const qualificationAt = uniqueSources >= 3 ? leadQualificationAt(recentReports) : null;
+    const hotScore = storyHotScore(item);
+    const sourceBoost = Math.min(uniqueSources, 8) * 7;
+    const recencyBoost = ageMinutes <= 10 ? 34 : ageMinutes <= 25 ? 26 : ageMinutes <= 45 ? 18 : ageMinutes <= 60 ? 12 : ageMinutes <= 180 ? 4 : 0;
+    const authorityBoost = hasOfficial ? 13 : hasVerified ? 5 : 0;
+    const velocityBoost = uniqueSources >= 3 && spreadMinutes <= 20 ? 12 : uniqueSources >= 2 && spreadMinutes <= 35 ? 6 : 0;
+    const score = hotScore * .75 + sourceBoost + recencyBoost + authorityBoost + velocityBoost;
+
+    return {
+      exactFingerprint,
+      overlap,
+      overlapRatio,
+      timeDistance,
+      entry: {
+        item,
+        reports,
+        recentReports,
+        uniqueSources,
+        ageMinutes,
+        latestAt: Number.isFinite(serverAtMs) ? new Date(serverAtMs).toISOString() : latestAt,
+        qualificationAt,
+        score,
+        hotScore,
+        hasOfficial,
+        spreadMinutes,
+        leadMode: uniqueSources >= 3 ? "verified" : "developing"
+      }
+    };
+  }).filter(Boolean).sort((a, b) =>
+    Number(b.exactFingerprint) - Number(a.exactFingerprint) ||
+    b.overlapRatio - a.overlapRatio ||
+    b.overlap - a.overlap ||
+    a.timeDistance - b.timeDistance
+  );
+
+  return candidates[0]?.entry || null;
+}
+
+async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) {
+  if (!el.leadStory || !el.leadStoryTitle) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort("initial_lead_timeout"), 2600);
+  try {
+    const response = await fetch(`/api/push/latest?_=${Date.now()}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+      credentials: "same-origin"
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    const title = cleanDisplayText(data?.title || "");
+    const sourceCount = Math.max(0, Number(data?.sources) || 0);
+    const storyAt = Date.parse(data?.at || 0);
+    // Freshness of the fallback is based on when the server last accepted this
+    // verified lead, not only on the timestamp of the oldest report inside it.
+    // The background selector itself is capped at three hours, so this preserves
+    // the intended hard window without rejecting a recently re-verified lead.
+    const verifiedAt = Date.parse(data?.receivedAt || data?.generatedAt || data?.at || 0);
+    const serverLeadAge = Number.isFinite(verifiedAt) ? Date.now() - verifiedAt : Infinity;
+    if (!title || sourceCount < 2 || serverLeadAge < -5 * 60 * 1000 || serverLeadAge > STORED_LEAD_HARD_MAX_AGE_MS) return false;
+
+    // A real live newsroom winner is always authoritative. V211 additionally
+    // allows the server fallback to replace the explicit waiting placeholder;
+    // this is the V209 dead-end seen in production.
+    if (state.currentLeadEntry) return false;
+    const waitingTitle = cleanDisplayText(el.leadStoryTitle.textContent || "");
+    const isWaitingPlaceholder = /ממתין לאימות|מתחבר לעדכונים|הסיפור המרכזי נטען|אוספים ומצליבים/.test(waitingTitle);
+    const mayHydrate = el.leadStory.classList.contains("is-initializing") || (allowWaitingState && isWaitingPlaceholder);
+    if (!mayHydrate) return false;
+
+    // V211: whenever the verified server lead is still present in the merged
+    // newsroom snapshot, restore its FULL cluster and pass it through the exact
+    // same renderer as a normal live winner. This preserves media, editorial
+    // deck, source chips, verification/hot score, timeline and "what changed"
+    // instead of painting the reduced bootstrap card used by V209/V210.
+    const fullFallbackEntry = findFullServerFallbackLeadEntry(data);
+    if (fullFallbackEntry) {
+      state.currentLeadEntry = fullFallbackEntry;
+      state.forceLeadReevaluation = false;
+      renderLeadStory();
+      const renderedTitle = cleanDisplayText(el.leadStoryTitle?.textContent || "");
+      const stillPlaceholder = /ממתין לאימות|מתחבר לעדכונים|הסיפור המרכזי נטען|אוספים ומצליבים/.test(renderedTitle);
+      if (!stillPlaceholder) return true;
+      state.currentLeadEntry = null;
+    }
+
+    el.leadStoryTitle.textContent = title;
+    applyLeadTitleSizing(title);
+    el.leadStoryPreview.textContent = cleanDisplayText(data?.body || `${sourceCount} מקורות מדווחים`);
+    el.leadStorySource.textContent = "כותרת פלוס";
+    el.leadStoryAge.textContent = formatAge(data?.at || data?.generatedAt || new Date().toISOString());
+    el.leadStoryCount.textContent = `${sourceCount} ${sourceCount === 1 ? "מקור מדווח" : "מקורות מדווחים"}`;
+    el.leadStorySources.innerHTML = "";
+    if (el.leadHotScore) el.leadHotScore.textContent = "🔥 חום —";
+    if (el.leadVerification) {
+      el.leadVerification.textContent = `✓ ${sourceCount} מקורות${data?.official ? " · כולל מקור רשמי" : ""}`;
+    }
+    if (el.leadTimeline) {
+      el.leadTimeline.innerHTML = "";
+      el.leadTimeline.closest("details")?.classList.add("hidden");
+    }
+    el.leadChanges?.classList.add("hidden");
+    if (el.leadStoryLabelText) el.leadStoryLabelText.textContent = "הסיפור המרכזי עכשיו";
+    el.leadStoryLiveBadge?.classList.remove("hidden");
+    el.leadStorySignal?.classList.add("hidden");
+
+    // Reuse visual/link metadata only when it belongs to the exact same server
+    // fingerprint. A mismatched local snapshot is never allowed to flash.
+    let localVisual = null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem("hadashota.publicLead.v1") || "null");
+      if (parsed && String(parsed.fingerprint || "") === String(data?.fingerprint || "")) localVisual = parsed;
+    } catch {}
+
+    const localHref = safeHttpHref(localVisual?.link || "");
+    const localImage = safeHttpHref(localVisual?.image || "");
+    setOptionalLink(el.leadStoryLink, localHref);
+    if (localHref) {
+      el.leadStoryCta.href = localHref;
+      el.leadStoryCta.classList.remove("hidden");
+    } else {
+      el.leadStoryCta.removeAttribute("href");
+      el.leadStoryCta.classList.add("hidden");
+    }
+
+    if (localImage) {
+      setOptionalLink(el.leadStoryMedia, localHref);
+      el.leadStoryImage.onerror = () => {
+        el.leadStoryImage.removeAttribute("src");
+        el.leadStoryMedia.classList.add("image-unavailable");
+      };
+      el.leadStoryImage.src = localImage;
+      el.leadStoryMedia.classList.remove("hidden", "image-unavailable");
+      el.leadStory.classList.add("has-media");
+    } else {
+      el.leadStoryImage.removeAttribute("src");
+      el.leadStoryMedia.classList.add("hidden", "image-unavailable");
+      el.leadStory.classList.remove("has-media");
+    }
+
+    el.leadStory.dataset.serverLead = "1";
+    el.leadStory.dataset.serverLeadAt = String(verifiedAt);
+    if (Number.isFinite(storyAt)) el.leadStory.dataset.serverStoryAt = String(storyAt);
+    el.leadStory.classList.remove("hidden", "is-initializing");
+    return true;
+  } catch (error) {
+    if (error?.name !== "AbortError") console.warn("Initial server lead bootstrap failed", error);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function verifyApiVersion() {
@@ -469,9 +682,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V200 · API ${apiVersion}` : "גרסה V200 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V211 · API ${apiVersion}` : "גרסה V211 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V200 · API לא מחובר";
+    marker.textContent = "גרסה V211 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1381,7 +1594,8 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     state.dataDelayed = true;
     state.dataDelaySeverity = "major";
     state.delayedShards = NEWS_SHARDS.map((shard) => ({ shard, reason: "request_failed", localFallback: true }));
-    const restored = state.items.length > 0 || restoreLocalLastGood();
+    const keepInitialLeadLoading = !!el.leadStory?.classList.contains("is-initializing");
+    const restored = state.items.length > 0 || restoreLocalLastGood({ skipLead: keepInitialLeadLoading });
     setDataStatus(true, restored, "major");
     scheduleNewsRetry();
     if (state.autoRefresh && !state.timer) scheduleNextRefresh(getRefreshInterval());
@@ -1495,7 +1709,7 @@ function persistFastRenderSnapshot(data) {
   }
 }
 
-function restoreFastRenderSnapshot() {
+function restoreFastRenderSnapshot(options = {}) {
   try {
     const raw = localStorage.getItem(FAST_RENDER_SNAPSHOT_KEY);
     if (!raw) return false;
@@ -1518,7 +1732,7 @@ function restoreFastRenderSnapshot() {
     state.delayedShards = [];
     if (el.lastUpdated) el.lastUpdated.textContent = `עודכן ${formatClock(data.generatedAt)}`;
     renderStats(data);
-    render();
+    render(options.skipLead ? { skipLead: true } : {});
     state.lastNewsFingerprint = newsSnapshotFingerprint(data);
     return true;
   } catch (error) {
@@ -1575,7 +1789,7 @@ function readShardLastGood(shard) {
   return null;
 }
 
-function restoreLocalLastGood() {
+function restoreLocalLastGood(options = {}) {
   const payloads = NEWS_SHARDS.map(readShardLastGood).filter(Boolean);
   if (!payloads.length) return false;
   const data = mergeNewsPayloads(payloads.map((payload) => ({ ...payload, stale: true, localFallback: true })));
@@ -1592,7 +1806,7 @@ function restoreLocalLastGood() {
     : { shard, reason: "unavailable", localFallback: false, generatedAt: null });
   el.lastUpdated.textContent = `מוצגים נתונים שמורים · ${formatClock(data.generatedAt)}`;
   renderStats(data);
-  render();
+  render(options.skipLead ? { skipLead: true } : {});
   state.lastNewsFingerprint = newsSnapshotFingerprint(data);
   setDataStatus(true, true, "major");
   return true;
@@ -3772,9 +3986,38 @@ function renderLeadStory() {
   // doing so would reintroduce cross-device divergence and could revive a story
   // that no longer exists in the current merged feed.
 
+  // V211: a temporary merged round with no eligible replacement must not erase
+  // an already verified lead that this session is showing. Retain it for the same
+  // three-hour hard window used by the editorial selector. This avoids the
+  // verified story -> waiting placeholder regression during automatic refreshes.
+  if (!winner && state.currentLeadEntry) {
+    const previous = state.currentLeadEntry;
+    const previousAt = Date.parse(previous.latestAt || previous.item?.latestReportAt || previous.item?.publishedAt || 0);
+    const previousAge = Number.isFinite(previousAt) ? now - previousAt : Infinity;
+    if (previousAge >= -5 * 60 * 1000 && previousAge <= STORED_LEAD_HARD_MAX_AGE_MS && Number(previous.uniqueSources || 0) >= 2) {
+      winner = previous;
+    }
+  }
+
   if (!winner) {
     state.currentLeadEntry = null;
     state.forceLeadReevaluation = false;
+
+    // V209 initial entry: do not replace the intentional loading skeleton before
+    // the server-verified fallback has had one chance to hydrate the hero.
+    if (el.leadStory?.classList.contains("is-initializing")) return;
+
+    // If the live browser round temporarily has no qualifying winner, preserve a
+    // fresh server-verified lead already shown on this page. This prevents the
+    // whole main-story module from disappearing on the next automatic refresh.
+    const serverLeadAt = Number(el.leadStory?.dataset?.serverLeadAt || 0);
+    if (el.leadStory?.dataset?.serverLead === "1" && serverLeadAt > 0 && Date.now() - serverLeadAt <= STORED_LEAD_HARD_MAX_AGE_MS) return;
+    if (el.leadStory) {
+      delete el.leadStory.dataset.serverLead;
+      delete el.leadStory.dataset.serverLeadAt;
+      delete el.leadStory.dataset.serverStoryAt;
+    }
+
     const hasFeed = state.items.length > 0;
     el.leadStoryTitle.textContent = hasFeed ? "ממתין לאימות ממקורות נוספים" : "מתחבר לעדכונים האחרונים…";
     el.leadStoryPreview.textContent = hasFeed
@@ -3818,6 +4061,11 @@ function renderLeadStory() {
 
   state.currentLeadEntry = winner;
   state.forceLeadReevaluation = false;
+  if (el.leadStory) {
+    delete el.leadStory.dataset.serverLead;
+    delete el.leadStory.dataset.serverLeadAt;
+    delete el.leadStory.dataset.serverStoryAt;
+  }
 
   const winnerFingerprint = leadFingerprint(winner);
   if (winnerFingerprint !== state.displayedLeadFingerprint) {
@@ -3894,7 +4142,9 @@ function renderLeadStory() {
     savedAt:Date.now()
   };
   try { localStorage.setItem("hadashota.publicLead.v1", JSON.stringify(publicLeadSnapshot)); } catch {}
-  syncDisplayedHotStoryToServer(publicLeadSnapshot);
+  // V209: browser renders may update the public display snapshot, but must never
+  // trigger Push fan-out. Autonomous Cron/background is the sole Push decision source.
+  syncDisplayedHotStoryToServer(publicLeadSnapshot,{displayOnly:true});
   if (leadHref) {
     el.leadStoryCta.href = leadHref;
     el.leadStoryCta.classList.remove("hidden");
@@ -4238,7 +4488,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=200.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=211.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4308,7 +4558,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=200.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=211.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4344,6 +4594,22 @@ async function ensureServerPushSubscription() {
 
   const applicationServerKey = await urlBase64ToUint8Array(config.publicKey);
   let subscription = await registration.pushManager.getSubscription();
+  // V201: a PushSubscription can only be reused when it is bound to the same
+  // VAPID applicationServerKey the server is currently signing with. Apple
+  // reports a mismatch as HTTP 400 VapidPkHashMismatch. Compare locally and
+  // rotate silently (permission is already granted) instead of storing a broken
+  // endpoint forever.
+  if(subscription?.options?.applicationServerKey){
+    try{
+      const existingKey=new Uint8Array(subscription.options.applicationServerKey);
+      const sameKey=existingKey.length===applicationServerKey.length&&existingKey.every((value,index)=>value===applicationServerKey[index]);
+      if(!sameKey){
+        await fetch("/api/push/unsubscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:subscription.endpoint})}).catch(()=>{});
+        await subscription.unsubscribe().catch(()=>{});
+        subscription=null;
+      }
+    }catch{}
+  }
   // V186 one-time iOS repair: refresh the PushSubscription endpoint without a
   // new permission prompt. This recovers Home-Screen apps whose Apple endpoint
   // expired while Notification.permission still remained "granted".
