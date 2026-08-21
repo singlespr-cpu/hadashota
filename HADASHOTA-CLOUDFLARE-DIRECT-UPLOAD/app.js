@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "211.0.0";
+const KOTERET_CLIENT_BUILD = "212.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -452,7 +452,7 @@ function init() {
   // refreshes reuse the shared snapshot so one visitor cannot re-scan every
   // source just by opening or refocusing the page.
   loadNews(false).then(async () => {
-    // V211: the fully merged newsroom remains authoritative. If that round has
+    // V212: the fully merged newsroom remains authoritative. If that round has
     // no eligible lead, the latest server-verified lead may hydrate BOTH the
     // initial loading state and the temporary "waiting for more sources" state.
     // V209 only allowed hydration while is-initializing was still present, so a
@@ -471,6 +471,42 @@ function init() {
   // but still show it automatically on a new visit. App installation itself is never auto-prompted.
   window.setTimeout(maybeShowNotificationOffer, 5000);
   syncInstallControl();
+}
+
+function serverFullDisplayEntry(data) {
+  const raw = data?.displayEntry;
+  if (!raw?.item || !raw?.fingerprint) return null;
+  if (String(raw.fingerprint || "") !== String(data?.fingerprint || "")) return null;
+
+  const latestAt = raw.latestAt || raw.item?.latestReportAt || raw.item?.publishedAt || data?.at || "";
+  const latestMs = Date.parse(latestAt || 0);
+  const ageMs = Number.isFinite(latestMs) ? Date.now() - latestMs : Infinity;
+  if (ageMs < -5 * 60 * 1000 || ageMs > STORED_LEAD_HARD_MAX_AGE_MS) return null;
+
+  const item = { ...raw.item };
+  if (!Array.isArray(item.related)) item.related = Array.isArray(raw.reports) ? raw.reports : [];
+  if (!Array.isArray(item.updates)) item.updates = Array.isArray(raw.reports) ? raw.reports : [];
+  const reports = normalizeClusterReports(item);
+  const recentReports = Array.isArray(raw.recentReports) && raw.recentReports.length
+    ? dedupeReports(raw.recentReports)
+    : reports;
+  const uniqueSources = Math.max(2, Number(raw.uniqueSources) || Number(data?.sources) || recentReports.length || reports.length || 2);
+
+  return {
+    item,
+    reports,
+    recentReports,
+    uniqueSources,
+    ageMinutes: Math.max(0, Number(raw.ageMinutes) || ageMs / 60_000),
+    latestAt,
+    qualificationAt: uniqueSources >= 3 ? leadQualificationAt(recentReports) : null,
+    score: Number(raw.score) || 0,
+    hotScore: Number(raw.hotScore) || storyHotScore(item),
+    hasOfficial: raw.hasOfficial === true || recentReports.some((report) => report.official),
+    spreadMinutes: Math.max(0, Number(raw.spreadMinutes) || 0),
+    leadMode: uniqueSources >= 3 ? "verified" : "developing",
+    serverVerified: true
+  };
 }
 
 function findFullServerFallbackLeadEntry(data) {
@@ -576,7 +612,7 @@ async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) 
     const serverLeadAge = Number.isFinite(verifiedAt) ? Date.now() - verifiedAt : Infinity;
     if (!title || sourceCount < 2 || serverLeadAge < -5 * 60 * 1000 || serverLeadAge > STORED_LEAD_HARD_MAX_AGE_MS) return false;
 
-    // A real live newsroom winner is always authoritative. V211 additionally
+    // A real live newsroom winner is always authoritative. V212 additionally
     // allows the server fallback to replace the explicit waiting placeholder;
     // this is the V209 dead-end seen in production.
     if (state.currentLeadEntry) return false;
@@ -585,12 +621,15 @@ async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) 
     const mayHydrate = el.leadStory.classList.contains("is-initializing") || (allowWaitingState && isWaitingPlaceholder);
     if (!mayHydrate) return false;
 
-    // V211: whenever the verified server lead is still present in the merged
+    // V212: whenever the verified server lead is still present in the merged
     // newsroom snapshot, restore its FULL cluster and pass it through the exact
     // same renderer as a normal live winner. This preserves media, editorial
     // deck, source chips, verification/hot score, timeline and "what changed"
     // instead of painting the reduced bootstrap card used by V209/V210.
-    const fullFallbackEntry = findFullServerFallbackLeadEntry(data);
+    // V212: prefer the exact full cluster selected by the autonomous server.
+    // Local matching remains as a compatibility fallback for the first minute
+    // after deployment, before lead.fullDisplay has been populated.
+    const fullFallbackEntry = serverFullDisplayEntry(data) || findFullServerFallbackLeadEntry(data);
     if (fullFallbackEntry) {
       state.currentLeadEntry = fullFallbackEntry;
       state.forceLeadReevaluation = false;
@@ -682,9 +721,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V211 · API ${apiVersion}` : "גרסה V211 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V212 · API ${apiVersion}` : "גרסה V212 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V211 · API לא מחובר";
+    marker.textContent = "גרסה V212 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3986,7 +4025,7 @@ function renderLeadStory() {
   // doing so would reintroduce cross-device divergence and could revive a story
   // that no longer exists in the current merged feed.
 
-  // V211: a temporary merged round with no eligible replacement must not erase
+  // V212: a temporary merged round with no eligible replacement must not erase
   // an already verified lead that this session is showing. Retain it for the same
   // three-hour hard window used by the editorial selector. This avoids the
   // verified story -> waiting placeholder regression during automatic refreshes.
@@ -4488,7 +4527,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=211.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=212.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4558,7 +4597,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=211.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=212.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
