@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "213.0.0";
+const KOTERET_CLIENT_BUILD = "214.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -452,7 +452,7 @@ function init() {
   // refreshes reuse the shared snapshot so one visitor cannot re-scan every
   // source just by opening or refocusing the page.
   loadNews(false).then(async () => {
-    // V213: the fully merged newsroom remains authoritative. If that round has
+    // V214: the fully merged newsroom remains authoritative. If that round has
     // no eligible lead, the latest server-verified lead may hydrate BOTH the
     // initial loading state and the temporary "waiting for more sources" state.
     // V209 only allowed hydration while is-initializing was still present, so a
@@ -480,7 +480,7 @@ function serverFullDisplayEntry(data) {
 
   const latestAt = raw.latestAt || raw.item?.latestReportAt || raw.item?.publishedAt || data?.at || "";
   const latestMs = Date.parse(latestAt || 0);
-  // V213: a server fallback is fresh according to when the autonomous newsroom
+  // V214: a server fallback is fresh according to when the autonomous newsroom
   // last VERIFIED/accepted it, not according to the timestamp of the last report
   // inside that already-verified story. These clocks can legitimately differ by
   // hours during a quiet period. Using report age here caused the full renderer
@@ -561,11 +561,8 @@ function findFullServerFallbackLeadEntry(data) {
       : 0;
     const qualificationAt = uniqueSources >= 3 ? leadQualificationAt(recentReports) : null;
     const hotScore = storyHotScore(item);
-    const sourceBoost = Math.min(uniqueSources, 8) * 7;
-    const recencyBoost = ageMinutes <= 10 ? 34 : ageMinutes <= 25 ? 26 : ageMinutes <= 45 ? 18 : ageMinutes <= 60 ? 12 : ageMinutes <= 180 ? 4 : 0;
-    const authorityBoost = hasOfficial ? 13 : hasVerified ? 5 : 0;
-    const velocityBoost = uniqueSources >= 3 && spreadMinutes <= 20 ? 12 : uniqueSources >= 2 && spreadMinutes <= 35 ? 6 : 0;
-    const score = hotScore * .75 + sourceBoost + recencyBoost + authorityBoost + velocityBoost;
+    const editorial = leadEditorialMetrics({ uniqueSources, ageMinutes, spreadMinutes, hotScore, hasOfficial, hasVerified });
+    const score = editorial.score;
 
     return {
       exactFingerprint,
@@ -584,6 +581,10 @@ function findFullServerFallbackLeadEntry(data) {
         hotScore,
         hasOfficial,
         spreadMinutes,
+        breaking: editorial.breaking,
+        velocityBoost: editorial.velocityBoost,
+        burstBoost: editorial.burstBoost,
+        agePenalty: editorial.agePenalty,
         leadMode: uniqueSources >= 3 ? "verified" : "developing",
         serverVerified: true,
         serverVerifiedAt: Number.isFinite(serverVerifiedAt) ? serverVerifiedAt : Date.now()
@@ -623,7 +624,7 @@ async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) 
     const serverLeadAge = Number.isFinite(verifiedAt) ? Date.now() - verifiedAt : Infinity;
     if (!title || sourceCount < 2 || serverLeadAge < -5 * 60 * 1000 || serverLeadAge > STORED_LEAD_HARD_MAX_AGE_MS) return false;
 
-    // A real live newsroom winner is always authoritative. V213 additionally
+    // A real live newsroom winner is always authoritative. V214 additionally
     // allows the server fallback to replace the explicit waiting placeholder;
     // this is the V209 dead-end seen in production.
     if (state.currentLeadEntry) return false;
@@ -632,12 +633,12 @@ async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) 
     const mayHydrate = el.leadStory.classList.contains("is-initializing") || (allowWaitingState && isWaitingPlaceholder);
     if (!mayHydrate) return false;
 
-    // V213: whenever the verified server lead is still present in the merged
+    // V214: whenever the verified server lead is still present in the merged
     // newsroom snapshot, restore its FULL cluster and pass it through the exact
     // same renderer as a normal live winner. This preserves media, editorial
     // deck, source chips, verification/hot score, timeline and "what changed"
     // instead of painting the reduced bootstrap card used by V209/V210.
-    // V213: prefer the exact full cluster selected by the autonomous server.
+    // V214: prefer the exact full cluster selected by the autonomous server.
     // Local matching remains as a compatibility fallback for the first minute
     // after deployment, before lead.fullDisplay has been populated.
     const fullFallbackEntry = serverFullDisplayEntry(data) || findFullServerFallbackLeadEntry(data);
@@ -734,9 +735,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V213 · API ${apiVersion}` : "גרסה V213 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V214 · API ${apiVersion}` : "גרסה V214 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V213 · API לא מחובר";
+    marker.textContent = "גרסה V214 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3947,6 +3948,29 @@ function syncLeadVisualSnapshot(base,imageUrl="") {
   syncDisplayedHotStoryToServer(visual,{displayOnly:true});
 }
 
+// V214 — mirrored newsroom velocity model. Keep this in lockstep with
+// serverLeadEditorialMetrics() in _worker.js so browser display and autonomous
+// Push agree on which corroborated story is hottest.
+function leadEditorialMetrics({uniqueSources=0,ageMinutes=9999,spreadMinutes=999,hotScore=0,hasOfficial=false,hasVerified=false}={}) {
+  const sources=Math.max(0,Number(uniqueSources)||0);
+  const age=Math.max(0,Number(ageMinutes)||0);
+  const spread=Math.max(0,Number(spreadMinutes)||0);
+  const hot=Math.max(0,Math.min(100,Number(hotScore)||0));
+  const sourceBoost=Math.min(sources,8)*7;
+  const recencyBoost=age<=10?34:age<=25?26:age<=45?18:age<=60?12:age<=120?4:0;
+  const authorityBoost=hasOfficial?13:hasVerified?5:0;
+  const velocityBoost=sources>=5&&spread<=20?18:sources>=4&&spread<=15?16:sources>=3&&spread<=10?14:sources>=3&&spread<=20?12:sources>=2&&spread<=35?6:0;
+  const burst3=sources>=3&&age<=10&&spread<=10;
+  const burst4=sources>=4&&age<=15&&spread<=15;
+  const burst5=sources>=5&&age<=25&&spread<=20;
+  const officialBurst=hasOfficial&&sources>=3&&age<=15&&spread<=20;
+  const breaking=hot>=64&&(burst3||burst4||burst5||officialBurst);
+  const burstBoost=breaking?(sources>=5?38:sources>=4?34:hasOfficial?32:28):(sources>=3&&age<=30&&spread<=25?9:0);
+  const agePenalty=age<=60?0:age<=90?(age-60)*0.65:age<=120?19.5+(age-90)*0.9:Math.min(62,46.5+(age-120)*0.26);
+  const score=hot*.75+sourceBoost+recencyBoost+authorityBoost+velocityBoost+burstBoost-agePenalty;
+  return {score,velocityBoost,burstBoost,agePenalty,breaking};
+}
+
 function renderLeadStory() {
   // Use the server snapshot clock so every device evaluates freshness at the same moment.
   const serverNow = Date.parse(state.lastDataGeneratedAt || "");
@@ -3976,13 +4000,10 @@ function renderLeadStory() {
       : 0;
     const qualificationAt = uniqueSources >= 3 ? leadQualificationAt(recentReports) : null;
     const hotScore = storyHotScore(item);
-    const sourceBoost = Math.min(uniqueSources, 8) * 7;
-    const recencyBoost = ageMinutes <= 10 ? 34 : ageMinutes <= 25 ? 26 : ageMinutes <= 45 ? 18 : ageMinutes <= 60 ? 12 : ageMinutes <= 180 ? 4 : 0;
-    const authorityBoost = hasOfficial ? 13 : hasVerified ? 5 : 0;
-    const velocityBoost = uniqueSources >= 3 && spreadMinutes <= 20 ? 12 : uniqueSources >= 2 && spreadMinutes <= 35 ? 6 : 0;
-    const score = hotScore * .75 + sourceBoost + recencyBoost + authorityBoost + velocityBoost;
+    const editorial = leadEditorialMetrics({ uniqueSources, ageMinutes, spreadMinutes, hotScore, hasOfficial, hasVerified });
+    const score = editorial.score;
 
-    return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, qualificationAt, score, hotScore, hasOfficial, spreadMinutes };
+    return { item, reports, recentReports, uniqueSources, ageMinutes, latestAt, qualificationAt, score, hotScore, hasOfficial, spreadMinutes, breaking: editorial.breaking, velocityBoost: editorial.velocityBoost, burstBoost: editorial.burstBoost, agePenalty: editorial.agePenalty };
   });
 
   const deterministicSort = (a, b) =>
@@ -3998,14 +4019,17 @@ function renderLeadStory() {
   const verified = allEntries
     .filter((entry) => entry.uniqueSources >= 3 && entry.ageMinutes <= 60)
     .sort(deterministicSort);
+  const breakingVerified = verified
+    .filter((entry) => entry.breaking === true && entry.ageMinutes <= 25)
+    .sort(deterministicSort);
 
   // The winner is derived only from the current merged server snapshot.
-  // Never let a device-local saved lead influence eligibility: that used to make
-  // desktop, Safari and an installed PWA disagree even when they received the same feed.
-  let winner = verified[0] || null;
+  // A real multi-source burst may replace even a very recent lead; ordinary
+  // fluctuations still use the stable deterministic ranking.
+  let winner = breakingVerified[0] || verified[0] || null;
   const retainedThreeSource = allEntries
     .filter((entry) => entry.uniqueSources >= 3 && entry.ageMinutes > 60 && entry.ageMinutes <= 180)
-    .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) || deterministicSort(a,b));
+    .sort(deterministicSort);
 
   // A 2-source story is permitted only when the current snapshot contains a full
   // hour of observable history and no 3+ source story appears anywhere in that
@@ -4024,7 +4048,7 @@ function renderLeadStory() {
       .sort(deterministicSort);
     const olderTwoSource = allEntries
       .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes > 60 && entry.ageMinutes <= 180)
-      .sort((a,b) => Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) || deterministicSort(a,b));
+      .sort(deterministicSort);
     winner = freshTwoSource[0] || olderTwoSource[0] || null;
   }
 
@@ -4038,7 +4062,7 @@ function renderLeadStory() {
   // doing so would reintroduce cross-device divergence and could revive a story
   // that no longer exists in the current merged feed.
 
-  // V213: a temporary merged round with no eligible replacement must not erase
+  // V214: a temporary merged round with no eligible replacement must not erase
   // an already verified lead that this session is showing. Retain it for the same
   // three-hour hard window used by the editorial selector. This avoids the
   // verified story -> waiting placeholder regression during automatic refreshes.
@@ -4111,7 +4135,7 @@ function renderLeadStory() {
     const currentTooOld = Number.isFinite(currentLatestMs) && Date.now() - currentLatestMs > 3 * 60 * 60 * 1000;
     const scoreDelta = Number(winner.score || 0) - Number(currentEntry.score || 0);
     const sourceDelta = Number(winner.uniqueSources || 0) - Number(currentEntry.uniqueSources || 0);
-    const breakingUpgrade = scoreDelta >= LEAD_BREAKOUT_SCORE_DELTA || sourceDelta >= 2 || currentTooOld;
+    const breakingUpgrade = winner.breaking === true || scoreDelta >= LEAD_BREAKOUT_SCORE_DELTA || sourceDelta >= 2 || currentTooOld;
 
     if (!breakingUpgrade) winner = currentEntry;
   }
@@ -4545,7 +4569,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=213.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=214.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4615,7 +4639,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=213.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=214.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
