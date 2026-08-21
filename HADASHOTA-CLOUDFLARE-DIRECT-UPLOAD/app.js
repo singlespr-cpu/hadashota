@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "214.0.0";
+const KOTERET_CLIENT_BUILD = "216.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -48,6 +48,7 @@ const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 const LEAD_SNAPSHOT_KEY = "hadashota.lastQualifiedLead.v2";
 const DISPLAYED_LEAD_SNAPSHOT_KEY = "hadashota.displayedLead.v1";
 const STORED_LEAD_HARD_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+const DISPLAY_LEAD_HARD_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 const LEAD_SESSION_LOCK_MS = 2 * 60 * 1000;
 const LEAD_BREAKOUT_SCORE_DELTA = 30;
 
@@ -487,7 +488,7 @@ function serverFullDisplayEntry(data) {
   // to be rejected while the compact summary was still considered fresh.
   const verifiedAt = Date.parse(data?.receivedAt || data?.generatedAt || raw.savedAt || data?.at || latestAt || 0);
   const verifiedAgeMs = Number.isFinite(verifiedAt) ? Date.now() - verifiedAt : Infinity;
-  if (verifiedAgeMs < -5 * 60 * 1000 || verifiedAgeMs > STORED_LEAD_HARD_MAX_AGE_MS) return null;
+  if (verifiedAgeMs < -5 * 60 * 1000 || verifiedAgeMs > DISPLAY_LEAD_HARD_MAX_AGE_MS) return null;
   const ageMs = Number.isFinite(latestMs) ? Math.max(0, Date.now() - latestMs) : 0;
 
   const item = { ...raw.item };
@@ -497,7 +498,7 @@ function serverFullDisplayEntry(data) {
   const recentReports = Array.isArray(raw.recentReports) && raw.recentReports.length
     ? dedupeReports(raw.recentReports)
     : reports;
-  const uniqueSources = Math.max(2, Number(raw.uniqueSources) || Number(data?.sources) || recentReports.length || reports.length || 2);
+  const uniqueSources = Math.max(1, Number(raw.uniqueSources) || Number(data?.sources) || recentReports.length || reports.length || 1);
 
   return {
     item,
@@ -549,7 +550,7 @@ function findFullServerFallbackLeadEntry(data) {
     const overlap = [...serverTokens].filter((token) => candidateTokens.has(token)).length;
     const overlapRatio = serverTokens.size ? overlap / serverTokens.size : 0;
     const timeDistance = Number.isFinite(serverAtMs) && Number.isFinite(latestMs) ? Math.abs(serverAtMs - latestMs) : Infinity;
-    const strongTitleMatch = overlap >= 3 && overlapRatio >= 0.55 && timeDistance <= STORED_LEAD_HARD_MAX_AGE_MS;
+    const strongTitleMatch = overlap >= 3 && overlapRatio >= 0.55 && timeDistance <= DISPLAY_LEAD_HARD_MAX_AGE_MS;
     if (!exactFingerprint && !strongTitleMatch) return null;
 
     const uniqueSources = Math.max(sourceCount, recentReports.length);
@@ -622,7 +623,7 @@ async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) 
     // the intended hard window without rejecting a recently re-verified lead.
     const verifiedAt = Date.parse(data?.receivedAt || data?.generatedAt || data?.at || 0);
     const serverLeadAge = Number.isFinite(verifiedAt) ? Date.now() - verifiedAt : Infinity;
-    if (!title || sourceCount < 2 || serverLeadAge < -5 * 60 * 1000 || serverLeadAge > STORED_LEAD_HARD_MAX_AGE_MS) return false;
+    if (!title || sourceCount < 1 || (sourceCount < 2 && data?.official !== true) || serverLeadAge < -5 * 60 * 1000 || serverLeadAge > DISPLAY_LEAD_HARD_MAX_AGE_MS) return false;
 
     // A real live newsroom winner is always authoritative. V214 additionally
     // allows the server fallback to replace the explicit waiting placeholder;
@@ -735,9 +736,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V214 · API ${apiVersion}` : "גרסה V214 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V216 · API ${apiVersion}` : "גרסה V216 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V214 · API לא מחובר";
+    marker.textContent = "גרסה V216 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -4011,11 +4012,12 @@ function renderLeadStory() {
     Date.parse(b.latestAt || 0) - Date.parse(a.latestAt || 0) ||
     String(a.item?.id || a.item?.url || a.item?.title || "").localeCompare(String(b.item?.id || b.item?.url || b.item?.title || ""), "he");
 
-  // V70 lead policy — hard editorial lock.
-  // A single-source item can NEVER be the main story.
-  // For the first 60 minutes we keep/choose only a 3+ source story.
-  // Only after there has been no qualifying 3+ source story for a full hour
-  // may a 2-source story take over.
+  // V216 display policy — the visible hero may be fresher than the strict
+  // high-confidence selector during quiet hours. The autonomous Worker mirrors
+  // this choice and may Push a NEW fresh multi-source hero through a guarded
+  // bridge; single-source quiet-hour fallbacks remain display-only. Here we
+  // prefer: 3+ corroborated sources, then a fresh 2-source story, then a fresh
+  // official single-source report.
   const verified = allEntries
     .filter((entry) => entry.uniqueSources >= 3 && entry.ageMinutes <= 60)
     .sort(deterministicSort);
@@ -4023,39 +4025,40 @@ function renderLeadStory() {
     .filter((entry) => entry.breaking === true && entry.ageMinutes <= 25)
     .sort(deterministicSort);
 
-  // The winner is derived only from the current merged server snapshot.
-  // A real multi-source burst may replace even a very recent lead; ordinary
-  // fluctuations still use the stable deterministic ranking.
   let winner = breakingVerified[0] || verified[0] || null;
-  const retainedThreeSource = allEntries
-    .filter((entry) => entry.uniqueSources >= 3 && entry.ageMinutes > 60 && entry.ageMinutes <= 180)
-    .sort(deterministicSort);
 
-  // A 2-source story is permitted only when the current snapshot contains a full
-  // hour of observable history and no 3+ source story appears anywhere in that
-  // hour. This makes the rule deterministic across clients and prevents a newly
-  // opened device from starting its own private one-hour timer.
-  const observedReportTimes = allEntries.flatMap((entry) => entry.reports || [])
-    .map((report) => Date.parse(report?.publishedAt || 0))
-    .filter(Number.isFinite);
-  const oldestObservedMs = observedReportTimes.length ? Math.min(...observedReportTimes) : Infinity;
-  const hasFullHourObservation = Number.isFinite(oldestObservedMs) && oldestObservedMs <= now - 60 * 60 * 1000;
-  const noThreeSourceStoryForHour = verified.length === 0 && hasFullHourObservation;
-
-  if (!winner && noThreeSourceStoryForHour) {
-    const freshTwoSource = allEntries
-      .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes <= 60)
+  if (!winner) {
+    const freshDisplay = allEntries
+      .filter((entry) =>
+        (entry.uniqueSources >= 2 && entry.ageMinutes <= 75) ||
+        (entry.hasOfficial && entry.uniqueSources >= 1 && entry.ageMinutes <= 45 && entry.hotScore >= 30)
+      )
       .sort(deterministicSort);
-    const olderTwoSource = allEntries
-      .filter((entry) => entry.uniqueSources >= 2 && entry.ageMinutes > 60 && entry.ageMinutes <= 180)
-      .sort(deterministicSort);
-    winner = freshTwoSource[0] || olderTwoSource[0] || null;
+    winner = freshDisplay[0] || null;
+    if (winner) winner.displayReason = winner.uniqueSources >= 2 ? "quiet-fresh-2plus" : "quiet-fresh-official";
   }
 
-  // If there is no eligible 2-source replacement, retain the most recent already
-  // corroborated 3+ source story for at most three hours. This keeps the main
-  // block stable without reviving very old headlines.
-  if (!winner) winner = retainedThreeSource[0] || null;
+  if (!winner) {
+    const expandedDisplay = allEntries
+      .filter((entry) =>
+        (entry.uniqueSources >= 2 && entry.ageMinutes <= 180) ||
+        (entry.hasOfficial && entry.uniqueSources >= 1 && entry.ageMinutes <= 120)
+      )
+      .sort(deterministicSort);
+    winner = expandedDisplay[0] || null;
+    if (winner) winner.displayReason = "quiet-expanded";
+  }
+
+  if (!winner) {
+    const reserveDisplay = allEntries
+      .filter((entry) =>
+        (entry.uniqueSources >= 2 && entry.ageMinutes <= 480) ||
+        (entry.hasOfficial && entry.uniqueSources >= 1 && entry.ageMinutes <= 360)
+      )
+      .sort(deterministicSort);
+    winner = reserveDisplay[0] || null;
+    if (winner) winner.displayReason = "quiet-reserve";
+  }
 
   // Delayed shards are already represented in state.items by the server/local
   // last-good snapshot. Do not inject a separate device-local headline here;
@@ -4075,7 +4078,7 @@ function renderLeadStory() {
       ? Date.now() - serverVerifiedAt
       : Infinity;
     const retentionAge = previous?.serverVerified === true ? serverVerifiedAge : previousAge;
-    if (retentionAge >= -5 * 60 * 1000 && retentionAge <= STORED_LEAD_HARD_MAX_AGE_MS && Number(previous.uniqueSources || 0) >= 2) {
+    if (retentionAge >= -5 * 60 * 1000 && retentionAge <= DISPLAY_LEAD_HARD_MAX_AGE_MS && (Number(previous.uniqueSources || 0) >= 2 || previous.hasOfficial === true)) {
       winner = previous;
     }
   }
@@ -4092,7 +4095,7 @@ function renderLeadStory() {
     // fresh server-verified lead already shown on this page. This prevents the
     // whole main-story module from disappearing on the next automatic refresh.
     const serverLeadAt = Number(el.leadStory?.dataset?.serverLeadAt || 0);
-    if (el.leadStory?.dataset?.serverLead === "1" && serverLeadAt > 0 && Date.now() - serverLeadAt <= STORED_LEAD_HARD_MAX_AGE_MS) return;
+    if (el.leadStory?.dataset?.serverLead === "1" && serverLeadAt > 0 && Date.now() - serverLeadAt <= DISPLAY_LEAD_HARD_MAX_AGE_MS) return;
     if (el.leadStory) {
       delete el.leadStory.dataset.serverLead;
       delete el.leadStory.dataset.serverLeadAt;
@@ -4132,7 +4135,7 @@ function renderLeadStory() {
     lockAgeMs < LEAD_SESSION_LOCK_MS
   ) {
     const currentLatestMs = Date.parse(currentEntry.latestAt || currentEntry.item?.latestReportAt || currentEntry.item?.publishedAt || 0);
-    const currentTooOld = Number.isFinite(currentLatestMs) && Date.now() - currentLatestMs > 3 * 60 * 60 * 1000;
+    const currentTooOld = Number.isFinite(currentLatestMs) && Date.now() - currentLatestMs > 60 * 60 * 1000;
     const scoreDelta = Number(winner.score || 0) - Number(currentEntry.score || 0);
     const sourceDelta = Number(winner.uniqueSources || 0) - Number(currentEntry.uniqueSources || 0);
     const breakingUpgrade = winner.breaking === true || scoreDelta >= LEAD_BREAKOUT_SCORE_DELTA || sourceDelta >= 2 || currentTooOld;
@@ -4183,8 +4186,10 @@ function renderLeadStory() {
   if (el.leadVerification) {
     if (winner.leadMode === "verified") {
       el.leadVerification.textContent = `✓ רמת אימות ${leadVerify.label}${leadVerify.hasOfficial ? " · כולל מקור רשמי" : ""}`;
+    } else if (count === 1 && winner.hasOfficial) {
+      el.leadVerification.textContent = "✓ מקור רשמי · דיווח ראשוני";
     } else {
-      el.leadVerification.textContent = `◌ מתפתח · ${count} מקורות כרגע`;
+      el.leadVerification.textContent = `◌ מתפתח · ${count} ${count === 1 ? "מקור כרגע" : "מקורות כרגע"}`;
     }
   }
 
@@ -4569,7 +4574,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=214.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=216.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4639,7 +4644,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=214.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=216.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
