@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hadashota",
+  "main": "HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/_worker.js",
+  "compatibility_date": "2026-08-12",
+  "assets": {
+    "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*",
+      "/", "/index.html",
+      "/escalation", "/escalation.html", "/%D7%9E%D7%93%D7%93-%D7%94%D7%94%D7%A1%D7%9C%D7%9E%D7%94",
+      "/about", "/about.html",
+      "/how-it-works", "/how-it-works.html",
+      "/contact", "/contact.html",
+      "/privacy", "/privacy.html",
+      "/copyright", "/copyright.html",
+      "/manage-kp-7538", "/admin.html",
+      "/robots.txt", "/sitemap.xml",
+      "/sw.js", "/app.js", "/styles.css",
+      "/escalation.js", "/escalation.css", "/site.webmanifest"
+    ],
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PUSH_HUB",
+        "class_name": "PushHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v123-true-web-push-1",
+      "new_sqlite_classes": ["PushHub"]
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+}

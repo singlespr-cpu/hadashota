@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3229513258465220"
+     crossorigin="anonymous"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script id="kp-entry-top-v180">
+    (function(){
+      try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
+      var active = false, timers = [], scrollRaf = 0;
+
+      function clearTimers(){
+        timers.forEach(clearTimeout);
+        timers = [];
+        if (scrollRaf) { try { cancelAnimationFrame(scrollRaf); } catch (_) {} scrollRaf = 0; }
+      }
+
+      function stripEntryHash(){
+        try {
+          if (location.hash) history.replaceState(history.state, "", location.pathname + location.search);
+        } catch (_) {}
+      }
+
+      function topNow(force){
+        if (!active && !force) return;
+        try { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); }
+        catch (_) { try { window.scrollTo(0, 0); } catch (__){ } }
+        try { document.documentElement.scrollTop = 0; } catch (_) {}
+        try { if (document.body) document.body.scrollTop = 0; } catch (_) {}
+      }
+
+      function release(){
+        if (!active) return;
+        active = false;
+        clearTimers();
+        try { document.documentElement.classList.remove("kp-force-entry-top"); } catch (_) {}
+      }
+
+      function arm(){
+        clearTimers();
+        active = true;
+        stripEntryHash();
+        try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
+        try { document.documentElement.classList.add("kp-force-entry-top"); } catch (_) {}
+        topNow();
+        try {
+          requestAnimationFrame(function(){ topNow(); requestAnimationFrame(topNow); });
+        } catch (_) {}
+        [0,20,60,120,240,420,700,1050,1500,2200,3200,4500,6500,9000,12000,16000].forEach(function(ms){
+          timers.push(setTimeout(topNow, ms));
+        });
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(function(){ if (active) topNow(); }).catch(function(){});
+        }
+      }
+
+      function keepTopUntilUserActs(){
+        if (!active) return;
+        var y = Math.max(window.scrollY || 0, window.pageYOffset || 0, document.documentElement.scrollTop || 0, document.body ? document.body.scrollTop || 0 : 0);
+        if (y <= 1) return;
+        if (scrollRaf) return;
+        try {
+          scrollRaf = requestAnimationFrame(function(){ scrollRaf = 0; topNow(); });
+        } catch (_) { topNow(); }
+      }
+
+      function releaseForRealUserAction(event){
+        if (!active) return;
+        if (event && event.isTrusted === false) return;
+        release();
+      }
+
+      window.addEventListener("scroll", keepTopUntilUserActs, { passive: true });
+      ["pointerdown","touchstart","wheel","keydown"].forEach(function(type){
+        window.addEventListener(type, releaseForRealUserAction, { passive: type !== "keydown", capture: true });
+      });
+
+      function resetStoredPositionBeforeLeaving(){
+        try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
+        topNow(true);
+      }
+
+      arm();
+      document.addEventListener("DOMContentLoaded", arm, { once: true });
+      window.addEventListener("pageshow", arm);
+      window.addEventListener("load", function(){ if (active) topNow(); else arm(); }, { once: true });
+      window.addEventListener("pagehide", resetStoredPositionBeforeLeaving);
+      window.addEventListener("beforeunload", resetStoredPositionBeforeLeaving);
+    })();
+  </script>
+  <meta name="theme-color" content="#05070a">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="author" content="כותרת פלוס">
+  <meta name="application-name" content="כותרת פלוס">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="description" content="דופק ההסלמה איראן–ישראל של כותרת פלוס (גם: דופק הסלמה / מדד ההסלמה): מצב המתיחות בזמן אמת ובדיקה אונליין של רמת ההסלמה האזורית על בסיס חדשות ביטחון, פיקוד העורף, מקורות רשמיים, תעופה, NOTAM, הורמוז, נפט ומידע OSINT פתוח.">
+  <meta name="keywords" content="דופק ההסלמה, דופק הסלמה, דופק הסלמה איראן ישראל, מדד ההסלמה, מדד הסלמה, מדד הסלמה איראן ישראל, מדד מתיחות, רמת מתיחות, רמת הסלמה, כמה קרובים למלחמה, איראן ישראל עכשיו, מצב איראן ישראל, מתיחות ישראל איראן, חדשות איראן, חדשות ביטחון, מצב ביטחוני בישראל, התרעות פיקוד העורף, מלחמה, תקיפה באיראן, לבנון, חיזבאללה, עזה, תעופה איראן, NOTAM, הורמוז, OSINT, כותרת פלוס">
+  <link rel="canonical" href="__SITE_URL__/escalation">
+  <link rel="alternate" hreflang="he-IL" href="__SITE_URL__/escalation">
+  <link rel="alternate" hreflang="x-default" href="__SITE_URL__/escalation">
+  <meta property="og:locale" content="he_IL">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="כותרת פלוס">
+  <meta property="og:title" content="דופק ההסלמה – כמה אנחנו קרובים למלחמה? | כותרת פלוס">
+  <meta property="og:description" content="דופק ההסלמה של כותרת פלוס: תמונת מצב חיה בזמן אמת של המתיחות בין איראן לישראל.">
+  <meta property="og:url" content="__SITE_URL__/escalation">
+  <meta property="og:image" content="__SITE_URL__/escalation-share.png?v=205.0.0">
+  <meta property="og:image:secure_url" content="__SITE_URL__/escalation-share.png?v=205.0.0">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="דופק ההסלמה של כותרת פלוס — תמונת מצב חיה בזמן אמת">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="דופק ההסלמה – כמה אנחנו קרובים למלחמה? | כותרת פלוס">
+  <meta name="twitter:description" content="דופק ההסלמה של כותרת פלוס מציג בזמן אמת את מצב המתיחות ואת תמונת המצב האזורית.">
+  <meta name="twitter:image" content="__SITE_URL__/escalation-share.png?v=205.0.0">
+  <meta name="twitter:image:alt" content="דופק ההסלמה של כותרת פלוס">
+  <title>דופק ההסלמה איראן–ישראל | מצב המתיחות בזמן אמת | כותרת פלוס</title>
+  <link rel="icon" href="/favicon.svg?v=205.0.0" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=205.0.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/escalation.css?v=205.0.0">
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@graph":[
+      {
+        "@type":"WebPage",
+        "@id":"__SITE_URL__/escalation#webpage",
+        "url":"__SITE_URL__/escalation",
+        "name":"דופק ההסלמה ישראל–איראן בזמן אמת | כותרת פלוס",
+        "alternateName":["דופק הסלמה","מדד ההסלמה","מדד הסלמה ישראל איראן"],
+        "headline":"דופק ההסלמה איראן–ישראל — מצב המתיחות בזמן אמת",
+        "description":"מדד OSINT אוטומטי לרמת המתיחות ישראל–איראן והסיכון להסלמה אזורית, המבוסס על חדשות ביטחון, פיקוד העורף, מקורות רשמיים, תעופה, סיכוני מרחב אווירי, הורמוז, נפט ושווקי חיזוי.",
+        "inLanguage":"he-IL",
+        "isPartOf":{"@id":"__SITE_URL__/#website"},
+        "publisher":{"@id":"__SITE_URL__/#organization"},
+        "about":[
+          {"@type":"Thing","name":"מתיחות ישראל איראן"},
+          {"@type":"Thing","name":"חדשות ביטחון"},
+          {"@type":"Thing","name":"הסלמה במזרח התיכון"},
+          {"@type":"Thing","name":"OSINT"},
+          {"@type":"Thing","name":"פיקוד העורף"},
+          {"@type":"Thing","name":"חדשות איראן"},
+          {"@type":"Thing","name":"מצב ישראל איראן עכשיו"},
+          {"@type":"Thing","name":"הורמוז"}
+        ]
+      },
+      {
+        "@type":"FAQPage",
+        "@id":"__SITE_URL__/escalation#faq",
+        "mainEntity":[
+          {"@type":"Question","name":"מהו דופק ההסלמה של כותרת פלוס?","acceptedAnswer":{"@type":"Answer","text":"מדד 0–100 שמרכז אינדיקציות ציבוריות ממספר תחומים כדי לתאר את עוצמת המתיחות האזורית בזמן אמת."}},
+          {"@type":"Question","name":"האם דופק ההסלמה מנבא מלחמה או תקיפה באיראן?","acceptedAnswer":{"@type":"Answer","text":"לא. המדד מודד עוצמת מתיחות ואינו הסתברות למלחמה, תחזית מודיעינית או מידע מסווג."}},
+          {"@type":"Question","name":"על אילו מקורות מבוסס דופק ההסלמה?","acceptedAnswer":{"@type":"Answer","text":"המדד משלב חדשות, פיקוד העורף ומקורות רשמיים, תעופה, NOTAM ואזהרות מרחב אווירי, הורמוז, נפט, IAEA ושווקי חיזוי ציבוריים, בהתאם לזמינות הנתונים."}},
+          {"@type":"Question","name":"האם יש הסלמה בין ישראל לאיראן עכשיו?","acceptedAnswer":{"@type":"Answer","text":"הציון החי בראש העמוד מסכם את האינדיקציות הזמינות כרגע. הוא מודד עוצמת מתיחות ולא תחזית למלחמה."}},
+          {"@type":"Question","name":"מה מצב התעופה והורמוז במדד?","acceptedAnswer":{"@type":"Answer","text":"המדד עוקב אחר סיגנלים ציבוריים מתחומי תעופה ומרחב אווירי, NOTAM, אזהרות תעופה ותעבורה ימית באזור הורמוז ומשקלל אותם לצד יתר המקורות."}}
+        ]
+      },
+      {
+        "@type":"BreadcrumbList",
+        "@id":"__SITE_URL__/escalation#breadcrumb",
+        "itemListElement":[
+          {"@type":"ListItem","position":1,"name":"כותרת פלוס","item":"__SITE_URL__/"},
+          {"@type":"ListItem","position":2,"name":"דופק ההסלמה","item":"__SITE_URL__/escalation"}
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <div class="esc-grid-bg" aria-hidden="true"></div>
+  <div class="esc-ambient esc-ambient-one" aria-hidden="true"></div>
+  <div class="esc-ambient esc-ambient-two" aria-hidden="true"></div>
+
+  <header class="esc-topbar">
+    <div class="esc-shell esc-topbar-inner">
+      <a class="esc-brand" href="https://koteretplus.com/" aria-label="כותרת פלוס - דף הבית">
+        <span class="esc-brand-mark" aria-hidden="true"><i></i></span>
+        <span><strong>כותרת פלוס</strong><small>כל החדשות. כל המקורות. במקום אחד.</small></span>
+      </a>
+      <div class="esc-top-actions">
+        <button id="shareEscalation" class="esc-share" type="button" aria-label="שיתוף דופק ההסלמה"><span>↗</span> שיתוף</button>
+        <button id="escContactBtn" class="esc-contact-btn" type="button">צור קשר</button>
+        <a class="esc-back" href="https://koteretplus.com/" aria-label="לאתר החדשות המלא של כותרת פלוס"><span class="esc-back-desktop">לאתר החדשות המלא של כותרת פלוס</span><span class="esc-back-mobile">לאתר החדשות המלא</span></a>
+      </div>
+    </div>
+  </header>
+
+  <div class="esc-floating-controls" aria-label="פעולות צפות">
+    <button class="esc-to-top" id="escToTop" type="button" aria-label="חזרה לראש העמוד" title="חזרה למעלה" aria-hidden="true" tabindex="-1">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6"></path></svg>
+    </button>
+    <button class="esc-support-float" id="escSupportBtn" type="button" aria-label="תמיכה בכותרת פלוס" title="תמיכה בכותרת פלוס">
+      <span class="esc-support-heart" aria-hidden="true">♥</span><span>תמיכה</span>
+    </button>
+    <a class="esc-mobile-site-promo" href="https://koteretplus.com/" aria-label="לעבור לאתר החדשות המלא של כותרת פלוס">
+      <span class="esc-mobile-site-promo__mark" aria-hidden="true"><i></i></span>
+      <span class="esc-mobile-site-promo__copy"><b>כותרת פלוס</b><small>כל החדשות בזמן אמת</small></span>
+      <span class="esc-mobile-site-promo__cta">לאתר המלא ←</span>
+    </a>
+  </div>
+
+  <main>
+    <section class="esc-hero">
+      <div class="esc-shell esc-hero-grid">
+        <div class="esc-hero-copy">
+          <span class="esc-kicker"><i></i> LIVE OSINT · מתעדכן אוטומטית</span>
+          <h1>דופק ההסלמה איראן–ישראל <span class="esc-h1-subline">מצב המתיחות בזמן אמת · כותרת פלוס</span></h1>
+          <p class="esc-subtitle">תמונת מצב חיה של רמת המתיחות בין ישראל, איראן והאזור — על בסיס הצלבה של חדשות, פיקוד העורף, מקורות רשמיים, תעופה אזרחית וצבאית גלויה, NOTAM ישראלי, אזהרות תעופה אזוריות, נפט, הורמוז, IAEA ושווקי חיזוי. פעילות צבאית גלויה משמשת רק כסיגנל הצלבה במשקל נמוך.</p>
+          <div class="esc-status-line">
+            <span id="escUpdated">אוסף נתונים…</span>
+            <span class="esc-dot">•</span>
+            <span id="escConfidence">בודק מקורות</span>
+          </div>
+          <div class="esc-trend-box" id="escTrendBox">
+            <strong id="escTrend">—</strong>
+            <span>שינוי ב־6 השעות האחרונות</span>
+          </div>
+        </div>
+
+        <div class="esc-gauge-wrap" aria-live="polite">
+          <div class="esc-gauge-stage">
+            <div class="esc-radar-sweep" aria-hidden="true"></div>
+            <div class="esc-gauge" id="escGauge" style="--score:0">
+              <svg viewBox="0 0 200 200" aria-hidden="true">
+                <circle class="esc-gauge-track" cx="100" cy="100" r="82"></circle>
+                <circle class="esc-gauge-value" id="escGaugeCircle" cx="100" cy="100" r="82"></circle>
+              </svg>
+              <div class="esc-gauge-pointer" aria-hidden="true"><i></i></div>
+              <div class="esc-gauge-center">
+                <div><strong id="escScore">—</strong><span>%</span></div>
+                <b id="escLevel">אוסף נתונים</b>
+                <small>רמת מתיחות 0–100</small>
+              </div>
+            </div>
+          </div>
+          <div class="esc-zone-legend" aria-label="טווחי דופק ההסלמה">
+            <span class="z-green"><i></i>0–29 שגרה</span>
+            <span class="z-yellow"><i></i>30–49 מוגברת</span>
+            <span class="z-orange"><i></i>50–69 גבוהה</span>
+            <span class="z-red"><i></i>70–100 הסלמה</span>
+          </div>
+          <p class="esc-not-probability"><b>חשוב:</b> המדד מודד <strong>עוצמת מתיחות</strong>. 70 אינו אומר 70% סיכוי למלחמה, והמערכת אינה מחזיקה מידע מסווג.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="esc-shell esc-hot-story-wrap" aria-live="polite" aria-label="הסיפור המרכזי עכשיו בכותרת פלוס">
+      <a class="esc-hot-story" id="escHotStoryLink" href="https://koteretplus.com/" target="_blank" rel="noopener noreferrer">
+        <div class="esc-hot-story__top">
+          <span class="esc-hot-story__label"><i aria-hidden="true"></i> הסיפור המרכזי עכשיו</span>
+          <span class="esc-hot-story__live"><i aria-hidden="true"></i> הכי חם בכותרת פלוס</span>
+        </div>
+        <div class="esc-hot-story__body">
+          <div class="esc-hot-story__media" id="escHotStoryMedia" hidden><img id="escHotStoryImage" alt="" loading="eager" decoding="async" referrerpolicy="no-referrer"></div>
+          <h2 id="escHotStoryTitle">מזהה את הכותרת החמה עכשיו…</h2>
+        </div>
+        <div class="esc-hot-story__meta">
+          <strong id="escHotStorySources">מצליב מקורות</strong>
+          <span id="escHotStoryAge">מתעדכן אוטומטית</span>
+          <b>לחדשות המלאות ←</b>
+        </div>
+      </a>
+    </section>
+
+    <section class="esc-shell esc-summary" aria-label="מצב מקורות המדד">
+      <div><span>משפחות מידע פעילות</span><strong id="escSourcesActive">—</strong></div>
+      <div><span>כיסוי נתונים</span><strong id="escCoverage">—</strong></div>
+      <div><span>סיגנלים מוגברים</span><strong id="escElevated">—</strong></div>
+      <div><span>רענון הבא</span><strong id="escNextRefresh">60 שנ׳</strong></div>
+    </section>
+
+    <section class="esc-shell esc-panel esc-chart-panel">
+      <div class="esc-section-head">
+        <div><span>מגמה</span><h2>72 השעות האחרונות</h2></div>
+        <div class="esc-legend"><i></i> מדד משוקלל</div>
+      </div>
+      <div class="esc-chart-wrap">
+        <svg class="esc-chart" id="escChart" viewBox="0 0 900 240" preserveAspectRatio="none" role="img" aria-label="גרף דופק ההסלמה ב-72 השעות האחרונות">
+          <defs>
+            <linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity=".30"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient>
+          </defs>
+          <g class="esc-chart-grid"><line x1="0" x2="900" y1="60" y2="60"></line><line x1="0" x2="900" y1="120" y2="120"></line><line x1="0" x2="900" y1="180" y2="180"></line></g>
+          <path id="escChartArea" class="esc-chart-area" d=""></path>
+          <path id="escChartLine" class="esc-chart-line" d=""></path>
+        </svg>
+        <div class="esc-chart-empty" id="escChartEmpty">המערכת אוספת היסטוריה. הגרף יתמלא אוטומטית.</div>
+      </div>
+      <div class="esc-chart-axis"><span>לפני 72 שעות</span><span>לפני 36 שעות</span><span>עכשיו</span></div>
+    </section>
+
+    <section class="esc-shell esc-panel">
+      <div class="esc-section-head">
+        <div><span>מה המערכת רואה?</span><h2>13 משפחות הסיגנלים שמרכיבות את המדד</h2></div>
+        <small>משקלים מתאזנים כאשר מקור זמני אינו זמין</small>
+      </div>
+      <div class="esc-signals" id="escSignals">
+        <div class="esc-loading-card">טוען ומצליב מקורות…</div>
+      </div>
+    </section>
+
+    <section class="esc-shell esc-two-col">
+      <article class="esc-panel esc-changes-panel">
+        <div class="esc-section-head"><div><span>מה השתנה?</span><h2>הגורמים שמשפיעים עכשיו</h2></div></div>
+        <ol class="esc-changes" id="escChanges"><li>אוסף ומצליב נתונים…</li></ol>
+      </article>
+
+      <article class="esc-panel esc-pizza-panel">
+        <div class="esc-section-head"><div><span>סיגנל ניסיוני</span><h2>🍕 מדד הפיצה של הפנטגון</h2></div><b class="esc-zero-weight">0% משקל</b></div>
+        <div class="esc-pizza-value"><strong id="pizzaLevel">—</strong><span id="pizzaScore">ממתין לנתונים</span></div>
+        <p id="pizzaReason">הסיגנל מוצג לצורכי OSINT וסקרנות בלבד ואינו משפיע כלל על המדד הראשי.</p>
+        <a href="https://www.pizzint.watch/" target="_blank" rel="noopener noreferrer">מקור: PizzINT ↗</a>
+        <small>פעילות חריגה בפיצריות אינה ראיה לפעילות צבאית. קורלציה אינה סיבתיות.</small>
+      </article>
+    </section>
+
+    <section class="esc-shell esc-panel esc-methodology">
+      <div class="esc-section-head"><div><span>שקיפות מלאה</span><h2>איך מחושב דופק ההסלמה?</h2></div></div>
+      <div class="esc-method-grid">
+        <div><b>1</b><strong>אוספים</strong><p>חדשות כותרת פלוס, הצלבת BBC ו־Al Jazeera, מקורות רשמיים ו־OSINT פתוחים — עם הפרדה בין מקורות שעלולים לדווח על אותו מידע לבין משפחות מידע בלתי־תלויות.</p></div>
+        <div><b>2</b><strong>מצליבים</strong><p>סיגנל בודד אינו מכתיב את התוצאה. חיזוק משמעותי מתקבל רק כשכמה תחומים בלתי־תלויים — למשל רשמי, תעופה, הורמוז, עמדת ארה״ב ושווקים — מתחזקים יחד.</p></div>
+        <div><b>3</b><strong>משקללים</strong><p>כל משפחה מקבלת משקל קבוע וגם מקדם איכות לפי שלמות הנתונים. מקור שנופל זמנית מקבל משקל שהולך ודועך לפי גיל הנתון, ולא מוחלף בנתון מומצא.</p></div>
+        <div><b>4</b><strong>מחשבים Nowcast</strong><p>המערכת מפרידה בין המצב המיידי לבין ההקשר המתמשך, ואז מאחדת אותם לציון אחד. הסלמה שמאומתת בכמה תחומים נכנסת מהר; ירידה נבלמת רק כל עוד קיימות ראיות פעילות למתח מבני מתמשך.</p></div>
+      </div>
+      <div class="esc-weights" id="escWeights"></div>
+      <p class="esc-method-note">המדד הוא כלי למודעות מצבית המבוסס על OSINT בלבד. הוא אינו תחזית מודיעינית, אינו יודע החלטות סודיות ואינו יכול לקבוע מתי תתחיל מלחמה או תקיפה.</p>
+    </section>
+
+    <section class="esc-shell esc-panel esc-seo-explainer">
+      <div class="esc-section-head"><div><span>שאלות חשובות</span><h2>מה באמת אומר דופק ההסלמה?</h2></div></div>
+      <div class="esc-faq-grid">
+        <article><h3>מהו דופק ההסלמה בין ישראל לאיראן?</h3><p>זהו ציון 0–100 שמרכז בזמן אמת אינדיקציות למתיחות אזורית: קצב חדשות ביטחוניות, התרעות, שינויי תעופה, מגבלות מרחב אווירי, מסרים רשמיים, פעילות ימית, נפט ומקורות נוספים.</p></article>
+        <article><h3>האם המדד מנבא מלחמה או תקיפה באיראן?</h3><p>לא. המדד אינו הסתברות למלחמה. הוא מציג כמה מהסימנים הפומביים שמזוהים בדרך כלל עם עלייה או ירידה במתיחות מתחזקים יחד.</p></article>
+        <article><h3>למה תעופה, הורמוז ונפט נכנסים לחישוב?</h3><p>שינויים בתעופה אזרחית, אזהרות בטיחות, אירועים בנתיבי שיט ומחירי אנרגיה יכולים לשקף שינוי בתפיסת הסיכון של גופים שונים — ולכן הם משמשים כסיגנלים משלימים, לא כהוכחה בפני עצמם.</p></article>
+      </div>
+    </section>
+
+    <section class="esc-shell esc-sources-panel">
+      <h2>מקורות מרכזיים שהמערכת בודקת</h2>
+      <div class="esc-source-links">
+        <a href="https://koteretplus.com/">45 מקורות כותרת פלוס</a>
+        <a href="https://www.oref.org.il/" target="_blank" rel="noopener noreferrer">פיקוד העורף</a>
+        <a href="https://www.idf.il/en/mini-sites/idf-press-releases-israel-at-war/" target="_blank" rel="noopener noreferrer">צה״ל</a>
+        <a href="https://ext.iaa.gov.il/aeroinfo/AeroInfo.aspx?msgType=Notam" target="_blank" rel="noopener noreferrer">רשות שדות התעופה / NOTAM</a>
+        <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer">ADSB.lol</a>
+        <a href="https://www.easa.europa.eu/en/domains/air-operations/czibs" target="_blank" rel="noopener noreferrer">EASA Conflict Zones</a>
+        <a href="https://www.faa.gov/air_traffic/publications/us_restrictions" target="_blank" rel="noopener noreferrer">FAA – מגבלות ואזהרות מרחב אווירי</a>
+        <a href="https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/" target="_blank" rel="noopener noreferrer">CENTCOM</a>
+        <a href="https://www.defense.gov/News/Releases/Search/Iran/" target="_blank" rel="noopener noreferrer">U.S. Department of Defense</a>
+        <a href="https://travel.state.gov/" target="_blank" rel="noopener noreferrer">U.S. State Department</a>
+        <a href="https://travel.state.gov/en/international-travel/travel-advisories/global-events/worldwide-caution.html" target="_blank" rel="noopener noreferrer">State Dept – Worldwide Caution</a>
+        <a href="https://www.gov.uk/foreign-travel-advice/israel" target="_blank" rel="noopener noreferrer">UK FCDO – אזהרות נסיעה אזוריות</a>
+        <a href="https://www.gov.il/he/departments/national-security-council/govil-landing-page" target="_blank" rel="noopener noreferrer">המטה לביטחון לאומי</a>
+        <a href="https://www.ukmto.org/recent-incidents" target="_blank" rel="noopener noreferrer">UKMTO</a>
+        <a href="https://www.ukmto.org/partner-products/jmic-products/jmic-advisories/2026" target="_blank" rel="noopener noreferrer">JMIC / UKMTO Advisories</a>
+        <a href="https://www.maritime.dot.gov/msci-advisories" target="_blank" rel="noopener noreferrer">U.S. MARAD</a>
+        <a href="https://www-news.iaea.org/EventList.aspx" target="_blank" rel="noopener noreferrer">IAEA</a>
+        <a href="https://fred.stlouisfed.org/series/DCOILBRENTEU" target="_blank" rel="noopener noreferrer">Brent / FRED</a>
+        <a href="https://polymarket.com/" target="_blank" rel="noopener noreferrer">Polymarket</a>
+      </div>
+    </section>
+
+    <section class="esc-shell esc-panel esc-seo-guide" aria-labelledby="escSeoGuideTitle">
+      <div class="esc-section-head"><div><span>שאלות נפוצות</span><h2 id="escSeoGuideTitle">דופק הסלמה ישראל–איראן ומתיחות אזורית בזמן אמת</h2></div></div>
+      <div class="esc-faq-grid">
+        <details><summary>מהו דופק ההסלמה של כותרת פלוס?</summary><p>מדד 0–100 שמרכז אינדיקציות ציבוריות בלתי־תלויות כדי לתאר את עוצמת המתיחות בין ישראל, איראן והאזור. הציון והמקורות מתעדכנים אוטומטית.</p></details>
+        <details><summary>האם המדד מנבא מלחמה או תקיפה באיראן?</summary><p>לא. המדד מודד עוצמת מתיחות ואינו הסתברות למלחמה, תחזית מודיעינית או מידע מסווג. יש לקרוא אותו כתמונת מצב מצטברת בלבד.</p></details>
+        <details><summary>מה רמת המתיחות בין ישראל לאיראן עכשיו?</summary><p>הציון העדכני מופיע בראש העמוד ומתעדכן לאורך היום. לצד הציון מוצגים הסיגנלים, הכיסוי, מגמת 72 השעות והמקורות שמחזקים או מחלישים את המדד.</p></details>
+        <details><summary>על אילו מקורות מבוסס המדד?</summary><p>המערכת משלבת חדשות ומקורות רשמיים, פיקוד העורף, תעופה ו־NOTAM, אזהרות מרחב אווירי, הורמוז, נפט, IAEA ומידע OSINT ציבורי נוסף, בהתאם לזמינות ולאמינות.</p></details>
+        <details><summary>מה ההבדל בין מדד מתיחות להסתברות למלחמה?</summary><p>מדד מתיחות מתאר כמה אינדיקציות חריגות פועלות יחד ובעוצמה גבוהה. הוא אינו מתרגם את הציון לאחוז סיכוי לאירוע עתידי.</p></details>
+        <details><summary>האם יש הסלמה בין ישראל לאיראן עכשיו?</summary><p>הציון החי בראש העמוד הוא תמונת המצב העדכנית של כותרת פלוס. הוא מסכם כמה משפחות מידע בלתי־תלויות ומציג אם רמת המתיחות כרגע בשגרה, מוגברת, גבוהה או בהסלמה.</p></details>
+        <details><summary>מה מצב התעופה, המרחב האווירי והורמוז?</summary><p>המערכת עוקבת אחר אינדיקציות ציבוריות מתעופה, NOTAM ואזהרות מרחב אווירי, לצד תעבורה ואיומים באזור הורמוז. כל אחד מהם הוא סיגנל בתוך מודל רחב יותר ולא קביעה בפני עצמה.</p></details>
+      </div>
+    </section>
+  </main>
+
+<footer class="esc-footer">
+    <div class="esc-shell esc-footer-card">
+      <div class="esc-footer-brand"><span class="esc-brand-mark"><i></i></span><div><strong>כותרת פלוס</strong><small>כל החדשות. כל המקורות. במקום אחד.</small></div></div>
+      <div><p>רוצים לראות את הדיווחים שמאחורי המדד? באתר המלא כותרת פלוס מרכז את החדשות, המבזקים והמקורות שהמערכת מצליבה בזמן אמת.</p><a class="esc-main-cta" href="https://koteretplus.com/">לכותרת פלוס — כל החדשות בזמן אמת</a></div>
+    </div>
+    <div class="esc-shell esc-visit-counter" aria-label="מונה כניסות למדד"><span>צפיות במדד מאז הפעלת המונה</span><strong id="escVisitCount">—</strong></div>
+    <div class="esc-shell esc-legal">דופק ההסלמה הוא שירות של כותרת פלוס · מידע גלוי בלבד · אין לראות במדד תחזית, התרעה רשמית או תחליף להנחיות פיקוד העורף. · גרסה V205</div>
+  </footer>
+
+  <div class="esc-push-backdrop" id="escPushBackdrop" hidden aria-hidden="true"></div>
+  <div class="esc-push-offer" id="escPushOffer" hidden aria-live="polite">
+    <button class="esc-push-close" id="escPushClose" type="button" aria-label="סגירה">×</button>
+    <div class="esc-push-icon">🔔</div>
+    <div class="esc-push-copy"><strong>לקבל Push כשבאמת קורה משהו?</strong><span id="escPushText">כותרת פלוס יכולה להתריע כשהסיפור המרכזי מתחלף או כשדופק ההסלמה עולה באופן משמעותי — גם כשהאתר סגור.</span></div>
+    <div class="esc-push-actions"><button id="escPushAccept" type="button">הפעלת התראות</button><button id="escPushLater" type="button">לא עכשיו</button></div>
+  </div>
+
+  <div class="esc-support-modal" id="escSupportModal" hidden aria-hidden="true">
+    <button class="esc-support-backdrop" id="escSupportBackdrop" type="button" aria-label="סגירת חלון התמיכה"></button>
+    <section class="esc-support-card" role="dialog" aria-modal="true" aria-labelledby="escSupportTitle" tabindex="-1">
+      <button class="esc-support-close" id="escSupportClose" type="button" aria-label="סגירה">×</button>
+      <div class="esc-support-modal-heart" aria-hidden="true">♥</div>
+      <span class="esc-contact-kicker">תמיכה בכותרת פלוס</span>
+      <h2 id="escSupportTitle">אוהבים את כותרת פלוס?</h2>
+      <p>כותרת פלוס ודופק ההסלמה פועלים באופן עצמאי ומתעדכנים לאורך היום. אם השירות שימושי לכם, אפשר לתמוך ולעזור לנו להמשיך לפתח ולשפר אותו.</p>
+      <div class="esc-support-payments" aria-label="אפשרויות תמיכה">
+        <a class="esc-support-payment bit" href="https://www.bitpay.co.il/app/me/48F70407-778D-B59A-08E4-D940D6875137A2DB" target="_blank" rel="noopener noreferrer"><b>bit</b><span>תמיכה דרך Bit</span></a>
+        <a class="esc-support-payment paybox" href="https://links.payboxapp.com/NpK8YwVDK5b" target="_blank" rel="noopener noreferrer"><b>PayBox</b><span>תמיכה דרך PayBox</span></a>
+      </div>
+      <small class="esc-support-note">התמיכה היא לבחירתכם ומסייעת להמשך הפיתוח והתחזוקה.</small>
+    </section>
+  </div>
+
+  <div class="esc-contact-modal" id="escContactModal" hidden aria-hidden="true">
+    <button class="esc-contact-backdrop" id="escContactBackdrop" type="button" aria-label="סגירת חלון יצירת קשר"></button>
+    <section class="esc-contact-card" role="dialog" aria-modal="true" aria-labelledby="escContactTitle" tabindex="-1">
+      <button class="esc-contact-close" id="escContactClose" type="button" aria-label="סגירה">×</button>
+      <span class="esc-contact-kicker">כותרת פלוס · דופק ההסלמה</span>
+      <h2 id="escContactTitle">צור קשר</h2>
+      <p>יש לכם הערה, תקלה, רעיון או פנייה בנושא המדד? השאירו פרטים וההודעה תגיע ישירות למרכז הניהול.</p>
+      <form id="escContactForm" class="esc-contact-form">
+        <div class="esc-contact-grid"><label><span>שם *</span><input id="escContactName" autocomplete="name" maxlength="80" required></label><label><span>טלפון *</span><input id="escContactPhone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" required></label></div>
+        <label><span>אימייל *</span><input id="escContactEmail" type="email" autocomplete="email" inputmode="email" maxlength="160" required></label>
+        <label><span>נושא</span><select id="escContactTopic"><option>דופק ההסלמה</option><option>תקלה באתר</option><option>הצעה לשיפור</option><option>מקור מידע</option><option>פרסום</option><option>כללי</option></select></label>
+        <label><span>הודעה *</span><textarea id="escContactMessage" maxlength="1200" rows="5" required></textarea></label>
+        <button id="escContactSubmit" type="submit">שליחת הודעה</button>
+        <div class="esc-contact-status" id="escContactStatus" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="esc-toast" id="escToast" role="status" aria-live="polite"></div>
+  <script src="/escalation.js?v=205.0.0" defer></script>
+</body>
+</html>
