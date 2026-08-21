@@ -261,7 +261,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "196.0.0",
+          version: "197.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -274,7 +274,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "196.0.0",
+        version: "197.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1525,7 +1525,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "196.0.0"
+      "X-Hadashota-Version": "197.0.0"
     }));
   }
 
@@ -1535,7 +1535,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "196.0.0",
+    "X-Hadashota-Version": "197.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1576,7 +1576,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "196.0.0",
+          "X-Hadashota-Version": "197.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1699,13 +1699,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "196.0.0",
+      "X-Hadashota-Version": "197.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "196.0.0",
+      "X-Hadashota-Version": "197.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1739,7 +1739,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "196.0.0"
+        "X-Hadashota-Version": "197.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1761,7 +1761,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "196.0.0"
+    "X-Hadashota-Version": "197.0.0"
   });
 }
 
@@ -3098,14 +3098,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"196.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"196.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"197.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"197.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"196.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"196.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"197.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"197.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3636,7 +3636,7 @@ async function sendEmptyWebPush(subscription,keys) {
   const endpoint=String(subscription?.endpoint||"");
   if(!/^https:\/\//i.test(endpoint))return {ok:false,status:400,mode:"empty"};
   const authorization=await vapidAuthorization(endpoint,keys);
-  const response=await fetch(endpoint,{method:"POST",headers:{Authorization:authorization,TTL:"120",Urgency:"high"},body:null});
+  const response=await fetch(endpoint,{method:"POST",headers:{Authorization:authorization,TTL:"900",Urgency:"high"},body:null});
   return {ok:response.ok,status:response.status,mode:"empty"};
 }
 
@@ -3646,11 +3646,32 @@ async function sendWebPush(subscription,keys,notification) {
   try{
     const authorization=await vapidAuthorization(endpoint,keys);
     const body=await encryptWebPushPayload(subscription,compactPushPayload(notification));
-    const response=await fetch(endpoint,{method:"POST",headers:{Authorization:authorization,TTL:"120",Urgency:"high","Content-Encoding":"aes128gcm","Content-Type":"application/octet-stream"},body});
+    const response=await fetch(endpoint,{method:"POST",headers:{Authorization:authorization,TTL:"900",Urgency:"high","Content-Encoding":"aes128gcm","Content-Type":"application/octet-stream"},body});
     return {ok:response.ok,status:response.status,mode:"payload"};
   }catch(error){
     console.warn("Encrypted Web Push failed; using empty-push fallback",String(error?.message||error));
     return sendEmptyWebPush(subscription,keys);
+  }
+}
+
+async function sendWebPushReliable(subscription,keys,notification) {
+  // One short retry for transient push-service failures. A successful first
+  // request is never retried. If the provider accepted a request but the reply
+  // was lost, the Service Worker fingerprint/content guards still prevent a
+  // second visible notification on the device.
+  let first;
+  try{first=await sendWebPush(subscription,keys,notification);}
+  catch(error){first={ok:false,status:0,mode:"network",error:String(error?.message||error)};}
+  if(first?.ok||[400,401,403,404,410].includes(Number(first?.status||0)))return first;
+  const status=Number(first?.status||0);
+  const transient=!status||status===408||status===425||status===429||status>=500;
+  if(!transient)return first;
+  await new Promise((resolve)=>setTimeout(resolve,status===429?180:70));
+  try{
+    const second=await sendWebPush(subscription,keys,notification);
+    return {...second,retried:true,firstStatus:status||null};
+  }catch(error){
+    return {...first,retried:true,error:String(error?.message||error)};
   }
 }
 
@@ -3775,6 +3796,7 @@ function stripAnalyticsDay(row={}) {
   return safe;
 }
 function pushTitleIdentity(value){return cleanPushTitle(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").replace(/\s+/g," ").trim().slice(0,140);}
+function pushIdentityHash(value=""){let hash=2166136261;const text=String(value||"");for(let i=0;i<text.length;i++){hash^=text.charCodeAt(i);hash=Math.imul(hash,16777619);}return (hash>>>0).toString(36);}
 function leadPushNumbers(value){return [...String(value||"").matchAll(/\d+(?:[.,]\d+)?/g)].map((m)=>m[0]).join("|");}
 function leadPushTitleDelta(previousTitle,currentTitle){
   const aKey=pushTitleIdentity(previousTitle||""),bKey=pushTitleIdentity(currentTitle||"");
@@ -3965,7 +3987,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"196.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"197.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4001,7 +4023,7 @@ export class PushHub {
         if(oldMapping===key)await storage.delete(`device:${existing.deviceId}`);
       }
       const preferences=normalizePushPreferences(data?.preferences,normalizePushPreferences(existing?.preferences||migratedPreferences));
-      await storage.put(key,{subscription,deviceId,platform,userAgent,preferences,createdAt:existing?.createdAt||now,lastSeenAt:now,pendingFingerprint:existing?.pendingFingerprint||""});
+      await storage.put(key,{subscription,deviceId,platform,userAgent,preferences,createdAt:existing?.createdAt||now,lastSeenAt:now,pendingFingerprint:existing?.pendingFingerprint||"",lastDeliveredFingerprint:existing?.lastDeliveredFingerprint||"",lastDeliveredAt:existing?.lastDeliveredAt||""});
       if(deviceId)await storage.put(`device:${deviceId}`,key);
       if(!existing)stats=await updatePushStats(storage,1,platform);
       else if(existing?.platform&&existing.platform!==platform){await updatePushStats(storage,-1,existing.platform);stats=await updatePushStats(storage,1,platform);}
@@ -4172,7 +4194,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"196.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"197.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4205,7 +4227,7 @@ export class PushHub {
       const stats=await ensurePushStats(storage);
       const lastResult=await storage.get("push.lastResult");
       const activeJob=await storage.get("push.job");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"196.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,fanoutActive:!!activeJob,lastResult:lastResult||null,version:"197.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -4261,93 +4283,117 @@ export class PushHub {
         origin:String(payload.origin||"background")==="site"?"site":"background",
         receivedAt:new Date(now).toISOString()
       };
+
+      // V197 — the newsroom lead is the Push hook.  Once the same editorial
+      // selector that powers "הסיפור המרכזי עכשיו" replaces the lead, Push is
+      // no longer allowed to veto that replacement with a second set of quality,
+      // age or stability rules.  A browser render can trigger this immediately;
+      // the scheduled Worker feeds the very same endpoint when every tab/PWA is
+      // closed, so delivery never depends on a visitor being online.
+      const previousLatest=await storage.get("lead.latest");
+      let observed=await storage.get("lead.observed.v197");
+      if(!observed&&previousLatest?.fingerprint)observed=previousLatest;
+      let lastState=await storage.get("lead.lastPushedState");
       await storage.put("lead.latest",payload);
 
-      const legacyFingerprint=String(await storage.get("lead.lastPushedFingerprint")||"");
-      const legacyTitle=cleanPushTitle(await storage.get("lead.lastPushedTitle")||"");
-      const legacyTitleKey=String(await storage.get("lead.lastPushedTitleKey")||pushTitleIdentity(legacyTitle));
-      let lastState=await storage.get("lead.lastPushedState");
-
-      // Upgrade safely from V195: if this is the same story that was already the
-      // last Push, seed its latest timestamp instead of replaying it after deploy.
-      if(!lastState&&legacyFingerprint){
-        const legacySame=legacyFingerprint===payload.fingerprint||(legacyTitleKey&&legacyTitleKey===pushTitleIdentity(payload.title));
-        lastState={fingerprint:legacyFingerprint,title:legacyTitle||payload.title,titleKey:legacyTitleKey||pushTitleIdentity(payload.title),latestAt:legacySame?payload.at:null,firstAt:legacySame?payload.firstAt:"",pushedAt:null,kind:"legacy"};
-        await storage.put("lead.lastPushedState",lastState);
-      }
-
-      if(!legacyFingerprint&&!lastState){
-        const primed={fingerprint:payload.fingerprint,title:payload.title,titleKey:pushTitleIdentity(payload.title),latestAt:payload.at,firstAt:payload.firstAt,pushedAt:new Date(now).toISOString(),kind:"prime"};
-        await storage.put("lead.lastPushedFingerprint",payload.fingerprint);
-        await storage.put("lead.lastPushedTitleKey",primed.titleKey);
-        await storage.put("lead.lastPushedTitle",payload.title);
-        await storage.put("lead.lastPushedState",primed);
+      // First ever observation only establishes a baseline. The previous-release
+      // lead.latest is reused during upgrade, preventing a deploy from replaying
+      // a headline that was already on screen before V197 became active.
+      if(!observed?.fingerprint){
+        await storage.put("lead.observed.v197",payload);
         await storage.delete("lead.candidate");
-        return json({ok:true,primed:true,pushed:0});
+        return json({ok:true,primed:true,pushed:0,reason:"first-observation"});
       }
 
-      const decision=leadPushDecision(payload,lastState,now);
-      if(!decision.eligible){
-        // A cooldown is intentionally not remembered as a candidate. The next
-        // minute will re-evaluate the same newsroom headline and can qualify it
-        // once the editorial gap expires. Every other rejection clears stale
-        // observations so old stories cannot accumulate stability over time.
-        if(decision.reason!=="update-cooldown")await storage.delete("lead.candidate");
-        return json({ok:true,changed:decision.reason!=="same-headline",pushed:0,suppressed:true,reason:decision.reason,ageMinutes:Number.isFinite(decision.ageMinutes)?Number(decision.ageMinutes.toFixed(1)):null,waitSeconds:decision.waitMs?Math.ceil(decision.waitMs/1000):0});
+      const sameObservedStory=leadPushSameStory(observed,payload);
+      const observedFingerprintChanged=String(observed.fingerprint||"")!==String(payload.fingerprint||"");
+      let changeKind="";
+      let changeReason="";
+      let titleDelta=null;
+
+      if(!sameObservedStory){
+        // A browser render is the strongest possible signal: the hero actually
+        // changed on the public site, so broadcast immediately. When nobody has
+        // the site open the Cron is the fallback editor; require the same server
+        // winner on two consecutive scheduled observations (~1 minute) so a
+        // half-refreshed shard can never create a false Push. No quality/freshness
+        // veto is applied after that confirmation.
+        if(payload.origin==="background"){
+          const candidateKey=pushIdentityHash(payload.fingerprint);
+          let candidate=await storage.get("lead.backgroundCandidate.v197");
+          if(candidate?.payload&&leadPushSameStory(candidate.payload,payload)){
+            candidate={...candidate,key:candidateKey,observations:Number(candidate.observations||1)+1,lastSeenAt:new Date(now).toISOString(),payload};
+          }else{
+            candidate={key:candidateKey,observations:1,firstSeenAt:new Date(now).toISOString(),lastSeenAt:new Date(now).toISOString(),payload};
+          }
+          await storage.put("lead.backgroundCandidate.v197",candidate);
+          const stableMs=now-Date.parse(candidate.firstSeenAt||now);
+          if(candidate.observations<2||stableMs<45000){
+            await storage.put("lead.lastDecision",{at:new Date().toISOString(),origin:payload.origin,fingerprint:payload.fingerprint,title:payload.title,changeKind:null,reason:"background-confirmation",queued:false,observations:candidate.observations,stableSeconds:Math.round(stableMs/1000)});
+            return json({ok:true,changed:true,pending:true,queued:false,reason:"background-confirmation",observations:candidate.observations,stableSeconds:Math.round(stableMs/1000),subscriptions:Number((await ensurePushStats(storage)).count||0)});
+          }
+        }
+        changeKind="new-story";
+        changeReason=payload.origin==="site"?"lead-replaced":"background-lead-confirmed";
+      }else if(lastState){
+        // The same story may legitimately receive another Push only when a new
+        // report materially changes the headline. Small rewrites/source-count
+        // changes never create another notification.
+        titleDelta=leadPushTitleDelta(lastState.title||"",payload.title||"");
+        const lastAt=Date.parse(lastState.latestAt||lastState.at||0);
+        const nextAt=Date.parse(payload.at||0);
+        const newReport=Number.isFinite(nextAt)&&(!Number.isFinite(lastAt)||nextAt>lastAt+30*1000);
+        if(titleDelta.material&&newReport){
+          const pushedAt=Date.parse(lastState.pushedAt||0);
+          const sincePush=Number.isFinite(pushedAt)?now-pushedAt:Infinity;
+          const minGap=titleDelta.major?60*1000:2*60*1000;
+          if(sincePush>=minGap){changeKind="story-update";changeReason="material-update";}
+          else changeReason="update-cooldown";
+        }else if(titleDelta.changed&&!titleDelta.material)changeReason="minor-rewrite";
+        else if(titleDelta.material&&!newReport)changeReason="no-new-report";
+        else changeReason="same-headline";
+      }else{
+        // Legacy safety: if the current story is the same but no historical
+        // sent-state exists, do not manufacture an update Push.
+        changeReason=observedFingerprintChanged?"same-story-fingerprint-change":"same-headline";
       }
 
-      if(await recentLeadPushDuplicate(storage,payload)){
-        await storage.delete("lead.candidate");
-        return json({ok:true,changed:false,pushed:0,deduped:true,reason:"recent-duplicate"});
+      let queued=null;
+      if(changeKind){
+        // Cross-origin/server-client dedupe: the page and Cron can observe the
+        // same replacement within seconds and their raw fingerprints may differ
+        // slightly. The recent editorial ledger compares story/title/time before
+        // a second fan-out is allowed.
+        const duplicate=await recentLeadPushDuplicate(storage,payload);
+        if(!duplicate){
+          const sourceCount=Math.max(2,Number(payload.sources||0));
+          const storyHash=pushIdentityHash(payload.fingerprint);
+          const updateSuffix=changeKind==="story-update"?`:${pushIdentityHash(pushTitleIdentity(payload.title))}:${Math.floor(Date.parse(payload.at||0)/60000)}`:"";
+          // Keep the event fingerprint compact so the update discriminator can
+          // never be truncated by the 220-char storage/payload safety limit.
+          const notificationFingerprint=`lead:${changeKind}:${storyHash}${updateSuffix}`;
+          queued=await queuePushJob(storage,{fingerprint:notificationFingerprint,kind:"hot-story",title:`הסיפור המרכזי · ${sourceCount} מקורות`,body:`🔥 ${cleanPushTitle(payload.title)}`,url:"/",at:payload.at,sources:sourceCount,changeKind});
+          if(queued.ok){
+            const pushedState={fingerprint:payload.fingerprint,title:payload.title,titleKey:pushTitleIdentity(payload.title),latestAt:payload.at,firstAt:payload.firstAt,pushedAt:new Date().toISOString(),kind:changeKind,sources:sourceCount,official:!!payload.official};
+            await storage.put("lead.lastPushedFingerprint",payload.fingerprint);
+            await storage.put("lead.lastPushedTitleKey",pushedState.titleKey);
+            await storage.put("lead.lastPushedTitle",payload.title);
+            await storage.put("lead.lastPushedState",pushedState);
+            if(!queued.duplicate)await rememberLeadPush(storage,payload,pushedState);
+          }
+        }else{
+          queued={ok:true,queued:false,duplicate:true,reason:"recent-editorial-duplicate"};
+        }
       }
 
-      const observationBasis=decision.kind==="story-update"?(lastState?.fingerprint||payload.fingerprint):payload.fingerprint;
-      const observationKey=leadPushObservationKey(payload,decision.kind||"new-story",observationBasis);
-      let candidate=await storage.get("lead.candidate");
-      if(candidate?.key===observationKey){
-        candidate={...candidate,observations:Number(candidate.observations||1)+1,lastSeenAt:new Date(now).toISOString(),sources:Math.max(Number(candidate.sources||0),Number(payload.sources||0)),official:!!(candidate.official||payload.official),reason:decision.kind||decision.reason};
-        const candidateAt=Date.parse(candidate.at||0),payloadAt=Date.parse(payload.at||0);
-        if(Number.isFinite(payloadAt)&&(!Number.isFinite(candidateAt)||payloadAt>candidateAt))candidate.at=payload.at;
-        const candidateFirst=Date.parse(candidate.firstAt||0),payloadFirst=Date.parse(payload.firstAt||0);
-        if(Number.isFinite(payloadFirst)&&(!Number.isFinite(candidateFirst)||payloadFirst<candidateFirst))candidate.firstAt=payload.firstAt;
-        // When a browser is open, prefer the exact editorial headline that is
-        // visibly rendered on the site. The Cron still guarantees Push when no
-        // browser is open.
-        if(payload.origin==="site"||candidate.origin!=="site")candidate={...candidate,title:payload.title,titleKey:pushTitleIdentity(payload.title),origin:payload.origin};
-      } else {
-        candidate={key:observationKey,fingerprint:payload.fingerprint,title:payload.title,titleKey:pushTitleIdentity(payload.title),origin:payload.origin,at:payload.at,firstAt:payload.firstAt,observations:1,firstSeenAt:new Date(now).toISOString(),lastSeenAt:new Date(now).toISOString(),sources:Number(payload.sources||0),official:!!payload.official,reason:decision.kind||decision.reason};
-      }
-      await storage.put("lead.candidate",candidate);
-
-      const stableMs=now-Date.parse(candidate.firstSeenAt||now);
-      if(candidate.observations<2||stableMs<45000){
-        return json({ok:true,changed:true,pending:true,reason:candidate.reason,observations:candidate.observations,stableSeconds:Math.round(stableMs/1000),sources:Number(candidate.sources||0)});
-      }
-
-      const finalPayload={...payload,title:candidate.title||payload.title,sources:Math.max(Number(candidate.sources||0),Number(payload.sources||0)),official:!!(candidate.official||payload.official),at:candidate.at||payload.at,firstAt:candidate.firstAt||payload.firstAt,origin:candidate.origin||payload.origin};
-      lastState=await storage.get("lead.lastPushedState")||lastState;
-      const finalDecision=leadPushDecision(finalPayload,lastState,Date.now());
-      if(!finalDecision.eligible){
-        await storage.delete("lead.candidate");
-        return json({ok:true,changed:true,pushed:0,suppressed:true,reason:`recheck-${finalDecision.reason}`});
-      }
-      if(await recentLeadPushDuplicate(storage,finalPayload)){
-        await storage.delete("lead.candidate");
-        return json({ok:true,changed:false,pushed:0,deduped:true,reason:"recent-duplicate"});
-      }
-
-      const sourceCount=Math.max(2,Number(finalPayload.sources||0));
-      const queued=await queuePushJob(storage,{fingerprint:`lead:${finalPayload.fingerprint}:${Math.floor(Date.parse(finalPayload.at||0)/60000)}`,kind:"hot-story",title:`הסיפור המרכזי · ${sourceCount} מקורות`,body:`🔥 ${cleanPushTitle(finalPayload.title)}`,url:"/",at:finalPayload.at,sources:sourceCount,changeKind:finalDecision.kind});
-      if(queued.ok&&!queued.duplicate){
-        const pushedState={fingerprint:finalPayload.fingerprint,title:finalPayload.title,titleKey:pushTitleIdentity(finalPayload.title),latestAt:finalPayload.at,firstAt:finalPayload.firstAt,pushedAt:new Date().toISOString(),kind:finalDecision.kind||"new-story",sources:sourceCount,official:!!finalPayload.official};
-        await storage.put("lead.lastPushedFingerprint",finalPayload.fingerprint);
-        await storage.put("lead.lastPushedTitleKey",pushedState.titleKey);
-        await storage.put("lead.lastPushedTitle",finalPayload.title);
-        await storage.put("lead.lastPushedState",pushedState);
-        await rememberLeadPush(storage,finalPayload,pushedState);
-        await storage.delete("lead.candidate");
-      }
-      return json({ok:queued.ok,changed:true,queued:queued.ok,changeKind:finalDecision.kind,subscriptions:Number((await ensurePushStats(storage)).count||0),stabilitySeconds:Math.round(stableMs/1000)});
+      // Always remember what the newsroom currently shows. This state is about
+      // detecting the NEXT replacement, not about deciding whether a prior Push
+      // was delivered.
+      await storage.put("lead.observed.v197",payload);
+      await storage.delete("lead.candidate");
+      await storage.delete("lead.backgroundCandidate.v197");
+      await storage.put("lead.lastDecision",{at:new Date().toISOString(),origin:payload.origin,fingerprint:payload.fingerprint,title:payload.title,changeKind:changeKind||null,reason:changeReason||(!changeKind?"same-story":"queued"),queued:!!queued?.queued,duplicate:!!queued?.duplicate});
+      return json({ok:queued?queued.ok:true,changed:!!changeKind,queued:!!queued?.queued,duplicate:!!queued?.duplicate,changeKind:changeKind||null,reason:changeReason||null,origin:payload.origin,subscriptions:Number((await ensurePushStats(storage)).count||0)});
     }
 
     return json({error:"Not found"},404);
@@ -4363,10 +4409,12 @@ export class PushHub {
       const row=await storage.get(job.targetKey);
       if(row){
         try{
+          if(String(row?.lastDeliveredFingerprint||"")===String(job.notificationFingerprint||"")){job.processed=1;job.skipped=Number(job.skipped||0)+1;await finalizePushJob(storage,job);return;}
           const updated={...row,pendingFingerprint:job.notificationFingerprint,pendingAt:new Date().toISOString()};await storage.put(job.targetKey,updated);
           const notification=await storage.get(`notification:${job.notificationFingerprint}`);
-          const result=await sendWebPush(updated.subscription,keys,notification);job.processed=1;
-          if(result.ok)job.pushed=1;else if([404,410].includes(result.status)){const invalidId=String(job.targetKey||"").replace(/^sub:/,"");if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:result.status});await storage.delete(job.targetKey);if(updated.deviceId){const mapped=await storage.get(`device:${updated.deviceId}`);if(mapped===job.targetKey)await storage.delete(`device:${updated.deviceId}`);}await updatePushStats(storage,-1,updated.platform||pushPlatformFromUserAgent(updated.userAgent));job.removed=1;}else job.failed=1;
+          const result=await sendWebPushReliable(updated.subscription,keys,notification);job.processed=1;
+          if(result.ok){job.pushed=1;await storage.put(job.targetKey,{...updated,lastDeliveredFingerprint:job.notificationFingerprint,lastDeliveredAt:new Date().toISOString()});}
+          else if([404,410].includes(result.status)){const invalidId=String(job.targetKey||"").replace(/^sub:/,"");if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:result.status});await storage.delete(job.targetKey);if(updated.deviceId){const mapped=await storage.get(`device:${updated.deviceId}`);if(mapped===job.targetKey)await storage.delete(`device:${updated.deviceId}`);}await updatePushStats(storage,-1,updated.platform||pushPlatformFromUserAgent(updated.userAgent));job.removed=1;}else job.failed=1;
         }catch{job.processed=1;job.failed=1;}
       } else {job.processed=1;job.failed=1;}
       await finalizePushJob(storage,job);return;
@@ -4411,17 +4459,18 @@ export class PushHub {
           }else if(!mapped)await storage.put(`device:${rowDeviceId}`,key);
         }
         if(!pushPreferenceAllows(row,notification?.kind,notification)){skipped.push([key,row]);continue;}
+        if(String(row?.lastDeliveredFingerprint||"")===String(job.notificationFingerprint||"")){skipped.push([key,row]);continue;}
         const updated={...row,pendingFingerprint:job.notificationFingerprint,pendingAt:new Date().toISOString()};
         await storage.put(key,updated);eligible.push([key,updated]);
       }
       job.processed+=skipped.length;job.skipped=Number(job.skipped||0)+skipped.length;
       const results=await Promise.all(eligible.map(async([key,row])=>{
-        try{const result=await sendWebPush(row?.subscription,keys,notification);if(result.ok)return {key,ok:true,mode:result.mode};if([404,410].includes(result.status))return {key,remove:true,row,status:result.status};return {key,ok:false,status:result.status,mode:result.mode};}
-        catch(error){return {key,ok:false,error:String(error?.message||error)};}
+        try{const result=await sendWebPushReliable(row?.subscription,keys,notification);if(result.ok)return {key,row,ok:true,mode:result.mode,retried:!!result.retried};if([404,410].includes(result.status))return {key,remove:true,row,status:result.status};return {key,row,ok:false,status:result.status,mode:result.mode};}
+        catch(error){return {key,row,ok:false,error:String(error?.message||error)};}
       }));
       for(const result of results){
         job.processed+=1;
-        if(result.ok)job.pushed+=1;
+        if(result.ok){job.pushed+=1;await storage.put(result.key,{...result.row,lastDeliveredFingerprint:job.notificationFingerprint,lastDeliveredAt:new Date().toISOString()});}
         else if(result.remove){const invalidId=String(result.key||"").replace(/^sub:/,"");if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:result.status||410});await storage.delete(result.key);if(result.row?.deviceId){const mapped=await storage.get(`device:${result.row.deviceId}`);if(mapped===result.key)await storage.delete(`device:${result.row.deviceId}`);}await updatePushStats(storage,-1,result.row?.platform||pushPlatformFromUserAgent(result.row?.userAgent));job.removed+=1;}
         else job.failed+=1;
       }
