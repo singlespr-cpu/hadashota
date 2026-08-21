@@ -261,7 +261,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "204.0.0",
+          version: "200.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -274,7 +274,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "204.0.0",
+        version: "200.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1525,7 +1525,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "204.0.0"
+      "X-Hadashota-Version": "200.0.0"
     }));
   }
 
@@ -1535,7 +1535,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "204.0.0",
+    "X-Hadashota-Version": "200.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1576,7 +1576,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "204.0.0",
+          "X-Hadashota-Version": "200.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1701,13 +1701,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "204.0.0",
+      "X-Hadashota-Version": "200.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "204.0.0",
+      "X-Hadashota-Version": "200.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1741,7 +1741,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "204.0.0"
+        "X-Hadashota-Version": "200.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1763,7 +1763,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "204.0.0"
+    "X-Hadashota-Version": "200.0.0"
   });
 }
 
@@ -3100,14 +3100,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"204.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"204.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"200.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"200.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"204.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"204.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"200.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"200.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -3438,7 +3438,7 @@ function serverLeadPayload(entry) {
 
 const BACKGROUND_NEWS_ORIGIN="https://koteretplus.com";
 const BACKGROUND_SHARD_GROUPS=[["sites-1","sites-3","telegram-2"],["sites-2","telegram-1","telegram-3"]];
-const PUSH_SHARD_COLLECTOR_PREFIX="koteret-plus-news-shard-v204";
+const PUSH_SHARD_COLLECTOR_PREFIX="koteret-plus-news-shard-v200";
 
 function flattenNewsPayloadRows(payloads=[]){
   const rows=[],seen=new Set();
@@ -3484,27 +3484,16 @@ async function collectBackgroundShardDirect(shard,env){
   const now=Date.now(),cutoff=now-30*60*60*1000;
   const sourceHealth=summarizeSourceHealth(settled,now,cutoff);
   const failedSources=settled.filter((result)=>result?.error).map((result)=>({id:result.source.id,name:result.source.name,error:result.error}));
-  const respondingSources=settled.filter((result)=>!result?.error).length;
-
-  // V203: an empty shard is not the same thing as a failed shard. sites-3 is
-  // mostly HTML/JSON-LD and official pages; those origins can answer HTTP 200
-  // while exposing no parseable/recent article rows at that moment. V200/V201
-  // collapsed that valid "fresh but empty" state into ALL_SOURCES_FAILED, which
-  // made the autonomous background cycle report 5/6 even though the collector
-  // had actually reached its publishers. Only a real all-request failure is a
-  // collector failure. A successfully collected shard with no recent rows is
-  // returned as a fresh empty payload and contributes no stories to lead choice.
-  if(!respondingSources)throw new Error("ALL_SOURCE_REQUESTS_FAILED");
-
   const recent=rawItems.filter((item)=>{
     const t=Date.parse(item?.publishedAt||0);
     return Number.isFinite(t)&&t>=cutoff&&t<=now+10*60*1000;
   }).map((item)=>({...item,category:classify(item)})).sort((a,b)=>Date.parse(b.publishedAt)-Date.parse(a.publishedAt));
-  const clustered=recent.length?clusterItems(recent).slice(0,shard.startsWith("telegram")?220:180):[];
+  if(!recent.length)throw new Error(rawItems.length?"NO_RECENT_ITEMS":"ALL_SOURCES_FAILED");
+  const clustered=clusterItems(recent).slice(0,shard.startsWith("telegram")?220:180);
   const generatedAt=new Date().toISOString();
   return {
     generatedAt,
-    snapshotId:stableId(`${shard}|push-v204|${generatedAt}|${clustered.slice(0,12).map((item)=>item.id).join("|")}`),
+    snapshotId:stableId(`${shard}|push-v200|${generatedAt}|${clustered.slice(0,12).map((item)=>item.id).join("|")}`),
     refreshAfterSeconds:30,
     shard,
     stale:false,
@@ -3513,7 +3502,7 @@ async function collectBackgroundShardDirect(shard,env){
     tookMs:Date.now()-started,
     items:clustered,
     sources:sourceHealth,
-    stats:{configuredSources:SOURCES.length,configuredShardSources:shardSources.length,attemptedSources:settled.length,respondingSources,rawItems:rawItems.length,recentItems:recent.length,items:clustered.length,failedSources:failedSources.length,retriesUsed:1-retryBudget.remaining,healthySources:sourceHealth.filter((source)=>source.healthStatus==="healthy").length,degradedSources:sourceHealth.filter((source)=>source.healthStatus==="degraded").length,offlineSources:sourceHealth.filter((source)=>source.healthStatus==="offline").length},
+    stats:{configuredSources:SOURCES.length,configuredShardSources:shardSources.length,attemptedSources:settled.length,items:clustered.length,failedSources:failedSources.length,retriesUsed:1-retryBudget.remaining,healthySources:sourceHealth.filter((source)=>source.healthStatus==="healthy").length,degradedSources:sourceHealth.filter((source)=>source.healthStatus==="degraded").length,offlineSources:sourceHealth.filter((source)=>source.healthStatus==="offline").length},
     failures:failedSources.slice(0,12)
   };
 }
@@ -3622,7 +3611,7 @@ async function runBackgroundPushMonitor(env, ctx) {
     if(backgroundResponse.ok){
       const background=await backgroundResponse.json().catch(()=>null);
       if(background?.payload){
-        background.payload.backgroundComplete=background.completeFresh===true||background.quorumReady===true;
+        background.payload.backgroundComplete=background.completeFresh===true;
         background.payload.backgroundFreshShards=Number(background.storedThisRun||0);
         await stub.fetch("https://push.internal/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(background.payload)});
       }
@@ -3760,35 +3749,19 @@ async function sendEmptyWebPush(subscription,keys,notification={}) {
   return {ok:response.ok,status:response.status,mode:"empty"};
 }
 
-function isAppleWebPushEndpoint(endpoint="") {
-  try{return /(^|\.)push\.apple\.com$/i.test(new URL(String(endpoint||"")).hostname);}catch{return false;}
-}
-async function pushProviderError(response) {
-  if(!response||response.ok)return {reason:"",detail:"",apnsId:""};
-  let detail="",reason="";
-  try{detail=(await response.clone().text()).slice(0,500);}catch{}
-  try{const parsed=detail?JSON.parse(detail):null;reason=String(parsed?.reason||parsed?.error||"").slice(0,120);}catch{}
-  return {reason,detail,apnsId:String(response.headers?.get?.("apns-id")||"").slice(0,120)};
-}
 async function sendWebPush(subscription,keys,notification) {
   const endpoint=String(subscription?.endpoint||"");
-  if(!/^https:\/\//i.test(endpoint))return {ok:false,status:400,mode:"payload",reason:"InvalidEndpoint"};
+  if(!/^https:\/\//i.test(endpoint))return {ok:false,status:400,mode:"payload"};
   try{
     const authorization=await vapidAuthorization(endpoint,keys);
     const body=await encryptWebPushPayload(subscription,compactPushPayload(notification));
-    const apple=isAppleWebPushEndpoint(endpoint);
-    // Apple APNs validates every optional Web Push header strictly. V197 — the
-    // last sender known to be accepted by Apple — did not send Topic. V198+
-    // added Topic and all three iOS subscriptions began returning HTTP 400 while
-    // Chrome/Android continued to accept the exact same payload. Keep Apple on
-    // the minimal RFC 8030/8291 request; server/device fingerprints already give
-    // us stronger duplicate protection without relying on provider-side Topic.
-    const headers={Authorization:authorization,TTL:"900","Content-Encoding":"aes128gcm","Content-Type":"application/octet-stream"};
-    if(!apple){headers.Urgency="high";headers.Topic=pushTopicHeader(notification);}
-    const response=await fetch(endpoint,{method:"POST",headers,body});
-    const provider=response.ok?{reason:"",detail:"",apnsId:String(response.headers?.get?.("apns-id")||"").slice(0,120)}:await pushProviderError(response);
-    return {ok:response.ok,status:response.status,mode:"payload",provider:apple?"apple":"webpush",...provider};
+    const response=await fetch(endpoint,{method:"POST",headers:{Authorization:authorization,TTL:"900",Urgency:"high",Topic:pushTopicHeader(notification),"Content-Encoding":"aes128gcm","Content-Type":"application/octet-stream"},body});
+    return {ok:response.ok,status:response.status,mode:"payload"};
   }catch(error){
+    // V200: never downgrade a userVisibleOnly notification to an empty/silent
+    // push. In particular WebKit can penalize silent pushes and an empty message
+    // cannot use the declarative fallback when the PWA is closed. Keep the
+    // failure explicit so the reliable sender can retry the encrypted payload.
     console.warn("Encrypted Web Push failed",String(error?.message||error));
     return {ok:false,status:0,mode:"payload",error:String(error?.message||error)};
   }
@@ -4110,7 +4083,7 @@ async function recordPushFailureDiagnostic(storage,job,row,result={}){
   try{
     const key=`push.failureScratch:${String(job?.notificationFingerprint||"unknown")}`;
     const rows=Array.isArray(await storage.get(key))?await storage.get(key):[];
-    rows.push({at:new Date().toISOString(),platform:String(row?.platform||pushPlatformFromUserAgent(row?.userAgent||"")),status:Number(result?.status||0)||0,mode:String(result?.mode||""),provider:String(result?.provider||""),reason:String(result?.reason||"").slice(0,120),transient:isTransientPushStatus(result?.status),error:String(result?.error||result?.detail||"").slice(0,220),apnsId:String(result?.apnsId||"").slice(0,120)});
+    rows.push({at:new Date().toISOString(),platform:String(row?.platform||pushPlatformFromUserAgent(row?.userAgent||"")),status:Number(result?.status||0)||0,mode:String(result?.mode||""),transient:isTransientPushStatus(result?.status),error:String(result?.error||"").slice(0,180)});
     await storage.put(key,rows.slice(-30));
   }catch{}
 }
@@ -4167,7 +4140,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"204.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"200.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4374,7 +4347,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"204.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"200.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4411,7 +4384,7 @@ export class PushHub {
       const heartbeat=await storage.get("push.backgroundHeartbeat");
       const lastDecision=await storage.get("lead.lastDecision");
       const lastFailureDetails=await storage.get("push.lastFailureDetails");
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"204.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"200.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -4454,7 +4427,7 @@ export class PushHub {
 
     if(url.pathname==="/background-heartbeat"&&request.method==="POST"){
       const data=await request.json().catch(()=>({}));
-      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"204.0.0"};
+      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"200.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       return json({ok:true,...heartbeat},200,{"Cache-Control":"no-store"});
     }
@@ -4498,14 +4471,7 @@ export class PushHub {
       const incomingShardNames=ESCALATION_SHARDS.filter((shard)=>incoming?.[shard]&&Array.isArray(incoming[shard]?.items));
       const expectedShards=Math.max(1,Math.min(ESCALATION_SHARDS.length,Number(data?.expectedShards)||ESCALATION_SHARDS.length));
       const completeFresh=storedCount>=expectedShards&&incomingShardNames.length>=expectedShards;
-      // sites-3 contains the lowest-priority/official HTML fallbacks and can be
-      // blocked as a group by upstream anti-bot rules. Do not make one failed
-      // auxiliary shard turn the otherwise autonomous 5-shard newsroom snapshot
-      // back into a browser-dependent 45-second candidate. Keep completeFresh
-      // truthful, but expose a strict core quorum for Push decisions.
-      const corePushShards=["sites-1","sites-2","telegram-1","telegram-2","telegram-3"];
-      const quorumReady=corePushShards.every((shard)=>incomingShardNames.includes(shard))&&recent.length>=20;
-      const status={at:new Date(now).toISOString(),tickStartedAt:String(data?.tickStartedAt||""),storedThisRun:storedCount,expectedShards,completeFresh,quorumReady,incomingShards:incomingShardNames,availableShards:payloads.length,shardAges,collectorFailures,recentItems:recent.length,leadFingerprint:payload?.fingerprint||"",leadTitle:payload?.title||""};
+      const status={at:new Date(now).toISOString(),tickStartedAt:String(data?.tickStartedAt||""),storedThisRun:storedCount,expectedShards,completeFresh,incomingShards:incomingShardNames,availableShards:payloads.length,shardAges,collectorFailures,recentItems:recent.length,leadFingerprint:payload?.fingerprint||"",leadTitle:payload?.title||""};
       await storage.put("push.backgroundNews.status",status);
       return json({ok:true,payload, ...status},200,{"Cache-Control":"no-store"});
     }
@@ -4659,13 +4625,7 @@ export class PushHub {
           const updated={...row,pendingFingerprint:job.notificationFingerprint,pendingAt:new Date().toISOString()};await storage.put(job.targetKey,updated);
           const notification=await storage.get(`notification:${job.notificationFingerprint}`);
           const result=await sendWebPushReliable(updated.subscription,keys,notification);job.processed=1;
-          if(!result.ok){
-            await recordPushFailureDiagnostic(storage,job,updated,result);
-            if(String(result?.reason||"")==="VapidPkHashMismatch"){
-              const invalidId=String(job.targetKey||"").replace(/^sub:/,"");
-              if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:400,reason:"VapidPkHashMismatch"});
-            }
-          }
+          if(!result.ok)await recordPushFailureDiagnostic(storage,job,updated,result);
           if(result.ok){
             job.pushed=1;
             await storage.put(job.targetKey,{...updated,lastDeliveredFingerprint:job.notificationFingerprint,lastDeliveredAt:new Date().toISOString(),pendingFingerprint:""});
@@ -4744,7 +4704,7 @@ export class PushHub {
       }
       job.processed+=skipped.length;job.skipped=Number(job.skipped||0)+skipped.length;
       const results=await Promise.all(eligible.map(async([key,row])=>{
-        try{const result=await sendWebPushReliable(row?.subscription,keys,notification);if(result.ok)return {key,row,ok:true,mode:result.mode,retried:!!result.retried,provider:result.provider||""};if([404,410].includes(result.status))return {key,remove:true,row,status:result.status,provider:result.provider||"",reason:result.reason||""};return {key,row,ok:false,status:result.status,mode:result.mode,provider:result.provider||"",reason:result.reason||"",detail:result.detail||"",error:result.error||"",apnsId:result.apnsId||""};}
+        try{const result=await sendWebPushReliable(row?.subscription,keys,notification);if(result.ok)return {key,row,ok:true,mode:result.mode,retried:!!result.retried};if([404,410].includes(result.status))return {key,remove:true,row,status:result.status};return {key,row,ok:false,status:result.status,mode:result.mode};}
         catch(error){return {key,row,ok:false,error:String(error?.message||error)};}
       }));
       for(const result of results){
@@ -4757,11 +4717,7 @@ export class PushHub {
         else {
           job.failed+=1;
           await recordPushFailureDiagnostic(storage,job,result.row,result);
-          if(String(result?.reason||"")==="VapidPkHashMismatch"){
-            const invalidId=String(result.key||"").replace(/^sub:/,"");
-            if(invalidId)await storage.put(`push.invalid:${invalidId}`,{at:new Date().toISOString(),status:400,reason:"VapidPkHashMismatch"});
-          }
-          // V201: do not lose a subscriber on a temporary Apple/Chrome push
+          // V200: do not lose a subscriber on a temporary Apple/Chrome push
           // service/network failure. The initial fan-out continues for everyone
           // else and a targeted alarm retries this exact endpoint afterwards.
           if(isTransientPushStatus(result?.status))await queueTargetPushRetry(storage,job,result.key,1);

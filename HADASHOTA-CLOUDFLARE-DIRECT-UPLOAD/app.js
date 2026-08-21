@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "204.0.0";
+const KOTERET_CLIENT_BUILD = "200.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -469,9 +469,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V204 · API ${apiVersion}` : "גרסה V204 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V200 · API ${apiVersion}` : "גרסה V200 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V204 · API לא מחובר";
+    marker.textContent = "גרסה V200 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -4238,7 +4238,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=204.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=200.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4308,7 +4308,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=204.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=200.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -4344,22 +4344,6 @@ async function ensureServerPushSubscription() {
 
   const applicationServerKey = await urlBase64ToUint8Array(config.publicKey);
   let subscription = await registration.pushManager.getSubscription();
-  // V201: a PushSubscription can only be reused when it is bound to the same
-  // VAPID applicationServerKey the server is currently signing with. Apple
-  // reports a mismatch as HTTP 400 VapidPkHashMismatch. Compare locally and
-  // rotate silently (permission is already granted) instead of storing a broken
-  // endpoint forever.
-  if(subscription?.options?.applicationServerKey){
-    try{
-      const existingKey=new Uint8Array(subscription.options.applicationServerKey);
-      const sameKey=existingKey.length===applicationServerKey.length&&existingKey.every((value,index)=>value===applicationServerKey[index]);
-      if(!sameKey){
-        await fetch("/api/push/unsubscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:subscription.endpoint})}).catch(()=>{});
-        await subscription.unsubscribe().catch(()=>{});
-        subscription=null;
-      }
-    }catch{}
-  }
   // V186 one-time iOS repair: refresh the PushSubscription endpoint without a
   // new permission prompt. This recovers Home-Screen apps whose Apple endpoint
   // expired while Notification.permission still remained "granted".
