@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "206.0.0";
+const KOTERET_CLIENT_BUILD = "208.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -429,10 +429,10 @@ function init() {
   verifyApiVersion();
   const restoredInstantly = restoreFastRenderSnapshot({ skipLead: true });
   if (!restoredInstantly) restoreLocalLastGood({ skipLead: true });
-  // V206: never paint a device-local lead headline during first entry. The feed
-  // may still use its fast local snapshot, but the hero is bootstrapped from the
-  // autonomous server lead so an old story cannot flash before the live merge.
-  hydrateInitialLeadFromServer().catch(() => {});
+  // V208: keep the lead module in its loading state for the entire initial
+  // newsroom collection. Do not paint a local snapshot or /api/push/latest
+  // bootstrap headline: only the fully merged live newsroom round may reveal
+  // the lead story. This guarantees a single transition: loading -> current lead.
   // Utilities are secondary to first paint. They fill in shortly afterwards.
   setTimeout(loadUtilities, restoredInstantly ? 650 : 150);
   initPromoCard();
@@ -558,9 +558,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V206 · API ${apiVersion}` : "גרסה V206 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V208 · API ${apiVersion}` : "גרסה V208 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V206 · API לא מחובר";
+    marker.textContent = "גרסה V208 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1470,7 +1470,8 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
     state.dataDelayed = true;
     state.dataDelaySeverity = "major";
     state.delayedShards = NEWS_SHARDS.map((shard) => ({ shard, reason: "request_failed", localFallback: true }));
-    const restored = state.items.length > 0 || restoreLocalLastGood();
+    const keepInitialLeadLoading = !!el.leadStory?.classList.contains("is-initializing");
+    const restored = state.items.length > 0 || restoreLocalLastGood({ skipLead: keepInitialLeadLoading });
     setDataStatus(true, restored, "major");
     scheduleNewsRetry();
     if (state.autoRefresh && !state.timer) scheduleNextRefresh(getRefreshInterval());
@@ -3983,7 +3984,7 @@ function renderLeadStory() {
     savedAt:Date.now()
   };
   try { localStorage.setItem("hadashota.publicLead.v1", JSON.stringify(publicLeadSnapshot)); } catch {}
-  // V206: browser renders may update the public display snapshot, but must never
+  // V208: browser renders may update the public display snapshot, but must never
   // trigger Push fan-out. Autonomous Cron/background is the sole Push decision source.
   syncDisplayedHotStoryToServer(publicLeadSnapshot,{displayOnly:true});
   if (leadHref) {
@@ -4329,7 +4330,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=206.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=208.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4399,7 +4400,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=206.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=208.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
