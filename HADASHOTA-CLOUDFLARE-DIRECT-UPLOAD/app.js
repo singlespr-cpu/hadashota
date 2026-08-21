@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "208.0.0";
+const KOTERET_CLIENT_BUILD = "209.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -429,7 +429,7 @@ function init() {
   verifyApiVersion();
   const restoredInstantly = restoreFastRenderSnapshot({ skipLead: true });
   if (!restoredInstantly) restoreLocalLastGood({ skipLead: true });
-  // V208: keep the lead module in its loading state for the entire initial
+  // V209: keep the lead module in its loading state for the entire initial
   // newsroom collection. Do not paint a local snapshot or /api/push/latest
   // bootstrap headline: only the fully merged live newsroom round may reveal
   // the lead story. This guarantees a single transition: loading -> current lead.
@@ -451,7 +451,19 @@ function init() {
   // browser action that explicitly forces all publishers; automatic/lifecycle
   // refreshes reuse the shared snapshot so one visitor cannot re-scan every
   // source just by opening or refocusing the page.
-  loadNews(false).catch((error) => console.warn("Initial news load failed", error));
+  loadNews(false).then(async () => {
+    // V209: the fully merged newsroom remains authoritative. If that round has
+    // no eligible lead, fall back to the latest server-verified lead instead of
+    // collapsing the entire hero into "waiting for more sources". This does not
+    // relax corroboration rules and does not touch Push delivery.
+    if (!state.currentLeadEntry && el.leadStory?.classList.contains("is-initializing")) {
+      const hydrated = await hydrateInitialLeadFromServer();
+      if (!hydrated && el.leadStory?.classList.contains("is-initializing")) {
+        el.leadStory.classList.remove("is-initializing");
+        renderLeadStory();
+      }
+    }
+  }).catch((error) => console.warn("Initial news load failed", error));
   restartAutoRefresh();
   // First-visit Push offer: wait for the first paint/news merge so the dialog is responsive,
   // but still show it automatically on a new visit. App installation itself is never auto-prompted.
@@ -474,7 +486,9 @@ async function hydrateInitialLeadFromServer() {
     const data = await response.json();
     const title = cleanDisplayText(data?.title || "");
     const sourceCount = Math.max(0, Number(data?.sources) || 0);
-    if (!title || sourceCount < 2) return false;
+    const serverLeadAt = Date.parse(data?.at || data?.generatedAt || 0);
+    const serverLeadAge = Number.isFinite(serverLeadAt) ? Date.now() - serverLeadAt : Infinity;
+    if (!title || sourceCount < 2 || serverLeadAge < -5 * 60 * 1000 || serverLeadAge > STORED_LEAD_HARD_MAX_AGE_MS) return false;
 
     // A full newsroom render that finished first is authoritative; never let the
     // lightweight bootstrap overwrite it afterwards.
@@ -534,6 +548,8 @@ async function hydrateInitialLeadFromServer() {
       el.leadStory.classList.remove("has-media");
     }
 
+    el.leadStory.dataset.serverLead = "1";
+    el.leadStory.dataset.serverLeadAt = String(serverLeadAt);
     el.leadStory.classList.remove("hidden", "is-initializing");
     return true;
   } catch (error) {
@@ -558,9 +574,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V208 · API ${apiVersion}` : "גרסה V208 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V209 · API ${apiVersion}` : "גרסה V209 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V208 · API לא מחובר";
+    marker.textContent = "גרסה V209 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3865,6 +3881,21 @@ function renderLeadStory() {
   if (!winner) {
     state.currentLeadEntry = null;
     state.forceLeadReevaluation = false;
+
+    // V209 initial entry: do not replace the intentional loading skeleton before
+    // the server-verified fallback has had one chance to hydrate the hero.
+    if (el.leadStory?.classList.contains("is-initializing")) return;
+
+    // If the live browser round temporarily has no qualifying winner, preserve a
+    // fresh server-verified lead already shown on this page. This prevents the
+    // whole main-story module from disappearing on the next automatic refresh.
+    const serverLeadAt = Number(el.leadStory?.dataset?.serverLeadAt || 0);
+    if (el.leadStory?.dataset?.serverLead === "1" && serverLeadAt > 0 && Date.now() - serverLeadAt <= STORED_LEAD_HARD_MAX_AGE_MS) return;
+    if (el.leadStory) {
+      delete el.leadStory.dataset.serverLead;
+      delete el.leadStory.dataset.serverLeadAt;
+    }
+
     const hasFeed = state.items.length > 0;
     el.leadStoryTitle.textContent = hasFeed ? "ממתין לאימות ממקורות נוספים" : "מתחבר לעדכונים האחרונים…";
     el.leadStoryPreview.textContent = hasFeed
@@ -3908,6 +3939,10 @@ function renderLeadStory() {
 
   state.currentLeadEntry = winner;
   state.forceLeadReevaluation = false;
+  if (el.leadStory) {
+    delete el.leadStory.dataset.serverLead;
+    delete el.leadStory.dataset.serverLeadAt;
+  }
 
   const winnerFingerprint = leadFingerprint(winner);
   if (winnerFingerprint !== state.displayedLeadFingerprint) {
@@ -3984,7 +4019,7 @@ function renderLeadStory() {
     savedAt:Date.now()
   };
   try { localStorage.setItem("hadashota.publicLead.v1", JSON.stringify(publicLeadSnapshot)); } catch {}
-  // V208: browser renders may update the public display snapshot, but must never
+  // V209: browser renders may update the public display snapshot, but must never
   // trigger Push fan-out. Autonomous Cron/background is the sole Push decision source.
   syncDisplayedHotStoryToServer(publicLeadSnapshot,{displayOnly:true});
   if (leadHref) {
@@ -4330,7 +4365,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=208.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=209.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4400,7 +4435,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=208.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=209.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
