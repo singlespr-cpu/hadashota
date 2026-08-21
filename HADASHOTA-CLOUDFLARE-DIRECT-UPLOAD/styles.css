@@ -9579,10 +9579,3 @@ html[data-theme="dark"] .lead-story-loading-copy small{color:#ff8b80}
   .lead-story-loading-copy small{font-size:10.5px}
 }
 @media(prefers-reduced-motion:reduce){.lead-story-loading-spinner{animation-duration:1.8s}}
-
-
-/* =========================================================
-   V209 — cold-entry lead is loading-only until full merge
-   ========================================================= */
-.lead-story.is-initializing .lead-story-topline{display:none!important}
-html:not([data-theme="dark"]) .lead-story.is-initializing{background:#fff!important}
