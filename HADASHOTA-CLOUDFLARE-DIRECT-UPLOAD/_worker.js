@@ -189,6 +189,10 @@ export default {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return handleAdminRegisterDevice(request, env);
     }
+    if (url.pathname === "/api/admin/device") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return handleAdminDevice(request, env);
+    }
     if (url.pathname === "/api/admin/push") {
       if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return handleAdminPush(request, env);
@@ -267,7 +271,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "218.0.0",
+          version: "219.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -280,7 +284,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "218.0.0",
+        version: "219.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -373,7 +377,8 @@ async function handleAdminSession(request,env){
     if(!(await verifyPromoAdminPassword(body?.password)))return json({error:"סיסמה שגויה"},401,{"Cache-Control":"no-store"});
     const bytes=crypto.getRandomValues(new Uint8Array(32)),token=bytesToBase64Url(bytes),tokenHash=await sha256Base64Url(token);
     const userAgent=String(request.headers.get("User-Agent")||"").slice(0,220);
-    await adminHubJson(env,"/admin/session/create",{tokenHash,userAgent,maxAge:ADMIN_SESSION_MAX_AGE});
+    const deviceId=String(body?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+    await adminHubJson(env,"/admin/session/create",{tokenHash,userAgent,deviceId,maxAge:ADMIN_SESSION_MAX_AGE});
     return json({ok:true,persistent:true},200,{"Cache-Control":"no-store","Set-Cookie":adminSessionCookie(token)});
   }
   if(request.method==="GET"){
@@ -496,7 +501,9 @@ async function handleAdminContact(request,env){
 async function handleAdminDashboard(request,env){
   let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
   if(!(await verifyAdminSession(request,env)))return json({error:"נדרשת התחברות"},401,{"Cache-Control":"no-store"});
-  return adminHubCall(env,"/admin/dashboard",{});
+  const currentDeviceId=String(body?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+  const token=adminSessionCookieValue(request),currentSessionHash=token?await sha256Base64Url(token):"";
+  return adminHubCall(env,"/admin/dashboard",{currentDeviceId,currentSessionHash});
 }
 async function handleAdminRegisterDevice(request,env){
   let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
@@ -504,7 +511,19 @@ async function handleAdminRegisterDevice(request,env){
   const deviceId=String(body?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
   const userAgent=String(body?.userAgent||request.headers.get("User-Agent")||"").slice(0,220);
   if(!deviceId)return json({error:"מזהה מכשיר חסר"},400,{"Cache-Control":"no-store"});
-  return adminHubCall(env,"/admin/register-device",{deviceId,userAgent});
+  const token=adminSessionCookieValue(request),currentSessionHash=token?await sha256Base64Url(token):"";
+  const notificationsEnabled=body?.notificationsEnabled===true?true:undefined;
+  return adminHubCall(env,"/admin/register-device",{deviceId,userAgent,currentSessionHash,notificationsEnabled});
+}
+async function handleAdminDevice(request,env){
+  let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
+  if(!(await verifyAdminSession(request,env)))return json({error:"נדרשת התחברות"},401,{"Cache-Control":"no-store"});
+  const action=String(body?.action||"").slice(0,40);
+  const deviceId=String(body?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+  const sessionHash=String(body?.sessionHash||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120);
+  const currentDeviceId=String(body?.currentDeviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+  const token=adminSessionCookieValue(request),currentSessionHash=token?await sha256Base64Url(token):"";
+  return adminHubCall(env,"/admin/device",{action,deviceId,sessionHash,currentDeviceId,currentSessionHash});
 }
 async function handleAdminPush(request,env){
   let body;try{body=await request.json()}catch{return json({error:"Invalid JSON"},400,{"Cache-Control":"no-store"})}
@@ -1558,7 +1577,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "218.0.0"
+      "X-Hadashota-Version": "219.0.0"
     }));
   }
 
@@ -1568,7 +1587,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "218.0.0",
+    "X-Hadashota-Version": "219.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1609,7 +1628,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "218.0.0",
+          "X-Hadashota-Version": "219.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1734,13 +1753,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "218.0.0",
+      "X-Hadashota-Version": "219.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "218.0.0",
+      "X-Hadashota-Version": "219.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1774,7 +1793,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "218.0.0"
+        "X-Hadashota-Version": "219.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1796,7 +1815,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "218.0.0"
+    "X-Hadashota-Version": "219.0.0"
   });
 }
 
@@ -3133,14 +3152,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"218.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"218.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"218.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"218.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4561,7 +4580,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"218.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"219.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4719,6 +4738,7 @@ export class PushHub {
       const summary=await storage.get("contact.summary")||{total:0,newCount:0};summary.total=Number(summary.total||0)+1;summary.newCount=Number(summary.newCount||0)+1;summary.lastAt=createdAt;await storage.put("contact.summary",summary);
       const adminRows=await storage.list({prefix:"admin.device:",limit:12});let adminPushQueued=0;
       for(const row of adminRows.values()){
+        if(row?.notificationsEnabled===false)continue;
         const deviceId=String(row?.deviceId||"");if(!deviceId)continue;
         const mapped=String(await storage.get(`device:${deviceId}`)||"");if(!mapped)continue;
         const queued=await queuePushJob(storage,{fingerprint:`admin-contact:${id}:${deviceId}`,kind:"admin-contact",title:"✉️ פנייה חדשה בכותרת פלוס",body:`${item.name} · ${item.topic||"כללי"}`,url:"/manage-kp-7538#contactInboxPanel",at:createdAt},deviceId);
@@ -4759,7 +4779,8 @@ export class PushHub {
       const tokenHash=String(data?.tokenHash||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120);
       if(tokenHash.length<20)return json({error:"Invalid admin session"},400,{"Cache-Control":"no-store"});
       const now=Date.now(),maxAge=Math.max(86400,Math.min(Number(data?.maxAge)||ADMIN_SESSION_MAX_AGE,ADMIN_SESSION_MAX_AGE));
-      await storage.put(`admin.session:${tokenHash}`,{tokenHash,createdAt:new Date(now).toISOString(),lastSeenAt:new Date(now).toISOString(),expiresAt:new Date(now+maxAge*1000).toISOString(),userAgent:String(data?.userAgent||"").slice(0,220)});
+      const deviceId=String(data?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+      await storage.put(`admin.session:${tokenHash}`,{tokenHash,deviceId,createdAt:new Date(now).toISOString(),lastSeenAt:new Date(now).toISOString(),expiresAt:new Date(now+maxAge*1000).toISOString(),userAgent:String(data?.userAgent||"").slice(0,220)});
       return json({ok:true},200,{"Cache-Control":"no-store"});
     }
     if(url.pathname==="/admin/session/verify"&&request.method==="POST"){
@@ -4782,8 +4803,41 @@ export class PushHub {
       const deviceId=String(data?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
       if(!deviceId)return json({error:"מזהה מכשיר חסר"},400,{"Cache-Control":"no-store"});
       const key=`admin.device:${deviceId}`,existing=await storage.get(key),now=new Date().toISOString();
-      await storage.put(key,{deviceId,userAgent:String(data?.userAgent||"").slice(0,220),registeredAt:existing?.registeredAt||now,lastSeenAt:now});
-      return json({ok:true,deviceId,pushReady:!!(await storage.get(`device:${deviceId}`))},200,{"Cache-Control":"no-store"});
+      const notificationsEnabled=data?.notificationsEnabled===true?true:(existing?.notificationsEnabled!==false);
+      await storage.put(key,{deviceId,userAgent:String(data?.userAgent||existing?.userAgent||"").slice(0,220),registeredAt:existing?.registeredAt||now,lastSeenAt:now,notificationsEnabled});
+      const currentSessionHash=String(data?.currentSessionHash||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120);
+      if(currentSessionHash){const sessionKey=`admin.session:${currentSessionHash}`,session=await storage.get(sessionKey);if(session)await storage.put(sessionKey,{...session,deviceId,lastSeenAt:now,userAgent:String(data?.userAgent||session?.userAgent||"").slice(0,220)});}
+      return json({ok:true,deviceId,pushReady:!!(await storage.get(`device:${deviceId}`)),notificationsEnabled},200,{"Cache-Control":"no-store"});
+    }
+
+    if(url.pathname==="/admin/device"&&request.method==="POST"){
+      const data=await request.json().catch(()=>({})),action=String(data?.action||"");
+      const deviceId=String(data?.deviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
+      const sessionHash=String(data?.sessionHash||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120);
+      const currentSessionHash=String(data?.currentSessionHash||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120);
+      let affected=0;
+      if(action==="disconnect-device"){
+        if(!deviceId)return json({error:"מזהה מכשיר חסר"},400,{"Cache-Control":"no-store"});
+        const sessions=await storage.list({prefix:"admin.session:",limit:200});for(const [key,row] of sessions.entries()){if(String(row?.deviceId||"")===deviceId){await storage.delete(key);affected+=1;}}
+        return json({ok:true,affected,pushPreserved:true},200,{"Cache-Control":"no-store"});
+      }
+      if(action==="disconnect-session"){
+        if(!sessionHash)return json({error:"מזהה חיבור חסר"},400,{"Cache-Control":"no-store"});
+        const key=`admin.session:${sessionHash}`;if(await storage.get(key)){await storage.delete(key);affected=1;}
+        return json({ok:true,affected,pushPreserved:true},200,{"Cache-Control":"no-store"});
+      }
+      if(action==="disconnect-others"){
+        if(!currentSessionHash)return json({error:"החיבור הנוכחי לא זוהה"},400,{"Cache-Control":"no-store"});
+        const sessions=await storage.list({prefix:"admin.session:",limit:200});for(const [key,row] of sessions.entries()){if(String(row?.tokenHash||"")!==currentSessionHash){await storage.delete(key);affected+=1;}}
+        return json({ok:true,affected,pushPreserved:true},200,{"Cache-Control":"no-store"});
+      }
+      if(action==="disable-admin-push"||action==="enable-admin-push"){
+        if(!deviceId)return json({error:"מזהה מכשיר חסר"},400,{"Cache-Control":"no-store"});
+        const key=`admin.device:${deviceId}`,row=await storage.get(key);if(!row)return json({error:"המכשיר לא נמצא"},404,{"Cache-Control":"no-store"});
+        const notificationsEnabled=action==="enable-admin-push";await storage.put(key,{...row,notificationsEnabled,lastSeenAt:row.lastSeenAt||new Date().toISOString()});
+        return json({ok:true,notificationsEnabled,pushSubscriptionPreserved:true},200,{"Cache-Control":"no-store"});
+      }
+      return json({error:"Unknown device action"},400,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/dashboard"&&request.method==="POST"){
@@ -4791,13 +4845,19 @@ export class PushHub {
       const dayRows=[...(await storage.list({prefix:"analytics.day:"})).values()].map(stripAnalyticsDay).sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-14);
       const hourRows=[...(await storage.list({prefix:"analytics.hour:"})).values()].sort((a,b)=>`${a.date}-${String(a.hour).padStart(2,"0")}`.localeCompare(`${b.date}-${String(b.hour).padStart(2,"0")}`)).slice(-48);
       const hourOfDay=await storage.get("analytics.hourOfDay")||Array.from({length:24},(_,hour)=>({hour,views:0}));
-      const stats=await ensurePushStats(storage),lastResult=await storage.get("push.lastResult"),activeJob=await storage.get("push.job"),latestNotification=await storage.get("notification.latest"),latestLead=await storage.get("lead.latest"),leadCandidate=await storage.get("lead.candidate"),lastPushedFingerprint=await storage.get("lead.lastPushedFingerprint"),backgroundNews=await storage.get("push.backgroundNews.status"),lastDecision=await storage.get("lead.lastDecision"),history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[],escalation=await storage.get("escalation.latest");
+      const stats=await ensurePushStats(storage),lastResult=await storage.get("push.lastResult"),activeJob=await storage.get("push.job"),latestNotification=await storage.get("notification.latest"),latestLead=await storage.get("lead.latest"),leadCandidate=await storage.get("lead.candidate"),lastPushedFingerprint=await storage.get("lead.lastPushedFingerprint"),backgroundNews=await storage.get("push.backgroundNews.status"),backgroundHeartbeat=await storage.get("push.backgroundHeartbeat"),lastDecision=await storage.get("lead.lastDecision"),history=Array.isArray(await storage.get("push.history"))?await storage.get("push.history"):[],escalation=await storage.get("escalation.latest");
       const contactSummary=await storage.get("contact.summary")||{total:0,newCount:0};const contactRows=[...(await storage.list({prefix:"contact.item:"})).values()].sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0)).slice(0,30);
-      const adminDeviceRows=[...(await storage.list({prefix:"admin.device:",limit:20})).values()];let adminPushReady=0;for(const row of adminDeviceRows){if(row?.deviceId&&await storage.get(`device:${row.deviceId}`))adminPushReady+=1;}
+      const requestData=await request.json().catch(()=>({})),currentDeviceId=String(requestData?.currentDeviceId||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120),currentSessionHash=String(requestData?.currentSessionHash||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,120),nowIso=new Date().toISOString();
+      if(currentSessionHash){const currentKey=`admin.session:${currentSessionHash}`,currentSession=await storage.get(currentKey);if(currentSession)await storage.put(currentKey,{...currentSession,deviceId:currentDeviceId||currentSession.deviceId||"",lastSeenAt:nowIso});}
+      const sessionEntries=[...(await storage.list({prefix:"admin.session:",limit:200})).entries()],activeSessions=[];for(const [key,row] of sessionEntries){const expiresAt=Date.parse(row?.expiresAt||0);if(!Number.isFinite(expiresAt)||expiresAt<=Date.now()){await storage.delete(key);continue;}activeSessions.push({...row,sessionHash:String(row?.tokenHash||key.slice("admin.session:".length))});}
+      const adminDeviceRows=[...(await storage.list({prefix:"admin.device:",limit:100})).values()];const deviceMap=new Map();let adminPushReady=0;
+      for(const row of adminDeviceRows){const deviceId=String(row?.deviceId||"");if(!deviceId)continue;const mapped=String(await storage.get(`device:${deviceId}`)||""),notificationsEnabled=row?.notificationsEnabled!==false,pushReady=!!mapped&&notificationsEnabled;if(pushReady)adminPushReady+=1;deviceMap.set(deviceId,{deviceId,userAgent:String(row?.userAgent||""),registeredAt:row?.registeredAt||null,lastSeenAt:row?.lastSeenAt||null,notificationsEnabled,pushSubscription:!!mapped,pushReady,sessionActive:false,sessionCount:0,sessionCreatedAt:null,sessionLastSeenAt:null,current:deviceId===currentDeviceId});}
+      const orphanSessions=[];for(const row of activeSessions){const deviceId=String(row?.deviceId||"");if(deviceId){let item=deviceMap.get(deviceId);if(!item){const mapped=String(await storage.get(`device:${deviceId}`)||"");item={deviceId,userAgent:String(row?.userAgent||""),registeredAt:row?.createdAt||null,lastSeenAt:row?.lastSeenAt||null,notificationsEnabled:true,pushSubscription:!!mapped,pushReady:!!mapped,sessionActive:false,sessionCount:0,sessionCreatedAt:null,sessionLastSeenAt:null,current:deviceId===currentDeviceId};deviceMap.set(deviceId,item);}item.sessionActive=true;item.sessionCount+=1;if(!item.userAgent)item.userAgent=String(row?.userAgent||"");if(!item.sessionCreatedAt||Date.parse(row?.createdAt||0)<Date.parse(item.sessionCreatedAt||0))item.sessionCreatedAt=row?.createdAt||item.sessionCreatedAt;if(!item.sessionLastSeenAt||Date.parse(row?.lastSeenAt||0)>Date.parse(item.sessionLastSeenAt||0))item.sessionLastSeenAt=row?.lastSeenAt||item.sessionLastSeenAt;}else orphanSessions.push({deviceId:"",sessionHash:row.sessionHash,userAgent:String(row?.userAgent||""),registeredAt:row?.createdAt||null,lastSeenAt:row?.lastSeenAt||null,notificationsEnabled:false,pushSubscription:false,pushReady:false,sessionActive:true,sessionCount:1,sessionCreatedAt:row?.createdAt||null,sessionLastSeenAt:row?.lastSeenAt||null,current:row.sessionHash===currentSessionHash,legacySession:true});}
+      const adminDeviceItems=[...deviceMap.values(),...orphanSessions].sort((a,b)=>Number(b.current)-Number(a.current)||Date.parse(b.sessionLastSeenAt||b.lastSeenAt||0)-Date.parse(a.sessionLastSeenAt||a.lastSeenAt||0));
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"218.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"219.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4837,7 +4897,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"218.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"219.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -4880,7 +4940,7 @@ export class PushHub {
 
     if(url.pathname==="/background-heartbeat"&&request.method==="POST"){
       const data=await request.json().catch(()=>({}));
-      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"218.0.0"};
+      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"219.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       return json({ok:true,...heartbeat},200,{"Cache-Control":"no-store"});
     }
