@@ -271,7 +271,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "219.0.0",
+          version: "220.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -284,7 +284,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "219.0.0",
+        version: "220.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1577,7 +1577,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "219.0.0"
+      "X-Hadashota-Version": "220.0.0"
     }));
   }
 
@@ -1587,7 +1587,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "219.0.0",
+    "X-Hadashota-Version": "220.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1628,7 +1628,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "219.0.0",
+          "X-Hadashota-Version": "220.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1753,13 +1753,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "219.0.0",
+      "X-Hadashota-Version": "220.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "219.0.0",
+      "X-Hadashota-Version": "220.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1793,7 +1793,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "219.0.0"
+        "X-Hadashota-Version": "220.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1815,7 +1815,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "219.0.0"
+    "X-Hadashota-Version": "220.0.0"
   });
 }
 
@@ -3152,14 +3152,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"220.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"220.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"219.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"220.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"220.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4378,6 +4378,62 @@ function leadPushAgeMinutes(payload={},now=Date.now()){
   if(!Number.isFinite(at))return Infinity;
   return Math.max(0,(now-at)/60000);
 }
+// V220 — source growth is NOT a material update. A story may gain 5, 10 or 20
+// publishers while remaining the very same event; that must never fan out a
+// second Push by itself. Only a concrete factual development (changed casualty
+// number/severity, death, arrest/capture, neutralisation, official terror-event
+// classification, release/rescue, etc.) can unlock another Push for the same
+// event. The signature is intentionally based on facts, not wording or sources.
+function leadPushMaterialFacts(value=""){
+  const text=normalizeHebrew(value||"");
+  const tokens=new Set(text.split(/\s+/).filter(Boolean));
+  // Count only event-impact numbers (casualties / launches / hostages etc.).
+  // Incidental numbers such as an age, road number or time must not create a
+  // second Push for the same event.
+  const numberFacts=[];
+  const countWord="הרוג(?:ים|ות)?|פצוע(?:ים|ות)?|נפגע(?:ים|ות)?|נעדר(?:ים|ות)?|חטופ(?:ים|ות)?|טיל(?:ים)?|רקט(?:ה|ות)|שיגור(?:ים)?";
+  for(const match of text.matchAll(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s+(${countWord})|(${countWord})\\s+(\\d+(?:[.,]\\d+)?)`,`g`))){
+    const n=match[1]||match[4]||"";const label=match[2]||match[3]||"";if(n&&label)numberFacts.push(`${label}:${n}`);
+  }
+  if(/(?:פצוע|נפגע|הרוג|נהרג|נרצח|נעדר|חטופ)/.test(text)){
+    for(const match of text.matchAll(/(?:עלה|עלתה|עומד|עומדת)\s+ל\s+(\d+(?:[.,]\d+)?)/g))numberFacts.push(`impact:${match[1]}`);
+  }
+  const numbers=[...new Set(numberFacts)].sort().join("|");
+  const families=[];
+  const hasAny=(words)=>words.some((w)=>tokens.has(w)||text.includes(w));
+  const groups=[
+    ["death",["נהרג","נהרגה","נהרגו","נרצח","נרצחה","נרצחו","נפטר","נפטרה","נפטרו","מותו","מותה","מת מפצעיו","מתה מפצעיה","נקבע מותו","נקבע מותה"]],
+    ["critical",["אנוש","אנושה","קריטי","קריטית","סכנה לחייו","סכנה לחייה"]],
+    ["severe",["קשה","קשים","קשות"]],
+    ["moderate",["בינוני","בינונית","בינוניים","בינוניות"]],
+    ["arrest",["נעצר","נעצרה","נעצרו","נתפס","נתפסה","נתפסו","נלכד","נלכדה","נלכדו","הסגיר","הסגירה"]],
+    ["neutralized",["חוסל","חוסלה","חוסלו","נוטרל","נוטרלה","נוטרלו","נורה למוות"]],
+    ["terror-classified",["פיגוע","טרור","לאומני","לאומנית"]],
+    ["released",["שוחרר","שוחררה","שוחררו","חולץ","חולצה","חולצו","אותו בחיים","אותרה בחיים"]],
+    ["hostage",["חטוף","חטופה","חטופים","חטופות"]],
+    ["ceasefire",["הפסקת אש","הפסקת האש","הסכם הפסקת אש"]]
+  ];
+  for(const [name,words] of groups)if(hasAny(words))families.push(name);
+  return {numbers,families:[...new Set(families)].sort()};
+}
+function leadPushMaterialDevelopment(previousState={},payload={}){
+  const titleDelta=leadPushTitleDelta(previousState?.title||"",payload?.title||"");
+  const before=leadPushMaterialFacts(previousState?.title||"");
+  const after=leadPushMaterialFacts(payload?.title||"");
+  const addedFamilies=after.families.filter((x)=>!before.families.includes(x));
+  const numbersChanged=!!(before.numbers||after.numbers)&&before.numbers!==after.numbers;
+  // A factual update must ADD a concrete development, or change a reported
+  // number. Merely removing/rephrasing words never qualifies.
+  const material=titleDelta.changed&&(numbersChanged||addedFamilies.length>0);
+  const signature=`n:${after.numbers||"-"}|f:${after.families.join(",")||"-"}`;
+  return {material,numbersChanged,addedFamilies,signature,titleDelta};
+}
+function leadPushEventId(payload={},priorState=null){
+  if(priorState?.eventId&&leadPushSameStory(priorState,payload))return String(priorState.eventId);
+  const first=Date.parse(payload?.firstAt||payload?.at||0);
+  const bucket=Number.isFinite(first)?Math.floor(first/(20*60*1000)):0;
+  return pushIdentityHash(`${bucket}|${String(payload?.fingerprint||"")}`);
+}
 function leadPushObservationKey(payload={},kind="new-story",basisFingerprint=""){
   const basis=String(basisFingerprint||payload?.fingerprint||"");
   return `${kind}:${basis}`;
@@ -4438,6 +4494,8 @@ async function rememberLeadPush(storage,payload,state={}){
     latestAt:payload?.at||null,
     firstAt:payload?.firstAt||null,
     kind:state?.kind||"new-story",
+    eventId:String(state?.eventId||leadPushEventId(payload,state)||""),
+    materialSignature:String(state?.materialSignature||leadPushMaterialFacts(payload?.title||"").families.join(",")||""),
     pushedAt:new Date().toISOString()
   });
   await storage.put("lead.recentPushedStories",rows.slice(-40));
@@ -4580,7 +4638,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"219.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"220.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4857,7 +4915,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"219.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"220.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4897,7 +4955,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"219.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"220.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -4940,7 +4998,7 @@ export class PushHub {
 
     if(url.pathname==="/background-heartbeat"&&request.method==="POST"){
       const data=await request.json().catch(()=>({}));
-      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"219.0.0"};
+      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"220.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       return json({ok:true,...heartbeat},200,{"Cache-Control":"no-store"});
     }
@@ -5090,11 +5148,22 @@ export class PushHub {
         return json({ok:true,primed:true,pushed:0,reason:"first-observation"});
       }
 
-      const sameObservedStory=leadPushSameStory(observed,payload);
+      const recentPushedRows=recentLeadPushes(await storage.get("lead.recentPushedStories"));
+      const recentSameEvent=[...recentPushedRows].reverse().find((row)=>leadPushSameStory(row,payload))||null;
+      const samePushedStory=!!lastState&&leadPushSameStory(lastState,payload);
+      const sameObservedOnly=leadPushSameStory(observed,payload);
+      // V220: if the current cluster drifts in wording/fingerprint while sources
+      // accumulate, the last delivered event ledger remains authoritative. This
+      // prevents the same real-world event from being mistaken for a new story.
+      const sameObservedStory=sameObservedOnly||samePushedStory||!!recentSameEvent;
+      // Only a state that actually belongs to THIS event may authorize an update
+      // Push. Never compare against an unrelated globally-last pushed story.
+      const sameEventState=samePushedStory?lastState:(recentSameEvent||null);
       const observedFingerprintChanged=String(observed.fingerprint||"")!==String(payload.fingerprint||"");
       let changeKind="";
       let changeReason="";
       let titleDelta=null;
+      let materialDevelopment=null;
 
       if(!sameObservedStory){
         // A browser render is the strongest possible signal: the hero actually
@@ -5122,22 +5191,25 @@ export class PushHub {
         }
         changeKind="new-story";
         changeReason=payload.origin==="site"?"lead-replaced":payload.backgroundComplete===true?"background-complete-lead":"background-partial-confirmed";
-      }else if(lastState){
-        // The same story may legitimately receive another Push only when a new
-        // report materially changes the headline. Small rewrites/source-count
-        // changes never create another notification.
-        titleDelta=leadPushTitleDelta(lastState.title||"",payload.title||"");
-        const lastAt=Date.parse(lastState.latestAt||lastState.at||0);
+      }else if(sameEventState){
+        // V220: SAME EVENT = one Push. Growing source count, a new representative
+        // headline, image change or ordinary rewrite do not qualify. A second
+        // Push is reserved for a concrete factual development only.
+        materialDevelopment=leadPushMaterialDevelopment(sameEventState,payload);
+        titleDelta=materialDevelopment.titleDelta;
+        const lastAt=Date.parse(sameEventState.latestAt||sameEventState.at||0);
         const nextAt=Date.parse(payload.at||0);
         const newReport=Number.isFinite(nextAt)&&(!Number.isFinite(lastAt)||nextAt>lastAt+30*1000);
-        if(titleDelta.material&&newReport){
-          const pushedAt=Date.parse(lastState.pushedAt||0);
+        const sameMaterialSignature=String(sameEventState.materialSignature||"")&&String(sameEventState.materialSignature||"")===String(materialDevelopment.signature||"");
+        if(materialDevelopment.material&&newReport&&!sameMaterialSignature){
+          const pushedAt=Date.parse(sameEventState.pushedAt||0);
           const sincePush=Number.isFinite(pushedAt)?now-pushedAt:Infinity;
-          const minGap=titleDelta.major?60*1000:2*60*1000;
-          if(sincePush>=minGap){changeKind="story-update";changeReason="material-update";}
+          const minGap=60*1000;
+          if(sincePush>=minGap){changeKind="story-update";changeReason="factual-development";}
           else changeReason="update-cooldown";
-        }else if(titleDelta.changed&&!titleDelta.material)changeReason="minor-rewrite";
-        else if(titleDelta.material&&!newReport)changeReason="no-new-report";
+        }else if(!newReport&&materialDevelopment.material)changeReason="no-new-report";
+        else if(sameMaterialSignature)changeReason="same-material-development";
+        else if(titleDelta.changed)changeReason="same-event-rewrite-or-source-growth";
         else changeReason="same-headline";
       }else{
         // Legacy safety: if the current story is the same but no historical
@@ -5154,14 +5226,17 @@ export class PushHub {
         const duplicate=await recentLeadPushDuplicate(storage,payload);
         if(!duplicate){
           const sourceCount=Math.max(2,Number(payload.sources||0));
-          const storyHash=pushIdentityHash(payload.fingerprint);
-          const updateSuffix=changeKind==="story-update"?`:${pushIdentityHash(pushTitleIdentity(payload.title))}:${Math.floor(Date.parse(payload.at||0)/60000)}`:"";
-          // Keep the event fingerprint compact so the update discriminator can
-          // never be truncated by the 220-char storage/payload safety limit.
-          const notificationFingerprint=`lead:${changeKind}:${storyHash}${updateSuffix}`;
+          const basisState=sameObservedStory?(sameEventState||lastState):null;
+          const eventId=leadPushEventId(payload,basisState);
+          const currentMaterial=materialDevelopment||leadPushMaterialDevelopment(basisState||{},payload);
+          const updateSuffix=changeKind==="story-update"?`:${pushIdentityHash(currentMaterial.signature||pushTitleIdentity(payload.title))}`:"";
+          // V220 uses the stable event id for a new-story Push and a factual
+          // development signature for updates. Source-count growth cannot create
+          // a new notification identity anymore.
+          const notificationFingerprint=`lead:${changeKind}:${eventId}${updateSuffix}`;
           queued=await queuePushJob(storage,{fingerprint:notificationFingerprint,kind:"hot-story",title:`הסיפור המרכזי · ${sourceCount} מקורות`,body:`🔥 ${cleanPushTitle(payload.title)}`,url:"/",at:payload.at,sources:sourceCount,changeKind});
           if(queued.ok){
-            const pushedState={fingerprint:payload.fingerprint,title:payload.title,titleKey:pushTitleIdentity(payload.title),latestAt:payload.at,firstAt:payload.firstAt,pushedAt:new Date().toISOString(),kind:changeKind,sources:sourceCount,official:!!payload.official};
+            const pushedState={fingerprint:payload.fingerprint,eventId,title:payload.title,titleKey:pushTitleIdentity(payload.title),materialSignature:currentMaterial.signature,latestAt:payload.at,firstAt:payload.firstAt,pushedAt:new Date().toISOString(),kind:changeKind,sources:sourceCount,official:!!payload.official};
             await storage.put("lead.lastPushedFingerprint",payload.fingerprint);
             await storage.put("lead.lastPushedTitleKey",pushedState.titleKey);
             await storage.put("lead.lastPushedTitle",payload.title);
@@ -5179,7 +5254,7 @@ export class PushHub {
       await storage.put("lead.observed.v200",payload);
       await storage.delete("lead.candidate");
       await storage.delete("lead.backgroundCandidate.v200");await storage.delete("lead.backgroundCandidate.v199");await storage.delete("lead.backgroundCandidate.v198");await storage.delete("lead.backgroundCandidate.v197");
-      await storage.put("lead.lastDecision",{at:new Date().toISOString(),origin:payload.origin,fingerprint:payload.fingerprint,title:payload.title,changeKind:changeKind||null,reason:changeReason||(!changeKind?"same-story":"queued"),queued:!!queued?.queued,duplicate:!!queued?.duplicate});
+      await storage.put("lead.lastDecision",{at:new Date().toISOString(),origin:payload.origin,fingerprint:payload.fingerprint,title:payload.title,changeKind:changeKind||null,reason:changeReason||(!changeKind?"same-story":"queued"),queued:!!queued?.queued,duplicate:!!queued?.duplicate,materialUpdate:materialDevelopment?{material:materialDevelopment.material,numbersChanged:materialDevelopment.numbersChanged,addedFamilies:materialDevelopment.addedFamilies}:null});
       return json({ok:queued?queued.ok:true,changed:!!changeKind,queued:!!queued?.queued,duplicate:!!queued?.duplicate,changeKind:changeKind||null,reason:changeReason||null,origin:payload.origin,subscriptions:Number((await ensurePushStats(storage)).count||0)});
     }
 
