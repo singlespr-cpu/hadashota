@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "222.0.0";
+const KOTERET_CLIENT_BUILD = "224.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -736,9 +736,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V222 · API ${apiVersion}` : "גרסה V222 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V224 · API ${apiVersion}` : "גרסה V224 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V222 · API לא מחובר";
+    marker.textContent = "גרסה V224 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2992,6 +2992,29 @@ function reusableSourceImageLicense(report) {
 }
 
 
+function clientPhotoCreditIsAgency(value) {
+  const text = cleanDisplayText(value || "");
+  return /^(?:מערכת|יחצ|יח"צ|יח״צ|ארכיון|shutterstock|istock|getty(?: images)?|reuters|ap|afp)(?:\b|$)/i.test(text);
+}
+
+function formatClientPhotoSourceCredit(value, sourceName = "") {
+  const raw = cleanDisplayText(value || "").replace(/^(?:צילום(?:\s+ו?עריכה)?|צלם|קרדיט(?:\s+תמונה)?|photo(?:graphy)?(?:\s+by)?|photographer|image\s+credit|credit)\s*[:\-–—]?\s*/i, "").trim();
+  const source = cleanDisplayText(sourceName || "");
+  if (!raw) return source ? `מקור תמונה: ${source}` : "";
+  const prefix = clientPhotoCreditIsAgency(raw) ? "קרדיט תמונה" : "צילום";
+  return `${prefix}: ${raw}${source ? ` · מקור: ${source}` : ""}`;
+}
+
+function sameImageAssetUrl(a, b) {
+  try {
+    const A = new URL(String(a || ""), location.origin);
+    const B = new URL(String(b || ""), location.origin);
+    return A.origin === B.origin && A.pathname === B.pathname;
+  } catch {
+    return String(a || "").split("?")[0] === String(b || "").split("?")[0];
+  }
+}
+
 function originalFeedSourceImage(item) {
   // Keep feed imagery tied to the exact article the card opens. Using an image
   // from another report in the same cluster can be visually relevant yet still
@@ -3010,7 +3033,7 @@ function originalFeedSourceImage(item) {
       url: raw,
       photographer,
       provider: "feed",
-      credit: photographer ? `צילום: ${photographer} / ${sourceName}` : `מקור תמונה: ${sourceName}`,
+      credit: formatClientPhotoSourceCredit(photographer, sourceName),
       sourceName,
       sourceUrl: report?.url || item?.url || ""
     };
@@ -3107,14 +3130,32 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
     return true;
   };
 
-  // Priority 1: image already supplied by this exact source report/RSS item.
-  const embeddedOriginal = originalFeedSourceImage(item) || preferredSourceImage(item);
-  if (applyOriginal(embeddedOriginal)) return;
-
-  // Priority 2: inspect the exact original article page for og:image/JSON-LD.
   const reports = normalizeClusterReports(item || {});
   const articleTarget = [item, ...reports].find((row) => row?.url && row?.sourceKind !== "telegram")
     || [item, ...reports].find((row) => row?.url);
+
+  // Priority 1: image already supplied by this exact source report/RSS item.
+  const embeddedOriginal = originalFeedSourceImage(item) || preferredSourceImage(item);
+  if (applyOriginal(embeddedOriginal)) {
+    // V224: if the feed gave us the image but not the photographer, inspect the
+    // exact linked article in the background and enrich the visible credit when
+    // it is clearly the same image asset. Do not swap imagery here.
+    const visibleHasPhotographer = Boolean(embeddedOriginal?.photographer) || /^צילום:|^קרדיט תמונה:/i.test(String(embeddedOriginal?.credit || ""));
+    if (!visibleHasPhotographer && articleTarget?.url) {
+      fetchOriginalArticleImage(articleTarget.url).then((articleOriginal) => {
+        if (currentFingerprint !== state.displayedLeadFingerprint) return;
+        if (!articleOriginal?.url || !articleOriginal?.credit) return;
+        if (!sameImageAssetUrl(embeddedOriginal?.url, articleOriginal.url)) return;
+        if (!/^(?:צילום|קרדיט תמונה):/i.test(String(articleOriginal.credit || ""))) return;
+        el.leadStoryMedia.dataset.mediaCredit = articleOriginal.credit;
+        el.leadStoryMedia.dataset.mediaLanding = articleOriginal.sourceUrl || articleTarget.url || "";
+        el.leadStoryMedia.title = articleOriginal.credit;
+      }).catch(() => null);
+    }
+    return;
+  }
+
+  // Priority 2: inspect the exact original article page for og:image/JSON-LD.
   if (articleTarget?.url) {
     const articleOriginal = await fetchOriginalArticleImage(articleTarget.url);
     if (currentFingerprint !== state.displayedLeadFingerprint) return;
@@ -3220,19 +3261,25 @@ async function hydrateSafeMediaSlot(slot) {
       delete a.dataset.failedSourceImage;
     }
 
-    if (currentImg?.isConnected && currentImg.src !== original.url) {
-      // Preload before swapping so the article image never disappears while the
-      // higher-quality exact source image is being resolved.
-      const probe = new Image();
-      probe.referrerPolicy = "no-referrer";
-      probe.onload = () => {
-        if (!currentImg.isConnected) return;
-        currentImg.src = original.url;
+    if (currentImg?.isConnected) {
+      if (sameImageAssetUrl(currentImg.src, original.url)) {
+        // Same photograph: update photographer/source credit immediately.
         currentImg.dataset.imageOrigin = "original-article";
         addCredit(creditText);
-      };
-      probe.onerror = () => markBadFeedImage(original.url);
-      probe.src = original.url;
+      } else {
+        // Preload before swapping so the article image never disappears while the
+        // higher-quality exact source image is being resolved.
+        const probe = new Image();
+        probe.referrerPolicy = "no-referrer";
+        probe.onload = () => {
+          if (!currentImg.isConnected) return;
+          currentImg.src = original.url;
+          currentImg.dataset.imageOrigin = "original-article";
+          addCredit(creditText);
+        };
+        probe.onerror = () => markBadFeedImage(original.url);
+        probe.src = original.url;
+      }
     }
     return { ...original, credit: creditText };
   };
@@ -4574,7 +4621,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=222.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=224.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4644,7 +4691,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=222.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=224.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 

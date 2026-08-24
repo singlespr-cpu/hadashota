@@ -271,7 +271,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "222.0.0",
+          version: "224.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -284,7 +284,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "222.0.0",
+        version: "224.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1151,7 +1151,7 @@ async function handleSourceArticleImage(url, ctx) {
   if (!source) return cors(json({ image: null, error: "source_not_allowed" }, 400, { "Cache-Control":"no-store" }));
 
   const cache = caches.default;
-  const cacheKey = new Request(`https://hadashota.source-image.local/v138-stable?u=${encodeURIComponent(articleUrl)}`);
+  const cacheKey = new Request(`https://hadashota.source-image.local/v224-photo-credit?u=${encodeURIComponent(articleUrl)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cors(cached);
 
@@ -1185,7 +1185,7 @@ async function handleSourceArticleImage(url, ctx) {
             sourceUrl: articleUrl,
             sourceName,
             photographer: photoCredit || "",
-            credit: photoCredit ? `צילום: ${photoCredit} / ${sourceName}` : `מקור תמונה: ${sourceName}`,
+            credit: formatPhotoSourceCredit(photoCredit, sourceName),
             caption: cleanText(imageCaption || "").slice(0,180),
             provider: "original-article"
           }
@@ -1577,7 +1577,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "222.0.0"
+      "X-Hadashota-Version": "224.0.0"
     }));
   }
 
@@ -1587,7 +1587,7 @@ async function handleNewsBundle(request, env, ctx) {
     payloads
   }, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "222.0.0",
+    "X-Hadashota-Version": "224.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1628,7 +1628,7 @@ async function handleNews(request, env, ctx) {
         cachedPayload.servedAt = new Date().toISOString();
         return cors(json(cachedPayload, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "222.0.0",
+          "X-Hadashota-Version": "224.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1753,13 +1753,13 @@ async function handleNews(request, env, ctx) {
 
     const response = json(payload, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "222.0.0",
+      "X-Hadashota-Version": "224.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = json(payload, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "222.0.0",
+      "X-Hadashota-Version": "224.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = json(payload, 200, {
@@ -1793,7 +1793,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "222.0.0"
+        "X-Hadashota-Version": "224.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1815,7 +1815,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "222.0.0"
+    "X-Hadashota-Version": "224.0.0"
   });
 }
 
@@ -1905,6 +1905,10 @@ async function fetchSource(source, retryBudget = { remaining: 0 }, forceFresh = 
       if (source.adapter === "telegram") items = parseTelegram(body, source);
       if (source.adapter === "jsonld") items = parseJsonLd(body, source);
       if (source.adapter === "htmlnews") items = parseOfficialHtmlNews(body, source);
+
+      // V224: preserve explicit photographer/photo-credit metadata whenever it
+      // is already present in the fetched feed/page. This adds no network calls.
+      if (source.adapter !== "telegram") items = enrichItemsWithPhotoCredits(items, body, source);
 
       items = dedupeSameSource(items)
         .filter((item) => item.title && item.url && item.publishedAt)
@@ -2022,9 +2026,13 @@ function parseRss(xml, source) {
     const publishedAt = safeIso(dateRaw);
     const url = chooseRssArticleUrl(block, source);
     const imageUrl = extractRssImage(block, descriptionRaw, source.home);
+    const rssPhotoCredit = normalizePhotoCreditText(
+      firstTag(block, ["media:credit", "photo:credit", "image:credit"]) ||
+      extractPhotoCredit(block, imageUrl || "") || ""
+    );
 
     if (!title || !url || !publishedAt) continue;
-    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(description), imageUrl }));
+    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(description), imageUrl, imageCredit: rssPhotoCredit }));
   }
   return items;
 }
@@ -2076,7 +2084,8 @@ function parseTelegram(html, source) {
     const url = `https://t.me/${dataPost}`;
     const title = telegramTitle(text);
     const imageUrl = extractTelegramImage(chunk);
-    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(text, 240), imageUrl }));
+    const telegramPhotoCredit = imageUrl ? extractPhotoCredit(chunk, imageUrl) : "";
+    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(text, 240), imageUrl, imageCredit: telegramPhotoCredit }));
   }
   return items;
 }
@@ -2203,7 +2212,7 @@ function sanitizeSourceImageUrl(value) {
   }
 }
 
-function makeItem({ source, title, url, publishedAt, preview, imageUrl = null }) {
+function makeItem({ source, title, url, publishedAt, preview, imageUrl = null, imageCredit = "", imageCreator = "" }) {
   return {
     id: stableId(`${source.id}|${url}|${publishedAt}`),
     sourceId: source.id,
@@ -2221,6 +2230,8 @@ function makeItem({ source, title, url, publishedAt, preview, imageUrl = null })
     // more relevant than guessing from a generic media search. Junk branding
     // and placeholders are filtered by sanitizeSourceImageUrl().
     imageUrl: sanitizeSourceImageUrl(imageUrl),
+    imageCredit: normalizePhotoCreditText(imageCredit || imageCreator || ""),
+    imageCreator: normalizePhotoCreditText(imageCreator || imageCredit || ""),
     url,
     publishedAt,
     defaultCategory: source.defaultCategory || null
@@ -2282,6 +2293,8 @@ function clusterItems(items) {
       url: item.url,
       publishedAt: item.publishedAt,
       imageUrl: item.imageUrl || null,
+      imageCredit: item.imageCredit || "",
+      imageCreator: item.imageCreator || "",
       title: item.title || "",
       preview: item.preview || "",
       category: item.category || null
@@ -2314,7 +2327,11 @@ function clusterItems(items) {
     }
 
     match.reportCount = match.related.length;
-    if (!match.imageUrl && item.imageUrl) match.imageUrl = item.imageUrl;
+    if (!match.imageUrl && item.imageUrl) {
+      match.imageUrl = item.imageUrl;
+      match.imageCredit = item.imageCredit || "";
+      match.imageCreator = item.imageCreator || item.imageCredit || "";
+    }
     if (itemTime > Date.parse(match.latestReportAt || 0)) match.latestReportAt = item.publishedAt;
     if (itemTime < Date.parse(match.firstReportAt || item.publishedAt)) match.firstReportAt = item.publishedAt;
 
@@ -2328,8 +2345,14 @@ function clusterItems(items) {
       const reportCount = match.reportCount;
       const latestReportAt = match.latestReportAt;
       const firstReportAt = match.firstReportAt;
-      const clusterImage = match.imageUrl || item.imageUrl || null;
-      Object.assign(match, item, { related, updates, reportCount, latestReportAt, firstReportAt, imageUrl: clusterImage });
+      const existingImageUrl = match.imageUrl || null;
+      const clusterImage = existingImageUrl || item.imageUrl || null;
+      const clusterImageCredit = existingImageUrl ? (match.imageCredit || "") : (item.imageCredit || "");
+      const clusterImageCreator = existingImageUrl ? (match.imageCreator || match.imageCredit || "") : (item.imageCreator || item.imageCredit || "");
+      Object.assign(match, item, {
+        related, updates, reportCount, latestReportAt, firstReportAt, imageUrl: clusterImage,
+        imageCredit: clusterImageCredit, imageCreator: clusterImageCreator
+      });
     }
   }
 
@@ -2473,9 +2496,23 @@ function normalizePhotoCreditText(value) {
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'"))
+    .replace(/^(?:צילום(?:\s+ו?עריכה)?|צלם|קרדיט(?:\s+תמונה)?|photo(?:graphy)?(?:\s+by)?|photographer|image\s+credit|credit)\s*[:\-–—]?\s*/i, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 180);
+}
+
+function photoCreditIsAgency(value) {
+  const text = normalizePhotoCreditText(value);
+  return /^(?:מערכת|יחצ|יח"צ|יח״צ|ארכיון|shutterstock|istock|getty(?: images)?|reuters|ap|afp|epa)(?:\b|$)/i.test(text);
+}
+
+function formatPhotoSourceCredit(value, sourceName = "") {
+  const credit = normalizePhotoCreditText(value);
+  const source = cleanText(sourceName || "");
+  if (!credit) return source ? `מקור תמונה: ${source}` : "";
+  const prefix = photoCreditIsAgency(credit) ? "קרדיט תמונה" : "צילום";
+  return `${prefix}: ${credit}${source ? ` · מקור: ${source}` : ""}`;
 }
 
 function photoCreditLooksUseful(value) {
@@ -2518,17 +2555,26 @@ function extractPhotoCreditFromJsonLd(html, targetImageUrl = "") {
       collect(imageObj);
       return urls.some((u) => String(u).split("?")[0] === target);
     })();
+    const imageObjectMatches = (() => {
+      if (!type.includes("imageobject")) return false;
+      if (!target) return true;
+      const urls = [node.url, node.contentUrl, node.thumbnailUrl, node["@id"]]
+        .flatMap((v) => Array.isArray(v) ? v : [v])
+        .filter(Boolean)
+        .map((u) => String(typeof u === "object" ? (u.url || u.contentUrl || u["@id"] || "") : u).split("?")[0]);
+      return urls.includes(target);
+    })();
 
-    if (imageMatches || type.includes("imageobject")) {
+    if (imageMatches || imageObjectMatches) {
+      // Do not use an Article's author as a photo credit: that is normally the
+      // journalist, not the photographer. Creator/author are accepted only on
+      // an explicit ImageObject.
+      const imageObject = type.includes("imageobject");
       const candidates = [
         node.creditText,
-        node.creator?.name,
-        node.creator,
-        node.author?.name,
-        node.author,
+        ...(imageObject ? [node.creator?.name, node.creator, node.author?.name, node.author] : []),
         node.copyrightHolder?.name,
-        node.copyrightHolder,
-        node.provider?.name
+        node.copyrightHolder
       ];
       for (const candidate of candidates) {
         const text = normalizePhotoCreditText(candidate?.name || candidate);
@@ -2576,14 +2622,52 @@ function extractPhotoCreditFromJsonLd(html, targetImageUrl = "") {
 function extractPhotoCreditFromMeta(html) {
   const source = String(html || "");
   const metaPatterns = [
-    /<meta[^>]+(?:name|property)=["'](?:credit|photo:credit|image:credit|og:image:credit|twitter:image:credit)["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["'](?:credit|photo:credit|image:credit|og:image:credit|twitter:image:credit)["'][^>]*>/i,
-    /<meta[^>]+name=["']author["'][^>]+content=["']([^"']+)["'][^>]*>/i
+    /<meta[^>]+(?:name|property)=["'](?:credit|photo:credit|image:credit|og:image:credit|twitter:image:credit|photographer|photo:creator|image:creator)["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["'](?:credit|photo:credit|image:credit|og:image:credit|twitter:image:credit|photographer|photo:creator|image:creator)["'][^>]*>/i
   ];
   for (const rx of metaPatterns) {
     const m = source.match(rx);
     const text = normalizePhotoCreditText(m?.[1] || "");
     if (photoCreditLooksUseful(text)) return text;
+  }
+  return "";
+}
+
+function extractPhotoCreditFromImageMarkup(html, targetImageUrl = "") {
+  const source = String(html || "");
+  const target = String(targetImageUrl || "").replace(/&amp;/g, "&");
+  let filename = "";
+  try { filename = new URL(target).pathname.split("/").pop() || ""; } catch {}
+  const needles = [target, filename].filter((v) => v && v.length >= 6);
+  for (const needle of needles) {
+    const idx = source.indexOf(needle);
+    if (idx < 0) continue;
+    const before = source.lastIndexOf("<img", idx);
+    const after = source.indexOf(">", idx);
+    if (before >= 0 && after > idx && after - before < 5000) {
+      const tag = source.slice(before, after + 1);
+      const attrPatterns = [
+        { rx: /(?:data-credit|data-photo-credit|data-photographer|data-image-credit|photographer|credit)=["']([^"']+)["']/i, explicitOnly: false },
+        { rx: /(?:data-caption|figcaption)=["']([^"']+)["']/i, explicitOnly: true }
+      ];
+      for (const { rx, explicitOnly } of attrPatterns) {
+        const raw = tag.match(rx)?.[1] || "";
+        const explicitMatch = raw.match(/(?:צילום|צלם|קרדיט(?:\s+תמונה)?|photo(?:graphy)?(?:\s+by)?|photographer|image\s+credit|credit)\s*[:\-–—]?\s*(.{2,140})/i);
+        if (explicitOnly && !explicitMatch) continue;
+        const credit = normalizePhotoCreditText(explicitMatch?.[1] || raw);
+        if (photoCreditLooksUseful(credit)) return credit;
+      }
+    }
+    const figureStart = source.lastIndexOf("<figure", idx);
+    const figureEnd = source.indexOf("</figure>", idx);
+    if (figureStart >= 0 && figureEnd > idx && figureEnd - figureStart < 12000) {
+      const figure = source.slice(figureStart, figureEnd + 9);
+      const caption = figure.match(/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/i)?.[1] || "";
+      const captionText = cleanText(caption);
+      const m = captionText.match(/(?:צילום|צלם|קרדיט(?:\s+תמונה)?|photo(?:graphy)?(?:\s+by)?|photographer|image\s+credit|credit)\s*[:\-–—]?\s*(.{2,140})/i);
+      const credit = normalizePhotoCreditText(m?.[1] || "");
+      if (photoCreditLooksUseful(credit)) return credit;
+    }
   }
   return "";
 }
@@ -2602,11 +2686,14 @@ function extractPhotoCreditNearImage(html, targetImageUrl = "") {
     const windowText = source.slice(Math.max(0, idx - 1200), Math.min(source.length, idx + 2200));
     const textOnly = normalizePhotoCreditText(windowText);
     const patterns = [
-      /צילום\s*[:\-–—]\s*([^|•<>]{2,90})/i,
-      /צלם\s*[:\-–—]\s*([^|•<>]{2,90})/i,
-      /קרדיט\s*[:\-–—]\s*([^|•<>]{2,90})/i,
-      /Photo(?:graphy)?\s*[:\-–—]\s*([^|•<>]{2,90})/i,
-      /Credit\s*[:\-–—]\s*([^|•<>]{2,90})/i
+      /צילום(?:\s+ו?עריכה)?\s*[:\-–—]\s*([^|•<>]{2,120})/i,
+      /צלם\s*[:\-–—]\s*([^|•<>]{2,120})/i,
+      /קרדיט(?:\s+תמונה)?\s*[:\-–—]\s*([^|•<>]{2,120})/i,
+      /Photo(?:graphy)?\s+by\s+([^|•<>]{2,120})/i,
+      /Photo(?:graphy)?\s*[:\-–—]\s*([^|•<>]{2,120})/i,
+      /Photographer\s*[:\-–—]\s*([^|•<>]{2,120})/i,
+      /Image\s+credit\s*[:\-–—]\s*([^|•<>]{2,120})/i,
+      /Credit\s*[:\-–—]\s*([^|•<>]{2,120})/i
     ];
     for (const rx of patterns) {
       const m = textOnly.match(rx);
@@ -2620,6 +2707,7 @@ function extractPhotoCreditNearImage(html, targetImageUrl = "") {
 function extractPhotoCredit(html, targetImageUrl = "") {
   return (
     extractPhotoCreditFromJsonLd(html, targetImageUrl) ||
+    extractPhotoCreditFromImageMarkup(html, targetImageUrl) ||
     extractPhotoCreditNearImage(html, targetImageUrl) ||
     extractPhotoCreditFromMeta(html) ||
     ""
@@ -3152,14 +3240,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"222.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"222.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"224.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"224.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"222.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"222.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"224.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"224.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4638,7 +4726,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"222.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"224.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -4915,7 +5003,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{}});
-      return json({ok:true,version:"222.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"224.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -4955,7 +5043,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"222.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"224.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -4998,7 +5086,7 @@ export class PushHub {
 
     if(url.pathname==="/background-heartbeat"&&request.method==="POST"){
       const data=await request.json().catch(()=>({}));
-      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"222.0.0"};
+      const heartbeat={at:new Date().toISOString(),tickStartedAt:String(data?.tickStartedAt||""),version:"224.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       return json({ok:true,...heartbeat},200,{"Cache-Control":"no-store"});
     }

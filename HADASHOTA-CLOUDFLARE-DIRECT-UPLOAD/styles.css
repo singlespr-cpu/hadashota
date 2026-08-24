@@ -9586,3 +9586,237 @@ html[data-theme="dark"] .lead-story-loading-copy small{color:#ff8b80}
    ========================================================= */
 .lead-story.is-initializing .lead-story-topline{display:none!important}
 html:not([data-theme="dark"]) .lead-story.is-initializing{background:#fff!important}
+
+/* =========================================================
+   V224 — MOBILE ONLY: compact 50/50 Home Front + Escalation row
+   Keeps both Home Front quick-action buttons visible and functional.
+   Desktop/tablet >=701px intentionally unchanged.
+   ========================================================= */
+@media (max-width:700px){
+  #alertCenter{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+    gap:7px!important;
+    align-items:stretch!important;
+    margin-top:8px!important;
+  }
+  #alertCenter .kp-desktop-triple-strip{
+    display:contents!important;
+  }
+  #alertCenter .kp-google-box,
+  #alertCenter .kp-escalation-box{
+    display:none!important;
+  }
+
+  /* Home Front — light compact card, still with both quick actions. */
+  #alertCenter .kp-oref-box.alert-center-card{
+    grid-column:1!important;
+    width:100%!important;
+    min-width:0!important;
+    height:92px!important;
+    min-height:92px!important;
+    max-height:92px!important;
+    margin:0!important;
+    padding:9px 9px 8px!important;
+    border-radius:14px!important;
+    overflow:hidden!important;
+    display:flex!important;
+    align-items:stretch!important;
+    justify-content:stretch!important;
+    box-sizing:border-box!important;
+    box-shadow:0 5px 18px rgba(16,24,40,.055)!important;
+  }
+  #alertCenter .kp-oref-box .alert-primary-wrap,
+  #alertCenter .kp-oref-box .alert-status-group,
+  #alertCenter .kp-oref-box .alert-primary-textblock{
+    width:100%!important;
+    min-width:0!important;
+    height:100%!important;
+  }
+  #alertCenter .kp-oref-box .alert-primary-textblock{
+    position:relative!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    justify-content:space-between!important;
+    gap:6px!important;
+    min-height:0!important;
+  }
+  #alertCenter .kp-oref-box .alert-center-copy{
+    width:100%!important;
+    padding:0!important;
+    min-width:0!important;
+  }
+  #alertCenter .kp-oref-box .alert-center-eyebrow{
+    width:100%!important;
+    min-width:0!important;
+    display:flex!important;
+    justify-content:center!important;
+    align-items:center!important;
+    gap:5px!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-align:center!important;
+  }
+  #alertCenter .kp-oref-box .alert-mobile-heading{
+    display:block!important;
+    min-width:0!important;
+    max-width:calc(100% - 14px)!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    line-height:1.15!important;
+    font-size:10.5px!important;
+    font-weight:950!important;
+  }
+  #alertCenter .kp-oref-box #alertLastCheck{
+    display:block!important;
+    position:absolute!important;
+    top:26px!important;
+    left:0!important;
+    right:0!important;
+    text-align:center!important;
+    font-size:7px!important;
+    line-height:1!important;
+    color:#98a2b3!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    pointer-events:none!important;
+  }
+  #alertCenter .kp-oref-box .alert-live-dot{
+    width:6px!important;
+    height:6px!important;
+    flex:0 0 6px!important;
+  }
+  #alertCenter .kp-oref-box .alert-center-actions{
+    position:static!important;
+    inset:auto!important;
+    transform:none!important;
+    width:100%!important;
+    height:auto!important;
+    margin-top:auto!important;
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:5px!important;
+    align-items:center!important;
+  }
+  #alertCenter .kp-oref-box .alert-sound-quick,
+  #alertCenter .kp-oref-box .alert-settings-button{
+    width:100%!important;
+    min-width:0!important;
+    height:31px!important;
+    min-height:31px!important;
+    padding:0!important;
+    border-radius:9px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    overflow:hidden!important;
+  }
+  #alertCenter .kp-oref-box .alert-sound-quick svg,
+  #alertCenter .kp-oref-box .alert-settings-button svg{
+    width:14px!important;
+    height:14px!important;
+    flex:0 0 14px!important;
+  }
+  #alertCenter .kp-oref-box .alert-sound-quick span,
+  #alertCenter .kp-oref-box .alert-settings-button span{
+    display:none!important;
+  }
+
+  /* Escalation — preserve the existing dark identity in the matching half-card. */
+  #alertCenter .kp-mobile-escalation-top{
+    grid-column:2!important;
+    width:100%!important;
+    min-width:0!important;
+    height:92px!important;
+    min-height:92px!important;
+    max-height:92px!important;
+    margin:0!important;
+    padding:10px 10px 9px!important;
+    box-sizing:border-box!important;
+    border-radius:14px!important;
+    display:grid!important;
+    grid-template-columns:8px minmax(0,1fr) auto!important;
+    grid-template-rows:auto 1fr auto!important;
+    grid-template-areas:
+      "pulse copy copy"
+      ". value value"
+      ". cta cta"!important;
+    align-items:center!important;
+    column-gap:6px!important;
+    row-gap:3px!important;
+    overflow:hidden!important;
+    box-shadow:0 5px 18px rgba(16,24,40,.10)!important;
+  }
+  #alertCenter .kp-mobile-escalation-top__pulse{grid-area:pulse!important;align-self:start!important;margin-top:2px!important;}
+  #alertCenter .kp-mobile-escalation-top__copy{grid-area:copy!important;align-self:start!important;}
+  #alertCenter .kp-mobile-escalation-top__copy small{display:none!important;}
+  #alertCenter .kp-mobile-escalation-top__copy strong{
+    font-size:11px!important;
+    line-height:1.1!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+  #alertCenter .kp-mobile-escalation-top__value{
+    grid-area:value!important;
+    justify-self:end!important;
+    align-self:center!important;
+  }
+  #alertCenter .kp-mobile-escalation-top__value b{font-size:25px!important;}
+  #alertCenter .kp-mobile-escalation-top__value em{font-size:7px!important;}
+  #alertCenter .kp-mobile-escalation-top__value small{
+    display:block!important;
+    max-width:94px!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    font-size:7.2px!important;
+  }
+  #alertCenter .kp-mobile-escalation-top__cta{
+    grid-area:cta!important;
+    justify-self:end!important;
+    height:auto!important;
+    min-height:0!important;
+    padding:0!important;
+    border:0!important;
+    background:transparent!important;
+    font-size:7.3px!important;
+    color:#aeb8c4!important;
+  }
+
+  /* Both cards keep equal visual weight even on very narrow phones. */
+  #alertCenter .sr-only{position:absolute!important;}
+}
+@media (max-width:370px){
+  #alertCenter{gap:5px!important;}
+  #alertCenter .kp-oref-box.alert-center-card,
+  #alertCenter .kp-mobile-escalation-top{
+    height:88px!important;
+    min-height:88px!important;
+    max-height:88px!important;
+    padding-inline:7px!important;
+  }
+  #alertCenter .kp-oref-box .alert-mobile-heading{font-size:9.4px!important;}
+  #alertCenter .kp-oref-box #alertLastCheck{font-size:6.5px!important;}
+  #alertCenter .kp-mobile-escalation-top__copy strong{font-size:10px!important;}
+  #alertCenter .kp-mobile-escalation-top__value b{font-size:22px!important;}
+}
+@media (min-width:371px) and (max-width:700px){
+  #alertCenter .kp-oref-box .alert-sound-quick::after,
+  #alertCenter .kp-oref-box .alert-settings-button::after{
+    display:inline-block!important;
+    margin-inline-start:4px!important;
+    font-size:7.2px!important;
+    line-height:1!important;
+    font-weight:900!important;
+    white-space:nowrap!important;
+  }
+  #alertCenter .kp-oref-box .alert-sound-quick::after{content:"צליל";}
+  #alertCenter .kp-oref-box .alert-settings-button::after{content:"הגדרות";}
+}
+@media (max-width:700px){
+  #alertCenter .kp-oref-box.alert-active #alertLastCheck{color:rgba(255,255,255,.78)!important;}
+}
