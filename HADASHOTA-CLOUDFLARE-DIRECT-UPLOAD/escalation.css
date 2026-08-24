@@ -539,5 +539,5 @@ html.kp-force-entry-top,html.kp-force-entry-top body{scroll-behavior:auto!import
   #escContactModal .esc-contact-status { min-height: 15px !important; }
 }
 
-/* V229 legal hardening */
+/* V230 legal hardening */
 .esc-contact-privacy{display:block;color:#7f8b9c;font-size:8.5px;line-height:1.55}.esc-contact-privacy a,.esc-legal a{color:#9eabba;text-decoration:underline;text-underline-offset:2px}
