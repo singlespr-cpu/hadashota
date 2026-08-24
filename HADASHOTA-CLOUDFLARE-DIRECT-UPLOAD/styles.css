@@ -9588,7 +9588,7 @@ html[data-theme="dark"] .lead-story-loading-copy small{color:#ff8b80}
 html:not([data-theme="dark"]) .lead-story.is-initializing{background:#fff!important}
 
 /* =========================================================
-   V225 — MOBILE ONLY: compact 50/50 Home Front + Escalation row
+   V226 — MOBILE ONLY: compact 50/50 Home Front + Escalation row
    Keeps both Home Front quick-action buttons visible and functional.
    Desktop/tablet >=701px intentionally unchanged.
    ========================================================= */
@@ -9820,3 +9820,11 @@ html:not([data-theme="dark"]) .lead-story.is-initializing{background:#fff!import
 @media (max-width:700px){
   #alertCenter .kp-oref-box.alert-active #alertLastCheck{color:rgba(255,255,255,.78)!important;}
 }
+
+
+/* V227 — unobtrusive rights/correction reporting links. */
+.lead-story-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lead-story-report,.content-rights-tools a{font-size:11px;font-weight:700;color:var(--muted,#667085);text-decoration:none;border-bottom:1px dotted currentColor;opacity:.78}
+.lead-story-report:hover,.content-rights-tools a:hover{opacity:1;color:var(--text,#111827)}
+.content-rights-tools{display:flex;justify-content:flex-end;padding:0 14px 10px}
+@media(max-width:700px){.lead-story-actions{gap:8px}.lead-story-report,.content-rights-tools a{font-size:10px}.content-rights-tools{padding:0 10px 8px}}

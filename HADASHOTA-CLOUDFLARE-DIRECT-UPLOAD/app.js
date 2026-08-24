@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "225.0.0";
+const KOTERET_CLIENT_BUILD = "227.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -189,6 +189,7 @@ const el = {
   leadStorySignal: document.querySelector("#leadStorySignal"),
   leadStorySources: document.querySelector("#leadStorySources"),
   leadStoryCta: document.querySelector("#leadStoryCta"),
+  leadStoryReport: document.querySelector("#leadStoryReport"),
   leadStoryMedia: document.querySelector("#leadStoryMedia"),
   leadStoryImage: document.querySelector("#leadStoryImage"),
   citySelect: document.querySelector("#citySelect"),
@@ -736,9 +737,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V225 · API ${apiVersion}` : "גרסה V225 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V227 · API ${apiVersion}` : "גרסה V227 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V225 · API לא מחובר";
+    marker.textContent = "גרסה V227 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2495,9 +2496,31 @@ function ensureUsefulIndependentHeadline(item) {
   return candidate;
 }
 
+// V227 — legal wording guard (presentation only).
+// The independent headline engine may reorder punctuation/clauses, but it must
+// never accidentally drop a material qualification that appears in the source
+// reporting (e.g. suspicion, allegation or "allegedly"). This function changes
+// display wording only; clustering, ranking, Cron and Push selection are untouched.
+function preserveSourceLegalQualifier(candidate, item) {
+  let out = cleanDisplayTitle(candidate || "");
+  if (!out) return out;
+  const titles = normalizeClusterReports(item || {}).map((r) => cleanDisplayTitle(r?.title || "")).filter(Boolean);
+  if (!titles.length && item?.title) titles.push(cleanDisplayTitle(item.title));
+  if (!titles.length) return out;
+  const threshold = titles.length <= 2 ? 1 : Math.ceil(titles.length * 0.5);
+  const count = (rx) => titles.reduce((n, title) => n + (rx.test(title) ? 1 : 0), 0);
+  const suspicionRx = /(?:לפי החשד|בחשד|חשוד(?:ה|ים|ות)?|נחשד(?:ה|ים|ות)?|חשד ל)/u;
+  const allegationRx = /(?:לטענת|לטענתו|לטענתה|נטען|טוען|טוענת|טענו|לדברי)/u;
+  const allegedRx = /(?:לכאורה)/u;
+  if (count(suspicionRx) >= threshold && !suspicionRx.test(out)) out = `לפי החשד: ${out}`;
+  else if (count(allegedRx) >= threshold && !allegedRx.test(out)) out = `לכאורה: ${out}`;
+  else if (count(allegationRx) >= threshold && !allegationRx.test(out)) out = `לפי הטענה שפורסמה: ${out}`;
+  return cleanDisplayTitle(out);
+}
+
 function editorialHeadlineForItem(item) {
   const headline = ensureUsefulIndependentHeadline(item);
-  return headline || cleanDisplayTitle(item?.title || "עדכון חדשותי");
+  return preserveSourceLegalQualifier(headline || cleanDisplayTitle(item?.title || "עדכון חדשותי"), item);
 }
 
 function polishConsensusHeadline(fact, category, titles = []) {
@@ -2997,7 +3020,7 @@ function clientPhotoCreditIsAgency(value) {
   return /^(?:מערכת|יחצ|יח"צ|יח״צ|ארכיון|shutterstock|istock|getty(?: images)?|reuters|ap|afp)(?:\b|$)/i.test(text);
 }
 
-// V225 — original-first, rights-aware imagery.
+// V226 — original-first, rights-aware imagery.
 // Keep ordinary publisher/photographer images visible, but avoid clearly
 // commercial wire/stock imagery when the credit or asset host identifies it.
 // This is deliberately a narrow blocklist: lack of a marker is not a legal
@@ -3223,7 +3246,7 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   // generic licensed illustration.
   const embeddedOriginal = originalFeedSourceImage(item) || originalClusterSourceImage(item) || preferredSourceImage(item);
   if (applyOriginal(embeddedOriginal)) {
-    // V225: if the feed gave us the image but not the photographer, inspect the
+    // V226: if the feed gave us the image but not the photographer, inspect the
     // exact linked article in the background and enrich the visible credit when
     // it is clearly the same image asset. Do not swap imagery here.
     const visibleHasPhotographer = Boolean(embeddedOriginal?.photographer) || /^צילום:|^קרדיט תמונה:/i.test(String(embeddedOriginal?.credit || ""));
@@ -3864,6 +3887,15 @@ function mainstreamFirst(items) {
   return [...selected, ...items.filter((item) => !chosen.has(item.id || item.url))];
 }
 
+function contentReportHref(title = "", sourceUrl = "", type = "תוכן/תמונה") {
+  const params = new URLSearchParams();
+  params.set("topic", "תוכן וזכויות יוצרים");
+  params.set("type", String(type || "תוכן/תמונה").slice(0, 40));
+  if (title) params.set("context", cleanDisplayTitle(title).slice(0, 180));
+  if (sourceUrl) params.set("ref", String(sourceUrl).slice(0, 1000));
+  return `/contact?${params.toString()}`;
+}
+
 function newsPreviewText(item, reportCount) {
   if (reportCount > 1) return `${reportCount} מקורות שונים מדווחים על אותו אירוע. לחצו למעבר לדיווחים המקוריים.`;
   return "עדכון חדשותי בזמן אמת. לחצו למעבר לידיעה במקור.";
@@ -3920,6 +3952,7 @@ function newsCardHtml(item) {
         <div class="news-side"><span class="category-badge ${category}">${CATEGORY_LABELS[category] || "כללי"}</span></div>
       </div>
       ${relatedHtml}
+      <div class="content-rights-tools"><a href="${escapeHtml(contentReportHref(safeTitle, rawStoryUrl))}" data-content-report onclick="event.stopPropagation()">דווח על תוכן/תמונה</a></div>
     </article>`;
 }
 
@@ -4375,6 +4408,7 @@ function renderLeadStory() {
   // V209: browser renders may update the public display snapshot, but must never
   // trigger Push fan-out. Autonomous Cron/background is the sole Push decision source.
   syncDisplayedHotStoryToServer(publicLeadSnapshot,{displayOnly:true});
+  if (el.leadStoryReport) el.leadStoryReport.href = contentReportHref(leadTitle, leadHref || leadResolvedHref, "הסיפור המרכזי / תמונה");
   if (leadHref) {
     el.leadStoryCta.href = leadHref;
     el.leadStoryCta.classList.remove("hidden");
@@ -4718,7 +4752,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=225.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=227.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4788,7 +4822,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=225.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=227.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
