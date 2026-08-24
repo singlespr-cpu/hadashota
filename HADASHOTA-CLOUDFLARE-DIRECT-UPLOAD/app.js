@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "224.0.0";
+const KOTERET_CLIENT_BUILD = "225.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -736,9 +736,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V224 · API ${apiVersion}` : "גרסה V224 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V225 · API ${apiVersion}` : "גרסה V225 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V224 · API לא מחובר";
+    marker.textContent = "גרסה V225 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2765,7 +2765,7 @@ function pruneFeedImageMemory() {
 function rememberFeedImage(articleUrl, image, provider = "original-article") {
   const key = feedImageMemoryKey(articleUrl);
   const imageUrl = String(image?.url || "").trim();
-  if (!key || !sourceImageLooksEditorial(imageUrl) || isKnownBadFeedImage(imageUrl)) return;
+  if (!key || !sourceImageLooksEditorial(imageUrl) || isKnownBadFeedImage(imageUrl) || !originalImageAllowed(image || {})) return;
   pruneFeedImageMemory();
   const existing = FEED_IMAGE_MEMORY.get(key);
   // An exact image scraped from the linked article outranks a provisional RSS image.
@@ -2997,6 +2997,35 @@ function clientPhotoCreditIsAgency(value) {
   return /^(?:מערכת|יחצ|יח"צ|יח״צ|ארכיון|shutterstock|istock|getty(?: images)?|reuters|ap|afp)(?:\b|$)/i.test(text);
 }
 
+// V225 — original-first, rights-aware imagery.
+// Keep ordinary publisher/photographer images visible, but avoid clearly
+// commercial wire/stock imagery when the credit or asset host identifies it.
+// This is deliberately a narrow blocklist: lack of a marker is not a legal
+// clearance, it only means the image is not automatically rejected here.
+const HIGH_RISK_IMAGE_CREDIT_RX = /(?:\breuters\b|רויטרס|associated\s+press|\bap\b|א[יי]-?פי|agence\s+france[-\s]presse|\bafp\b|getty(?:\s+images)?|גטי(?:\s+אימג(?:׳|')?ס)?|shutterstock|שאטרסטוק|flash\s*90|פלאש\s*90|\bepa(?:-efe)?\b|alamy|istock(?:photo)?|depositphotos|dreamstime|123rf|wireimage|imago(?:\s+images)?|anadolu(?:\s+agency)?|\bupi\b)/i;
+const HIGH_RISK_IMAGE_HOST_RX = /(?:^|\.)(?:gettyimages\.|shutterstock\.|flash90\.|alamy\.|istockphoto\.|depositphotos\.|dreamstime\.|123rf\.|reuters\.|apnews\.|afp\.|epa\.|anadoluimages\.)/i;
+
+function originalImageRightsRisk(candidate = {}) {
+  const text = cleanDisplayText([
+    candidate?.photographer,
+    candidate?.imageCredit,
+    candidate?.imageCreator,
+    candidate?.photoCredit,
+    candidate?.credit,
+    candidate?.sourceName
+  ].filter(Boolean).join(" · "));
+  if (HIGH_RISK_IMAGE_CREDIT_RX.test(text)) return "agency-credit";
+  try {
+    const host = new URL(String(candidate?.url || candidate?.imageUrl || "")).hostname.toLowerCase();
+    if (HIGH_RISK_IMAGE_HOST_RX.test(host)) return "agency-host";
+  } catch {}
+  return "";
+}
+
+function originalImageAllowed(candidate = {}) {
+  return !originalImageRightsRisk(candidate);
+}
+
 function formatClientPhotoSourceCredit(value, sourceName = "") {
   const raw = cleanDisplayText(value || "").replace(/^(?:צילום(?:\s+ו?עריכה)?|צלם|קרדיט(?:\s+תמונה)?|photo(?:graphy)?(?:\s+by)?|photographer|image\s+credit|credit)\s*[:\-–—]?\s*/i, "").trim();
   const source = cleanDisplayText(sourceName || "");
@@ -3029,7 +3058,7 @@ function originalFeedSourceImage(item) {
     if (sourceImageConflictsWithStory(item, report, raw)) continue;
     const sourceName = cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה");
     const photographer = cleanDisplayText(report?.imageCredit || report?.imageCreator || report?.photoCredit || "");
-    return {
+    const candidate = {
       url: raw,
       photographer,
       provider: "feed",
@@ -3037,10 +3066,56 @@ function originalFeedSourceImage(item) {
       sourceName,
       sourceUrl: report?.url || item?.url || ""
     };
+    if (!originalImageAllowed(candidate)) continue;
+    return candidate;
   }
   return null;
 }
 
+
+function originalClusterSourceImage(item) {
+  // Main-story only helper: if the representative article image is a clearly
+  // licensed wire/stock asset, prefer another real image from the SAME event
+  // cluster before falling back to generic open media. Official reports get
+  // first priority, then the representative, then the freshest other reports.
+  const itemUrl = String(item?.url || "").trim();
+  const reports = [item, ...normalizeClusterReports(item || {})].filter(Boolean);
+  const seen = new Set();
+  const ranked = reports
+    .filter((report) => {
+      const key = `${report?.url || ""}|${report?.imageUrl || report?.image || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => {
+      const officialDelta = Number(!!b?.official) - Number(!!a?.official);
+      if (officialDelta) return officialDelta;
+      const representativeDelta = Number(String(b?.url || "") === itemUrl) - Number(String(a?.url || "") === itemUrl);
+      if (representativeDelta) return representativeDelta;
+      return Date.parse(b?.publishedAt || 0) - Date.parse(a?.publishedAt || 0);
+    });
+
+  for (const report of ranked) {
+    const raw = String(report?.imageUrl || report?.image || report?.thumbnailUrl || report?.thumbnail || report?.enclosure?.url || "").trim();
+    if (!raw || !sourceImageLooksEditorial(raw) || isKnownBadFeedImage(raw)) continue;
+    if (sourceImageConflictsWithStory(item, report, raw)) continue;
+    const sourceName = cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה");
+    const photographer = cleanDisplayText(report?.imageCredit || report?.imageCreator || report?.photoCredit || "");
+    const candidate = {
+      url: raw,
+      photographer,
+      provider: report?.official ? "cluster-official" : "cluster-source",
+      credit: formatClientPhotoSourceCredit(photographer, sourceName),
+      sourceName,
+      sourceUrl: report?.url || item?.url || "",
+      official: !!report?.official
+    };
+    if (!originalImageAllowed(candidate)) continue;
+    return candidate;
+  }
+  return null;
+}
 
 function sourceImageConflictsWithStory(item, report, rawUrl = "") {
   const storyText = `${item?.title || ""} ${item?.preview || ""} ${report?.title || ""} ${report?.preview || ""}`;
@@ -3111,7 +3186,7 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   const currentFingerprint = leadFingerprint(winner);
 
   const applyOriginal = (direct) => {
-    if (!direct?.url) return false;
+    if (!direct?.url || !originalImageAllowed(direct)) return false;
     el.leadStoryImage.onerror = async () => {
       if (currentFingerprint !== state.displayedLeadFingerprint) return;
       el.leadStoryImage.removeAttribute("src");
@@ -3131,35 +3206,57 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   };
 
   const reports = normalizeClusterReports(item || {});
-  const articleTarget = [item, ...reports].find((row) => row?.url && row?.sourceKind !== "telegram")
-    || [item, ...reports].find((row) => row?.url);
+  const articleTargets = [item, ...reports]
+    .filter((row, index, all) => row?.url && all.findIndex((other) => String(other?.url || "") === String(row?.url || "")) === index)
+    .sort((a, b) => {
+      const officialDelta = Number(!!b?.official) - Number(!!a?.official);
+      if (officialDelta) return officialDelta;
+      const siteDelta = Number(b?.sourceKind !== "telegram") - Number(a?.sourceKind !== "telegram");
+      if (siteDelta) return siteDelta;
+      return Date.parse(b?.publishedAt || 0) - Date.parse(a?.publishedAt || 0);
+    });
+  const articleTarget = articleTargets[0] || null;
 
-  // Priority 1: image already supplied by this exact source report/RSS item.
-  const embeddedOriginal = originalFeedSourceImage(item) || preferredSourceImage(item);
+  // Priority 1: preserve a real image from the event whenever possible.
+  // Exact-source imagery wins; for the main story we can safely use another
+  // rights-screened image from the same cluster (official first) before a
+  // generic licensed illustration.
+  const embeddedOriginal = originalFeedSourceImage(item) || originalClusterSourceImage(item) || preferredSourceImage(item);
   if (applyOriginal(embeddedOriginal)) {
-    // V224: if the feed gave us the image but not the photographer, inspect the
+    // V225: if the feed gave us the image but not the photographer, inspect the
     // exact linked article in the background and enrich the visible credit when
     // it is clearly the same image asset. Do not swap imagery here.
     const visibleHasPhotographer = Boolean(embeddedOriginal?.photographer) || /^צילום:|^קרדיט תמונה:/i.test(String(embeddedOriginal?.credit || ""));
-    if (!visibleHasPhotographer && articleTarget?.url) {
-      fetchOriginalArticleImage(articleTarget.url).then((articleOriginal) => {
+    const embeddedArticleUrl = embeddedOriginal?.sourceUrl || articleTarget?.url || "";
+    if (!visibleHasPhotographer && embeddedArticleUrl) {
+      fetchOriginalArticleImage(embeddedArticleUrl).then((articleOriginal) => {
         if (currentFingerprint !== state.displayedLeadFingerprint) return;
         if (!articleOriginal?.url || !articleOriginal?.credit) return;
         if (!sameImageAssetUrl(embeddedOriginal?.url, articleOriginal.url)) return;
         if (!/^(?:צילום|קרדיט תמונה):/i.test(String(articleOriginal.credit || ""))) return;
         el.leadStoryMedia.dataset.mediaCredit = articleOriginal.credit;
-        el.leadStoryMedia.dataset.mediaLanding = articleOriginal.sourceUrl || articleTarget.url || "";
+        el.leadStoryMedia.dataset.mediaLanding = articleOriginal.sourceUrl || embeddedArticleUrl || "";
         el.leadStoryMedia.title = articleOriginal.credit;
       }).catch(() => null);
     }
     return;
   }
 
-  // Priority 2: inspect the exact original article page for og:image/JSON-LD.
-  if (articleTarget?.url) {
-    const articleOriginal = await fetchOriginalArticleImage(articleTarget.url);
+  // Priority 2: inspect up to three linked reports from the SAME cluster.
+  // This is intentionally limited to keep the page fast. An official source is
+  // attempted first; a clearly commercial agency/stock image is skipped.
+  for (const target of articleTargets.slice(0, 3)) {
+    if (!target?.url) continue;
+    const articleOriginal = await fetchOriginalArticleImage(target.url);
     if (currentFingerprint !== state.displayedLeadFingerprint) return;
-    if (articleOriginal?.url && sourceImageLooksEditorial(articleOriginal.url) && applyOriginal(articleOriginal)) return;
+    if (!articleOriginal?.url || !sourceImageLooksEditorial(articleOriginal.url) || !originalImageAllowed(articleOriginal)) continue;
+    const contextualReport = {
+      ...target,
+      imageCaption: articleOriginal.caption || target?.imageCaption || "",
+      imageCredit: articleOriginal.photographer || target?.imageCredit || ""
+    };
+    if (sourceImageConflictsWithStory(item, contextualReport, articleOriginal.url)) continue;
+    if (applyOriginal(articleOriginal)) return;
   }
 
   // Priority 3 only: a strictly matched reusable illustration.
@@ -3213,7 +3310,7 @@ async function hydrateSafeMediaSlot(slot) {
   };
 
   const showDirect = (url, creditText = directCredit, provider = "feed") => {
-    if (!url || isKnownBadFeedImage(url)) return false;
+    if (!url || isKnownBadFeedImage(url) || !originalImageAllowed({ url, credit: creditText, sourceName: a?.dataset?.sourceName || "" })) return false;
     const img = document.createElement('img');
     img.src = url;
     img.alt = "";
@@ -3248,7 +3345,7 @@ async function hydrateSafeMediaSlot(slot) {
   const upgradeToExactArticleImage = async (currentImg = null) => {
     if (!articleUrl || !/^https?:\/\//i.test(articleUrl)) return null;
     const original = await fetchOriginalArticleImage(articleUrl);
-    if (!original?.url || isKnownBadFeedImage(original.url)) return null;
+    if (!original?.url || isKnownBadFeedImage(original.url) || !originalImageAllowed(original)) return null;
     const failedUrl = a?.dataset?.failedSourceImage || "";
     if (failedUrl && original.url === failedUrl) return null;
     if (!sourceImageLooksEditorial(original.url)) return null;
@@ -4621,7 +4718,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=224.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=225.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4691,7 +4788,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=224.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=225.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 

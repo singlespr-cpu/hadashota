@@ -9588,7 +9588,7 @@ html[data-theme="dark"] .lead-story-loading-copy small{color:#ff8b80}
 html:not([data-theme="dark"]) .lead-story.is-initializing{background:#fff!important}
 
 /* =========================================================
-   V224 — MOBILE ONLY: compact 50/50 Home Front + Escalation row
+   V225 — MOBILE ONLY: compact 50/50 Home Front + Escalation row
    Keeps both Home Front quick-action buttons visible and functional.
    Desktop/tablet >=701px intentionally unchanged.
    ========================================================= */
