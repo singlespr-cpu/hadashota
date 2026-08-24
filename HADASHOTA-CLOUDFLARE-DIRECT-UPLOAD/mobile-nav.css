@@ -1,5 +1,5 @@
 /* =========================================================
-   KOTERET PLUS V221 — mobile application navigation
+   KOTERET PLUS V222 — mobile application navigation
    UI-only layer. No Push / Cron / newsroom logic lives here.
    ========================================================= */
 .kp-mobile-app-nav,
@@ -131,4 +131,23 @@
 
 @media (prefers-reduced-motion:reduce){
   .kp-mobile-nav-item,.kp-mobile-nav-item svg,.kp-mobile-new-dot,.kp-mobile-more-sheet:not([hidden]){transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
+
+/* V222 — precise mobile shortcut arrival feedback. UI only. */
+@media (max-width:700px){
+  #leadStory.kp-mobile-nav-target,
+  .feed-column .section-head.kp-mobile-nav-target,
+  #alertCenterCard.kp-mobile-nav-target{
+    animation:kpMobileTargetArrival 1.05s ease-out;
+  }
+  @keyframes kpMobileTargetArrival{
+    0%{box-shadow:0 0 0 0 rgba(217,45,32,.20)}
+    35%{box-shadow:0 0 0 4px rgba(217,45,32,.10)}
+    100%{box-shadow:0 0 0 0 rgba(217,45,32,0)}
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  #leadStory.kp-mobile-nav-target,
+  .feed-column .section-head.kp-mobile-nav-target,
+  #alertCenterCard.kp-mobile-nav-target{animation:none!important}
 }

@@ -4,10 +4,39 @@
   const smooth = () => reduceMotion() ? "auto" : "smooth";
   const isMobile = () => window.matchMedia?.("(max-width: 700px)")?.matches !== false;
 
-  function scrollToNode(node, offset = 68) {
+  function visibleHeight(selector) {
+    const node = document.querySelector(selector);
+    if (!node) return 0;
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") return 0;
+    return Math.max(0, node.getBoundingClientRect().height || 0);
+  }
+
+  function topUiOffset(extra = 10) {
+    // The main mobile UI has two sticky rows. Measure them instead of relying
+    // on hard-coded pixels so navigation remains exact after future UI tweaks.
+    return visibleHeight(".topbar") + visibleHeight(".news-nav") + extra;
+  }
+
+  function scrollToNode(node, { extra = 10, behavior = smooth() } = {}) {
     if (!node) return;
-    const top = Math.max(0, node.getBoundingClientRect().top + window.scrollY - offset);
-    window.scrollTo({ top, behavior: smooth() });
+    const top = Math.max(0, node.getBoundingClientRect().top + window.scrollY - topUiOffset(extra));
+    window.scrollTo({ top, behavior });
+  }
+
+  function revealTarget(node) {
+    if (!node) return;
+    node.classList.remove("kp-mobile-nav-target");
+    // Force restart when the same shortcut is tapped twice.
+    void node.offsetWidth;
+    node.classList.add("kp-mobile-nav-target");
+    window.setTimeout(() => node.classList.remove("kp-mobile-nav-target"), 1250);
+  }
+
+  function preciseReveal(node, extra = 10) {
+    if (!node) return;
+    scrollToNode(node, { extra });
+    window.setTimeout(() => revealTarget(node), reduceMotion() ? 0 : 220);
   }
 
   function setCurrent(items, active) {
@@ -27,8 +56,8 @@
     const home = byAction("home"), story = byAction("story"), updates = byAction("updates"), search = byAction("search"), more = byAction("more");
     const lead = document.querySelector("#leadStory");
     const feedColumn = document.querySelector(".feed-column");
+    const feedTitle = document.querySelector("#feedTitle");
     const feed = document.querySelector("#feed");
-    const control = document.querySelector("#controlPanel");
     const searchInput = document.querySelector("#searchInput");
     const searchBox = searchInput?.closest(".search-box");
     const newDotHost = updates;
@@ -52,27 +81,72 @@
       syncNotificationState();
     };
 
-    home?.addEventListener("click", () => { closeMore(); window.scrollTo({ top: 0, behavior: smooth() }); setCurrent(items, home); });
-    story?.addEventListener("click", () => { closeMore(); scrollToNode(lead, 62); setCurrent(items, story); });
-    updates?.addEventListener("click", () => { closeMore(); newDotHost?.classList.remove("has-new"); scrollToNode(feedColumn || feed, 64); setCurrent(items, updates); });
-    search?.addEventListener("click", () => {
-      closeMore(); searchActive = true; setCurrent(items, search); scrollToNode(control, 58);
-      searchBox?.classList.add("kp-mobile-search-focus");
-      window.setTimeout(() => { try { searchInput?.focus({ preventScroll: true }); } catch { searchInput?.focus(); } }, reduceMotion() ? 20 : 240);
+    home?.addEventListener("click", () => {
+      closeMore();
+      window.scrollTo({ top: 0, behavior: smooth() });
+      setCurrent(items, home);
     });
+
+    story?.addEventListener("click", () => {
+      closeMore();
+      preciseReveal(lead, 10);
+      setCurrent(items, story);
+    });
+
+    updates?.addEventListener("click", () => {
+      closeMore();
+      newDotHost?.classList.remove("has-new");
+      // Aim at the heading, not the middle of the feed, so "כל העדכונים"
+      // is the first thing visible under the sticky mobile headers.
+      preciseReveal(feedTitle?.closest(".section-head") || feedColumn || feed, 10);
+      setCurrent(items, updates);
+    });
+
+    search?.addEventListener("click", () => {
+      closeMore();
+      searchActive = true;
+      setCurrent(items, search);
+      searchBox?.classList.add("kp-mobile-search-focus");
+
+      // IMPORTANT: focus synchronously inside the tap event. iOS/Safari and
+      // Chrome mobile may refuse to open the keyboard if focus is delayed.
+      try { searchInput?.focus({ preventScroll: true }); }
+      catch { try { searchInput?.focus(); } catch {} }
+
+      const target = searchBox || searchInput;
+      const align = (behavior = smooth()) => scrollToNode(target, { extra: 10, behavior });
+      requestAnimationFrame(() => align());
+      // The visual viewport changes when the software keyboard opens. Re-align
+      // once so the field remains fully visible rather than landing "near" it.
+      window.setTimeout(() => align("auto"), 180);
+      if (window.visualViewport) {
+        const onResize = () => align("auto");
+        window.visualViewport.addEventListener("resize", onResize, { once: true });
+      }
+    });
+
     more?.addEventListener("click", () => sheetOpen ? closeMore() : openMore());
     moreBackdrop?.addEventListener("click", closeMore);
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && sheetOpen) closeMore(); });
 
     searchInput?.addEventListener("blur", () => {
-      searchActive = false; searchBox?.classList.remove("kp-mobile-search-focus"); window.setTimeout(updateActive, 40);
+      searchActive = false;
+      searchBox?.classList.remove("kp-mobile-search-focus");
+      window.setTimeout(updateActive, 40);
     });
 
     const runExisting = (selector) => {
       closeMore();
       window.setTimeout(() => document.querySelector(selector)?.click(), 30);
     };
-    document.querySelector("#kpMoreOref")?.addEventListener("click", () => { closeMore(); scrollToNode(document.querySelector("#alertCenterCard"), 62); });
+
+    document.querySelector("#kpMoreOref")?.addEventListener("click", () => {
+      closeMore();
+      const target = document.querySelector("#alertCenterCard") || document.querySelector("#alertCenter");
+      // Wait one frame for the bottom sheet to be removed, then land the Oref
+      // card immediately below both sticky header rows.
+      requestAnimationFrame(() => preciseReveal(target, 8));
+    });
     document.querySelector("#kpMoreNotifications")?.addEventListener("click", () => runExisting("#notificationsBtn"));
     document.querySelector("#kpMoreSupport")?.addEventListener("click", () => runExisting("#supportFloatBtn"));
     document.querySelector("#kpMoreAbout")?.addEventListener("click", () => runExisting("#aboutBtn"));
@@ -92,7 +166,7 @@
     function feedInView() {
       if (!feedColumn) return false;
       const r = feedColumn.getBoundingClientRect();
-      return r.top < innerHeight * .72 && r.bottom > 110;
+      return r.top < innerHeight * .72 && r.bottom > topUiOffset(0);
     }
     if (feed) {
       new MutationObserver(() => {
@@ -111,10 +185,10 @@
       if (!isMobile() || sheetOpen || searchActive) return;
       if (window.scrollY < 180) { setCurrent(items, home); return; }
       const feedTop = feedColumn ? feedColumn.getBoundingClientRect().top : Infinity;
-      if (feedTop <= Math.min(210, innerHeight * .34)) { setCurrent(items, updates); return; }
+      if (feedTop <= Math.min(topUiOffset(20) + 70, innerHeight * .38)) { setCurrent(items, updates); return; }
       if (lead) {
         const r = lead.getBoundingClientRect();
-        if (r.bottom > 90 || window.scrollY < (lead.offsetTop + lead.offsetHeight + 220)) { setCurrent(items, story); return; }
+        if (r.bottom > topUiOffset(0) || window.scrollY < (lead.offsetTop + lead.offsetHeight + 220)) { setCurrent(items, story); return; }
       }
       setCurrent(items, home);
     }
