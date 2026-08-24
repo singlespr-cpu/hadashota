@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "228.0.0";
+const KOTERET_CLIENT_BUILD = "229.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -685,7 +685,7 @@ async function hydrateInitialLeadFromServer({ allowWaitingState = false } = {}) 
     } catch {}
 
     const localHref = safeHttpHref(localVisual?.link || "");
-    // V228: legacy local snapshots may contain a publisher image saved by an
+    // V229: legacy local snapshots may contain a publisher image saved by an
     // older build before Safe-by-default existed. Never flash that image during
     // bootstrap; the full renderer will resolve a licensed image independently.
     const localImage = "";
@@ -740,9 +740,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V228 · API ${apiVersion}` : "גרסה V228 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V229 · API ${apiVersion}` : "גרסה V229 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V228 · API לא מחובר";
+    marker.textContent = "גרסה V229 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2499,7 +2499,7 @@ function ensureUsefulIndependentHeadline(item) {
   return candidate;
 }
 
-// V228 — legal wording guard (presentation only).
+// V229 — legal wording guard (presentation only).
 // The independent headline engine may reorder punctuation/clauses, but it must
 // never accidentally drop a material qualification that appears in the source
 // reporting (e.g. suspicion, allegation or "allegedly"). This function changes
@@ -2997,7 +2997,7 @@ function openMediaPassesEditorialGate(media, { lead = false } = {}) {
 function reusableSourceImageLicense(report) {
   const license = String(report?.imageLicense || report?.mediaLicense || report?.license || "").trim();
   const normalized = license.toUpperCase().replace(/_/g, " ");
-  // V228 maximum-safety auto mode: only public-domain/CC0-type source
+  // V229 maximum-safety auto mode: only public-domain/CC0-type source
   // imagery is reused automatically. Attribution licences can be enabled later
   // only through explicit manual approval where their exact terms are known.
   const allowed = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
@@ -3008,7 +3008,7 @@ function reusableSourceImageLicense(report) {
   const landingUrl = String(report?.imageLandingUrl || report?.mediaLandingUrl || report?.url || "").trim();
 
   // Public-domain/CC0/PDM media is the only automatic source-image class in
-  // V228, so no attribution metadata is required as a legal condition. We still
+  // V229, so no attribution metadata is required as a legal condition. We still
   // preserve creator/source information whenever it is available.
   const attributionRequired = !(normalized.includes("PUBLIC DOMAIN") || normalized === "CC0" || normalized === "PDM");
   if (attributionRequired && (!creator || !licenseUrl)) return null;
@@ -3022,12 +3022,12 @@ function clientPhotoCreditIsAgency(value) {
   return /^(?:מערכת|יחצ|יח"צ|יח״צ|ארכיון|shutterstock|istock|getty(?: images)?|reuters|ap|afp)(?:\b|$)/i.test(text);
 }
 
-// V228 — SAFE-BY-DEFAULT image policy.
-// A photo is reusable only when the item carries a positive rights basis
-// (CC0/Public Domain/PDM), or when the asset is explicitly marked as
-// site-owned/manual with a known rights basis.
-// Merely finding a photo on a publisher page or knowing the photographer name
-// is NOT treated as permission to republish it.
+// V229 — BALANCED RIGHTS-AWARE image policy.
+// Green tier: public-domain/CC0/PDM or explicitly approved/site-owned media.
+// Yellow tier: an editorial image supplied directly in a publisher feed/listing
+// may be shown with source/photographer credit when it is not identified as a
+// commercial wire/stock asset. We never crawl an article page merely to obtain
+// such a photo. Red tier: known wire/stock agencies remain blocked.
 const HIGH_RISK_IMAGE_CREDIT_RX = /(?:\breuters\b|רויטרס|associated\s+press|\bap\b|א[יי]-?פי|agence\s+france[-\s]presse|\bafp\b|getty(?:\s+images)?|גטי(?:\s+אימג(?:׳|')?ס)?|shutterstock|שאטרסטוק|flash\s*90|פלאש\s*90|\bepa(?:-efe)?\b|alamy|istock(?:photo)?|depositphotos|dreamstime|123rf|wireimage|imago(?:\s+images)?|anadolu(?:\s+agency)?|\bupi\b)/i;
 const HIGH_RISK_IMAGE_HOST_RX = /(?:^|\.)(?:gettyimages\.|shutterstock\.|flash90\.|alamy\.|istockphoto\.|depositphotos\.|dreamstime\.|123rf\.|reuters\.|apnews\.|afp\.|epa\.|anadoluimages\.)/i;
 
@@ -3061,7 +3061,38 @@ function explicitReusableImageRights(candidate = {}) {
 
 function originalImageAllowed(candidate = {}) {
   if (originalImageRightsRisk(candidate)) return false;
-  return Boolean(explicitReusableImageRights(candidate));
+  if (explicitReusableImageRights(candidate)) return true;
+  // V229 yellow tier: only images explicitly marked by our renderer as having
+  // arrived with the publisher's own feed/listing entry may pass without an
+  // open licence. Article-page scraping never creates this marker.
+  return candidate?.rightsBasis === "publisher-feed" || candidate?.provider === "publisher-feed" || candidate?.provider === "cluster-publisher-feed";
+}
+
+function publisherFeedImageCandidate(report, item, { cluster = false } = {}) {
+  if (!report) return null;
+  const sourceKind = String(report?.sourceKind || item?.sourceKind || "").toLowerCase();
+  // Unknown-rights Telegram imagery remains excluded unless it has an explicit
+  // reusable licence handled by the green tier.
+  if (sourceKind === "telegram") return null;
+  const raw = String(report?.imageUrl || report?.image || report?.thumbnailUrl || report?.thumbnail || report?.enclosure?.url || "").trim();
+  if (!raw || !sourceImageLooksEditorial(raw) || isKnownBadFeedImage(raw)) return null;
+  if (sourceImageConflictsWithStory(item, report, raw)) return null;
+  const sourceName = cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה");
+  const photographer = cleanDisplayText(report?.imageCredit || report?.imageCreator || report?.photoCredit || "");
+  const candidate = {
+    url: raw,
+    photographer,
+    imageCreator: photographer,
+    provider: cluster ? "cluster-publisher-feed" : "publisher-feed",
+    rightsBasis: "publisher-feed",
+    credit: formatClientPhotoSourceCredit(photographer, sourceName) || `מקור תמונה: ${sourceName}`,
+    sourceName,
+    sourceUrl: report?.url || item?.url || "",
+    landingUrl: report?.url || item?.url || "",
+    official: !!report?.official,
+    sourceKind
+  };
+  return originalImageAllowed(candidate) ? candidate : null;
 }
 
 function formatClientPhotoSourceCredit(value, sourceName = "") {
@@ -3083,9 +3114,9 @@ function sameImageAssetUrl(a, b) {
 }
 
 function originalFeedSourceImage(item) {
-  // Keep feed imagery tied to the exact article the card opens. Using an image
-  // from another report in the same cluster can be visually relevant yet still
-  // be the wrong photograph for this source/article.
+  // The feed card may reuse the exact image supplied with its own publisher
+  // entry. Explicitly reusable media remains preferred; otherwise V229 allows
+  // the yellow publisher-feed tier, except known wire/stock agencies.
   const itemUrl = String(item?.url || "").trim();
   const reports = [item, ...normalizeClusterReports(item || {}).filter((report) =>
     itemUrl && String(report?.url || "").trim() === itemUrl
@@ -3097,21 +3128,24 @@ function originalFeedSourceImage(item) {
     const sourceName = cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה");
     const photographer = cleanDisplayText(report?.imageCredit || report?.imageCreator || report?.photoCredit || "");
     const rights = reusableSourceImageLicense(report);
-    if (!rights) continue;
-    const candidate = {
-      url: raw,
-      photographer: rights.creator || photographer,
-      imageCreator: rights.creator || photographer,
-      provider: "feed-licensed",
-      credit: [rights.creator, rights.license, sourceName].filter(Boolean).join(" · "),
-      sourceName,
-      sourceUrl: report?.url || item?.url || "",
-      license: rights.license,
-      licenseUrl: rights.licenseUrl,
-      landingUrl: rights.landingUrl
-    };
-    if (!originalImageAllowed(candidate)) continue;
-    return candidate;
+    if (rights) {
+      const candidate = {
+        url: raw,
+        photographer: rights.creator || photographer,
+        imageCreator: rights.creator || photographer,
+        provider: "feed-licensed",
+        rightsBasis: "open-license",
+        credit: [rights.creator, rights.license, sourceName].filter(Boolean).join(" · "),
+        sourceName,
+        sourceUrl: report?.url || item?.url || "",
+        license: rights.license,
+        licenseUrl: rights.licenseUrl,
+        landingUrl: rights.landingUrl
+      };
+      if (originalImageAllowed(candidate)) return candidate;
+    }
+    const publisherCandidate = publisherFeedImageCandidate(report, item);
+    if (publisherCandidate) return publisherCandidate;
   }
   return null;
 }
@@ -3163,6 +3197,37 @@ function originalClusterSourceImage(item) {
     };
     if (!originalImageAllowed(candidate)) continue;
     return candidate;
+  }
+  return null;
+}
+
+function publisherClusterSourceImage(item) {
+  // Hero fallback after the green tier: find another publisher-supplied image
+  // from the SAME event. Official reports are considered first, then the
+  // representative report, then the freshest remaining site reports.
+  const itemUrl = String(item?.url || "").trim();
+  const reports = [item, ...normalizeClusterReports(item || {})].filter(Boolean);
+  const seen = new Set();
+  const ranked = reports
+    .filter((report) => {
+      const key = `${report?.url || ""}|${report?.imageUrl || report?.image || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => {
+      const officialDelta = Number(!!b?.official) - Number(!!a?.official);
+      if (officialDelta) return officialDelta;
+      const representativeDelta = Number(String(b?.url || "") === itemUrl) - Number(String(a?.url || "") === itemUrl);
+      if (representativeDelta) return representativeDelta;
+      return Date.parse(b?.publishedAt || 0) - Date.parse(a?.publishedAt || 0);
+    });
+  for (const report of ranked) {
+    // Explicitly licensed media is handled by originalClusterSourceImage() in
+    // the green pass, so this helper is intentionally the yellow pass only.
+    if (reusableSourceImageLicense(report)) continue;
+    const candidate = publisherFeedImageCandidate(report, item, { cluster: true });
+    if (candidate) return candidate;
   }
   return null;
 }
@@ -3249,23 +3314,23 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
     el.leadStoryImage.referrerPolicy = "no-referrer";
     el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
     delete el.leadStoryMedia.dataset.fallbackLabel;
-    el.leadStoryMedia.dataset.mediaCredit = direct.credit || "תמונה ברישיון שימוש מזוהה";
+    const directCredit = direct.credit || (direct.sourceName ? `מקור תמונה: ${direct.sourceName}` : "מקור תמונה");
+    el.leadStoryMedia.dataset.mediaCredit = directCredit;
     el.leadStoryMedia.dataset.mediaLanding = direct.landingUrl || direct.sourceUrl || item?.url || "";
     el.leadStoryMedia.dataset.mediaLicense = direct.licenseUrl || "";
-    el.leadStoryMedia.title = direct.credit || "תמונה ברישיון שימוש מזוהה";
+    el.leadStoryMedia.title = directCredit;
     return true;
   };
 
-  // V228: only a positively identified reusable source image may be used as the
-  // hero. Ordinary publisher photographs, even with a photographer credit, do
-  // not qualify by themselves. This prevents an unknown-rights source photo
-  // from becoming the dominant visual on the site.
-  const licensedSource = preferredSourceImage(item) || originalFeedSourceImage(item) || originalClusterSourceImage(item);
+  // V229 hero priority: (1) green licensed/open media from the event, (2) the
+  // exact publisher-supplied feed/listing image when it is not a blocked agency,
+  // (3) strictly matched public-domain/CC0 media, then branded fallback.
+  const licensedSource = preferredSourceImage(item) || originalClusterSourceImage(item);
   if (applyLicensed(licensedSource)) return;
+  const publisherSource = originalFeedSourceImage(item) || publisherClusterSourceImage(item);
+  if (applyLicensed(publisherSource)) return;
 
-  // Otherwise use a strictly matched open-licence image (Commons/Openverse),
-  // or the branded contextual fallback when no sufficiently relevant licensed
-  // image is available. No article-page scraping is performed for hero imagery.
+  // We still never crawl the article page just to obtain an unknown-rights photo.
   await hydrateLeadOpenMediaFallback(winner, leadTitle, publicSnapshot);
 }
 
@@ -3340,7 +3405,7 @@ async function hydrateSafeMediaSlot(slot) {
       hydrateSafeMediaSlot(replacement).catch((error) => console.warn("Image fallback failed", error));
     }, { once:true });
     slot.replaceWith(img);
-    addCredit(candidate?.credit || "תמונה ברישיון שימוש מזוהה", candidate?.landingUrl || candidate?.sourceUrl || "");
+    addCredit(candidate?.credit || (candidate?.sourceName ? `מקור תמונה: ${candidate.sourceName}` : "מקור תמונה"), candidate?.landingUrl || candidate?.sourceUrl || "");
     return true;
   };
 
@@ -3355,13 +3420,15 @@ async function hydrateSafeMediaSlot(slot) {
     creator: a?.dataset?.sourceCreator || "",
     landingUrl: a?.dataset?.sourceLanding || articleUrl,
     sourceUrl: articleUrl,
-    sourceName: a?.dataset?.sourceName || ""
+    sourceName: a?.dataset?.sourceName || "",
+    rightsBasis: a?.dataset?.sourceBasis || "",
+    provider: a?.dataset?.sourceProvider || ""
   };
-  if (embedded.url && showLicensedDirect(embedded, "licensed-feed")) return;
+  if (embedded.url && showLicensedDirect(embedded, embedded.provider || "publisher-feed")) return;
 
-  // V228 SAFE-BY-DEFAULT: never crawl a publisher article merely to obtain an
-  // unknown-rights photo. Use reusable open media; if none is sufficiently
-  // relevant, retain the branded contextual visual instead.
+  // V229: never crawl a publisher article merely to obtain an unknown-rights
+  // photo. If the source did not supply a usable feed/listing image, use reusable
+  // open media; if none is sufficiently relevant, retain the branded fallback.
   const mediaQueries = String(slot.dataset.mediaQuery || "").split("|").map((q) => q.trim()).filter(Boolean);
   const feedStory = {
     title: slot.dataset.storyTitle || "",
@@ -3413,6 +3480,8 @@ function hydrateDirectSourceImageSlotsNow() {
       a.dataset.sourceLicenseUrl = remembered.licenseUrl || "";
       a.dataset.sourceCreator = remembered.creator || remembered.imageCreator || remembered.photographer || "";
       a.dataset.sourceLanding = remembered.landingUrl || remembered.sourceUrl || "";
+      a.dataset.sourceBasis = remembered.rightsBasis || "";
+      a.dataset.sourceProvider = remembered.provider || "";
     }
     if (!a?.dataset?.sourceImage) continue;
     slot.dataset.mediaObserved = "1";
@@ -3435,7 +3504,9 @@ function captureVisibleFeedImages() {
       licenseUrl: a.dataset.sourceLicenseUrl || "",
       creator: a.dataset.sourceCreator || "",
       landingUrl: a.dataset.sourceLanding || articleUrl,
-      sourceUrl: articleUrl
+      sourceUrl: articleUrl,
+      rightsBasis: a.dataset.sourceBasis || "",
+      provider: origin || a.dataset.sourceProvider || ""
     };
     if (!originalImageAllowed(candidate)) return;
     rememberFeedImage(articleUrl, candidate, origin || "licensed-feed");
@@ -3860,7 +3931,7 @@ function newsCardHtml(item) {
   const mediaQuery = escapeHtml(licensedMediaQueryVariantsForItem(item, safeTitle).join(" | "));
   const preferredImage = rememberedFeedImage(rawStoryUrl) || originalFeedSourceImage(item) || preferredSourceImage(item);
   const imageHtml = state.showImages
-    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה" data-source-url="${storyUrl}" data-source-name="${escapeHtml(cleanDisplayText(item.sourceName || ""))}"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit || "")}" data-source-license="${escapeHtml(preferredImage.license || "")}" data-source-license-url="${escapeHtml(preferredImage.licenseUrl || "")}" data-source-creator="${escapeHtml(preferredImage.creator || preferredImage.imageCreator || preferredImage.photographer || "")}" data-source-landing="${escapeHtml(preferredImage.landingUrl || preferredImage.sourceUrl || "")}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="${escapeHtml(newsPreviewText(item, reportCount))}" aria-hidden="true"></span></a>`
+    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה" data-source-url="${storyUrl}" data-source-name="${escapeHtml(cleanDisplayText(item.sourceName || ""))}"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit || "")}" data-source-license="${escapeHtml(preferredImage.license || "")}" data-source-license-url="${escapeHtml(preferredImage.licenseUrl || "")}" data-source-creator="${escapeHtml(preferredImage.creator || preferredImage.imageCreator || preferredImage.photographer || "")}" data-source-landing="${escapeHtml(preferredImage.landingUrl || preferredImage.sourceUrl || "")}" data-source-basis="${escapeHtml(preferredImage.rightsBasis || "")}" data-source-provider="${escapeHtml(preferredImage.provider || "")}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="${escapeHtml(newsPreviewText(item, reportCount))}" aria-hidden="true"></span></a>`
     : "";
   const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeTitle)}</a>`;
   const relatedHtml = related.length ? `
@@ -4328,7 +4399,7 @@ function renderLeadStory() {
   const leadResolvedHref = storyHref(sourceTarget || item);
   setOptionalLink(el.leadStoryLink, leadResolvedHref);
   const leadHref = safeHttpHref(leadResolvedHref);
-  const initialLeadMedia = originalFeedSourceImage(item) || preferredSourceImage(item);
+  const initialLeadMedia = preferredSourceImage(item) || originalClusterSourceImage(item) || originalFeedSourceImage(item) || publisherClusterSourceImage(item);
   const publicLeadSnapshot={
     fingerprint:winnerFingerprint,
     title:leadTitle,
@@ -4688,7 +4759,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=228.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=229.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4758,7 +4829,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=228.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=229.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
