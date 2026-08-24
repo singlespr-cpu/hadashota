@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "230.0.0";
+const KOTERET_CLIENT_BUILD = "231.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -740,9 +740,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V230 · API ${apiVersion}` : "גרסה V230 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V231 · API ${apiVersion}` : "גרסה V231 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V230 · API לא מחובר";
+    marker.textContent = "גרסה V231 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -4680,9 +4680,20 @@ function getRefreshInterval() {
 }
 
 
+function analyticsSourceHint(){
+  try{
+    const p=new URLSearchParams(location.search),src=String(p.get("utm_source")||"").toLowerCase(),medium=String(p.get("utm_medium")||"").toLowerCase();
+    if(/google/.test(src))return "google";
+    if(/facebook|instagram|meta/.test(src))return "meta";
+    if(/whatsapp|\bwa\b/.test(src))return "whatsapp";
+    if(/twitter|(^|[-_])x($|[-_])/.test(src))return "x";
+    if(/koteret[_-]?share|share/.test(src)||medium==="share")return "share";
+  }catch{}
+  return "";
+}
 async function trackAnalyticsVisit(page="home") {
   try {
-    await fetch("/api/analytics/visit",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",keepalive:true,body:JSON.stringify({page,deviceId:getPushDeviceId(),userAgent:navigator.userAgent.slice(0,220),referrer:document.referrer||""})});
+    await fetch("/api/analytics/visit",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",keepalive:true,body:JSON.stringify({page,deviceId:getPushDeviceId(),userAgent:navigator.userAgent.slice(0,220),referrer:document.referrer||"",sourceHint:analyticsSourceHint()})});
   } catch {}
 }
 function syncPushDeviceIdToServiceWorker(registration=state.serviceWorkerRegistration) {
@@ -4713,7 +4724,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=230.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=231.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4783,7 +4794,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=230.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=231.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
@@ -6505,7 +6516,7 @@ async function shareKoteretPlus() {
   const shareData = {
     title: "כותרת פלוס — חדשות בזמן אמת",
     text: "כותרת פלוס — כל מה שקורה עכשיו במקום אחד. חדשות, מבזקים ועדכונים בזמן אמת ממגוון מקורות בישראל.",
-    url: "https://koteretplus.com/"
+    url: "https://koteretplus.com/?utm_source=koteret_share&utm_medium=share&utm_campaign=home"
   };
   const clipboardText = `${shareData.text}\n${shareData.url}`;
   try {
