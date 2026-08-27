@@ -271,7 +271,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "234.0.0",
+          version: "235.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -284,7 +284,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "234.0.0",
+        version: "235.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1573,6 +1573,35 @@ function summarizeSourceHealth(settled, now, cutoff) {
 
 const NEWS_BUNDLE_SHARDS = ["sites-1", "sites-2", "sites-3", "telegram-1", "telegram-2", "telegram-3"];
 
+// CPU optimization: shared news snapshots are produced by this Worker with a
+// stable JSON layout. On cache hits, avoid parsing and re-stringifying the full
+// payload merely to flip servedFromCache and append servedAt. The slow fallback
+// preserves the previous behavior for any unexpected/legacy cache entry.
+function markCachedNewsPayloadText(rawText, servedAt) {
+  const raw = String(rawText || "").trim();
+  if (!raw.startsWith("{") || !raw.endsWith("}")) return null;
+  const itemsIndex = raw.indexOf('"items":[');
+  const marker = '"servedFromCache":false';
+  const markerIndex = raw.indexOf(marker);
+  if (itemsIndex < 0 || markerIndex < 0 || markerIndex > itemsIndex) return null;
+  const marked = `${raw.slice(0, markerIndex)}"servedFromCache":true${raw.slice(markerIndex + marker.length)}`;
+  return `${marked.slice(0, -1)},"servedAt":${JSON.stringify(servedAt)}}`;
+}
+
+function cachedNewsPayloadText(rawText, servedAt) {
+  const fast = markCachedNewsPayloadText(rawText, servedAt);
+  if (fast) return fast;
+  try {
+    const payload = JSON.parse(String(rawText || ""));
+    if (!payload || !Array.isArray(payload.items)) return null;
+    payload.servedFromCache = true;
+    payload.servedAt = servedAt;
+    return JSON.stringify(payload);
+  } catch {
+    return null;
+  }
+}
+
 async function handleNewsBundle(request, env, ctx) {
   const requestUrl = new URL(request.url);
   const presenceDeviceId = String(requestUrl.searchParams.get("presenceDeviceId") || "").replace(/[^a-zA-Z0-9._:-]/g, "").slice(0, 120);
@@ -1581,37 +1610,32 @@ async function handleNewsBundle(request, env, ctx) {
   }
 
   const cache = caches.default;
-  const payloads = await Promise.all(NEWS_BUNDLE_SHARDS.map(async (shard) => {
+  const payloadTexts = await Promise.all(NEWS_BUNDLE_SHARDS.map(async (shard) => {
     const cacheKey = new Request(`${PUBLIC_SITE_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&v=119`, { method: "GET" });
     const hit = await cache.match(cacheKey);
     if (!hit) return null;
     try {
-      const payload = await hit.json();
-      if (!payload || !Array.isArray(payload.items)) return null;
-      payload.servedFromCache = true;
-      payload.servedAt = new Date().toISOString();
-      return payload;
+      const rawText = await hit.text();
+      return cachedNewsPayloadText(rawText, new Date().toISOString());
     } catch (error) {
       console.warn(`news bundle parse ${shard} failed`, error);
       return null;
     }
   }));
 
-  const missing = NEWS_BUNDLE_SHARDS.filter((_, index) => !payloads[index]);
+  const missing = NEWS_BUNDLE_SHARDS.filter((_, index) => !payloadTexts[index]);
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "234.0.0"
+      "X-Hadashota-Version": "235.0.0"
     }));
   }
 
-  return cors(json({
-    ok: true,
-    generatedAt: new Date().toISOString(),
-    payloads
-  }, 200, {
+  const generatedAt = new Date().toISOString();
+  const bundleText = `{"ok":true,"generatedAt":${JSON.stringify(generatedAt)},"payloads":[${payloadTexts.join(",")}]}`;
+  return cors(jsonText(bundleText, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "234.0.0",
+    "X-Hadashota-Version": "235.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1647,12 +1671,11 @@ async function handleNews(request, env, ctx) {
       // tell the browser that this was a cache hit so it can start exactly one
       // full-source refresh in the background. This avoids a blank first paint.
       try {
-        const cachedPayload = await cached.json();
-        cachedPayload.servedFromCache = true;
-        cachedPayload.servedAt = new Date().toISOString();
-        return cors(json(cachedPayload, 200, {
+        const cachedText = cachedNewsPayloadText(await cached.text(), new Date().toISOString());
+        if (!cachedText) throw new Error("INVALID_CACHED_NEWS_PAYLOAD");
+        return cors(jsonText(cachedText, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "234.0.0",
+          "X-Hadashota-Version": "235.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1775,18 +1798,19 @@ async function handleNews(request, env, ctx) {
       failures: failedSources.slice(0, 12)
     };
 
-    const response = json(payload, 200, {
+    const payloadText = JSON.stringify(payload);
+    const response = jsonText(payloadText, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "234.0.0",
+      "X-Hadashota-Version": "235.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
-    const sharedSnapshotResponse = json(payload, 200, {
+    const sharedSnapshotResponse = jsonText(payloadText, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "234.0.0",
+      "X-Hadashota-Version": "235.0.0",
       "X-Hadashota-Shard": shard
     });
-    const lastGoodResponse = json(payload, 200, {
+    const lastGoodResponse = jsonText(payloadText, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=7200"
     });
 
@@ -1817,7 +1841,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "234.0.0"
+        "X-Hadashota-Version": "235.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1839,16 +1863,18 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "234.0.0"
+    "X-Hadashota-Version": "235.0.0"
   });
 }
 
 
 function enrichItemsWithPhotoCredits(items, html, source) {
   if (!Array.isArray(items) || !items.length || !html) return items;
+  let creditContext = null;
   return items.map((item) => {
     if (!item?.imageUrl || item.imageCredit) return item;
-    const credit = extractPhotoCredit(html, item.imageUrl);
+    if (!creditContext) creditContext = preparePhotoCreditContext(html);
+    const credit = extractPhotoCreditPrepared(creditContext, item.imageUrl);
     if (!credit) return item;
     return {
       ...item,
@@ -2290,22 +2316,54 @@ function scoreWords(text, words) {
 
 function clusterItems(items) {
   const clusters = [];
+  // Invocation-local memoization only. Titles are pure inputs to the existing
+  // event rules, so this removes repeated normalization/Set construction while
+  // keeping every threshold, scan order and match decision unchanged.
+  const profileCache = new Map();
+  const timeCache = new Map();
+  const timeFor = (value) => {
+    const key = String(value ?? "");
+    if (timeCache.has(key)) return timeCache.get(key);
+    const parsed = Date.parse(value);
+    timeCache.set(key, parsed);
+    return parsed;
+  };
+  const tokenIds = new Map();
+  let nextTokenId = 1;
+  const profileFor = (title) => {
+    const key = String(title || "");
+    let profile = profileCache.get(key);
+    if (!profile) {
+      profile = eventProfile(key);
+      profile.numericTokens = [...profile.tokens].map((token) => {
+        let id = tokenIds.get(token);
+        if (id === undefined) {
+          id = nextTokenId++;
+          tokenIds.set(token, id);
+        }
+        return id;
+      }).sort((a, b) => a - b);
+      profileCache.set(key, profile);
+    }
+    return profile;
+  };
 
   for (const item of items) {
-    const itemTime = Date.parse(item.publishedAt);
+    const itemTime = timeFor(item.publishedAt);
+    const itemProfile = profileFor(item.title);
     let match = null;
 
     for (let i = Math.max(0, clusters.length - 110); i < clusters.length; i++) {
       const cluster = clusters[i];
-      const clusterTime = Date.parse(cluster.latestReportAt || cluster.publishedAt);
+      const clusterTime = timeFor(cluster.latestReportAt || cluster.publishedAt);
       const timeDeltaMs = Math.abs(itemTime - clusterTime);
       if (timeDeltaMs > 8 * 60 * 60 * 1000) continue;
-      const directMatch = sameEvent(item.title, cluster.title, timeDeltaMs);
+      const directMatch = sameEventProfiles(itemProfile, profileFor(cluster.title), timeDeltaMs);
       const relatedMatch = !directMatch && (cluster.related || []).some((report) => {
         if (!report?.title) return false;
-        const reportTime = Date.parse(report.publishedAt || 0);
+        const reportTime = timeFor(report.publishedAt || 0);
         const reportDeltaMs = Number.isFinite(reportTime) && Number.isFinite(itemTime) ? Math.abs(itemTime - reportTime) : timeDeltaMs;
-        return reportDeltaMs <= 180 * 60 * 1000 && sameEvent(item.title, report.title, reportDeltaMs);
+        return reportDeltaMs <= 180 * 60 * 1000 && sameEventProfiles(itemProfile, profileFor(report.title), reportDeltaMs);
       });
       if (directMatch || relatedMatch) {
         match = cluster;
@@ -2346,14 +2404,14 @@ function clusterItems(items) {
     match.updates = Array.isArray(match.updates) ? match.updates : [...(match.related || [])];
     if (!match.updates.some((update) => update.url === relatedEntry.url && update.publishedAt === relatedEntry.publishedAt)) {
       match.updates.push(relatedEntry);
-      match.updates.sort((a,b) => Date.parse(a.publishedAt || 0) - Date.parse(b.publishedAt || 0));
+      match.updates.sort((a,b) => timeFor(a.publishedAt || 0) - timeFor(b.publishedAt || 0));
       if (match.updates.length > 24) match.updates = match.updates.slice(-24);
     }
 
     const existing = match.related.find((related) => related.publisher === item.publisher);
     if (!existing) {
       match.related.push(relatedEntry);
-    } else if (Date.parse(item.publishedAt) > Date.parse(existing.publishedAt || 0)) {
+    } else if (itemTime > timeFor(existing.publishedAt || 0)) {
       Object.assign(existing, relatedEntry);
     }
 
@@ -2363,14 +2421,14 @@ function clusterItems(items) {
       match.imageCredit = item.imageCredit || "";
       match.imageCreator = item.imageCreator || item.imageCredit || "";
     }
-    if (itemTime > Date.parse(match.latestReportAt || 0)) match.latestReportAt = item.publishedAt;
-    if (itemTime < Date.parse(match.firstReportAt || item.publishedAt)) match.firstReportAt = item.publishedAt;
+    if (itemTime > timeFor(match.latestReportAt || 0)) match.latestReportAt = item.publishedAt;
+    if (itemTime < timeFor(match.firstReportAt || item.publishedAt)) match.firstReportAt = item.publishedAt;
 
     // A mixed cluster must stay clickable. A news-site article always represents the
     // cluster when one exists; official/verified priority is applied within the same kind.
     const representativeScore = Number(match.sourceKind === "site") * 100 + Number(match.official) * 20 + Number(match.verified) * 5;
     const candidateScore = Number(item.sourceKind === "site") * 100 + Number(item.official) * 20 + Number(item.verified) * 5;
-    if (candidateScore > representativeScore || (candidateScore === representativeScore && itemTime > Date.parse(match.publishedAt))) {
+    if (candidateScore > representativeScore || (candidateScore === representativeScore && itemTime > timeFor(match.publishedAt))) {
       const related = match.related;
       const updates = match.updates;
       const reportCount = match.reportCount;
@@ -2387,35 +2445,110 @@ function clusterItems(items) {
     }
   }
 
-  return clusters.sort((a, b) => Date.parse(b.latestReportAt || b.publishedAt) - Date.parse(a.latestReportAt || a.publishedAt));
+  return clusters.sort((a, b) => timeFor(b.latestReportAt || b.publishedAt) - timeFor(a.latestReportAt || a.publishedAt));
 }
 
-function sameEvent(a, b, timeDeltaMs = Infinity) {
-  const A = titleTokens(a);
-  const B = titleTokens(b);
+const EVENT_PREFIXABLE_STEMS = new Set([
+  "איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה",
+  "תקיפה","מתקפה","פגיעה","פיצוץ","ירי","שיגור","מטח","טיל","רקטה","כטבמ","רחפן","יירוט","אזעקה","התרעה","בסיס"
+]);
+const EVENT_TOKEN_ALIASES = Object.freeze({
+  "איראני":"איראן", "איראנית":"איראן", "איראנים":"איראן", "איראניות":"איראן",
+  "iran":"איראן", "iranian":"איראן", "iranians":"איראן",
+  "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית", "kuwait":"כווית", "kuwaiti":"כווית",
+  "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב", "american":"ארהב", "americans":"ארהב",
+  "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ", "drone":"כטבמ", "drones":"כטבמ",
+  "טילים":"טיל", "missile":"טיל", "missiles":"טיל", "רקטות":"רקטה", "rocket":"רקטה", "rockets":"רקטה",
+  "תקיפות":"תקיפה", "התקפות":"תקיפה", "מתקפה":"תקיפה", "מתקפת":"תקיפה", "attack":"תקיפה", "attacks":"תקיפה", "attacked":"תקיפה", "strike":"תקיפה", "strikes":"תקיפה",
+  "שיגורים":"שיגור", "launch":"שיגור", "launches":"שיגור", "launched":"שיגור",
+  "פיצוצים":"פיצוץ", "explosion":"פיצוץ", "explosions":"פיצוץ", "blast":"פיצוץ", "blasts":"פיצוץ",
+  "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט", "intercepted":"יירוט", "intercepts":"יירוט", "interception":"יירוט"
+});
+const EVENT_ENTITY_TOKENS = new Set(["איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה"]);
+const EVENT_ACTION_FAMILIES = new Map([
+  ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","פיצוץ","ירי","שיגור","שיגרה","שיגר","מטח"])],
+  ["missile", new Set(["טיל","רקטה","כטבמ","רחפן","מלט"])],
+  ["intercept", new Set(["יירוט","יירט","הגנה","אזעקה","התרעה","התרעות"])],
+  ["base", new Set(["בסיס","צבאי","כוחות","ארהב"])]
+]);
+const EVENT_SPECIFIC_TARGETS = new Set(["כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","טהרן","ביירות","דמשק"]);
+const EVENT_ENTITY_BITS = new Map([...EVENT_ENTITY_TOKENS].map((token, index) => [token, 1 << index]));
+const EVENT_ACTION_BITS = new Map([...EVENT_ACTION_FAMILIES.keys()].map((family, index) => [family, 1 << index]));
+const EVENT_ACTION_TOKEN_BITS = (() => {
+  const map = new Map();
+  for (const [family, words] of EVENT_ACTION_FAMILIES) {
+    const bit = EVENT_ACTION_BITS.get(family) || 0;
+    for (const word of words) map.set(word, (map.get(word) || 0) | bit);
+  }
+  return map;
+})();
+const EVENT_SPECIFIC_TARGET_MASK = [...EVENT_SPECIFIC_TARGETS].reduce((mask, token) => mask | (EVENT_ENTITY_BITS.get(token) || 0), 0);
+
+function bitCount32(value) {
+  let v = value >>> 0;
+  v -= (v >>> 1) & 0x55555555;
+  v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+  return (((v + (v >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
+}
+
+function eventEntitiesFromTokens(tokens) {
+  return new Set([...tokens].filter((t) => EVENT_ENTITY_TOKENS.has(t)));
+}
+
+function eventActionsFromTokens(tokens) {
+  const out = new Set();
+  for (const [family, words] of EVENT_ACTION_FAMILIES) if ([...tokens].some((t) => words.has(t))) out.add(family);
+  return out;
+}
+
+function eventProfile(value) {
+  const tokens = titleTokens(value);
+  let entityMask = 0;
+  let actionMask = 0;
+  for (const token of tokens) {
+    entityMask |= EVENT_ENTITY_BITS.get(token) || 0;
+    actionMask |= EVENT_ACTION_TOKEN_BITS.get(token) || 0;
+  }
+  return { tokens, numericTokens: null, entityMask, actionMask };
+}
+
+function sameEventProfiles(profileA, profileB, timeDeltaMs = Infinity) {
+  const A = profileA.tokens;
+  const B = profileB.tokens;
   if (!A.size || !B.size) return false;
   let intersection = 0;
-  for (const token of A) if (B.has(token)) intersection++;
+  if (profileA.numericTokens && profileB.numericTokens) {
+    const a = profileA.numericTokens;
+    const b = profileB.numericTokens;
+    let i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { intersection++; i++; j++; }
+      else if (a[i] < b[j]) i++;
+      else j++;
+    }
+  } else {
+    for (const token of A) if (B.has(token)) intersection++;
+  }
   const union = A.size + B.size - intersection;
   const jaccard = union ? intersection / union : 0;
   const containment = intersection / Math.max(1, Math.min(A.size, B.size));
   if (jaccard >= 0.50 || (intersection >= 3 && containment >= 0.46) || (intersection >= 4 && containment >= 0.40)) return true;
   if (timeDeltaMs <= 180 * 60 * 1000) {
-    const entitiesA = eventEntities(a);
-    const entitiesB = eventEntities(b);
-    const actionsA = eventActions(a);
-    const actionsB = eventActions(b);
-    const sharedEntities = [...entitiesA].filter((x) => entitiesB.has(x)).length;
-    const sharedActions = [...actionsA].filter((x) => actionsB.has(x)).length;
+    const sharedEntityMask = profileA.entityMask & profileB.entityMask;
+    const sharedActionMask = profileA.actionMask & profileB.actionMask;
+    const sharedEntities = bitCount32(sharedEntityMask);
+    const sharedActions = bitCount32(sharedActionMask);
     if (sharedEntities >= 2 && sharedActions >= 1) return true;
     if (sharedEntities >= 1 && sharedActions >= 2 && intersection >= 2) return true;
     if (timeDeltaMs <= 150 * 60 * 1000 && sharedEntities >= 1 && sharedActions >= 1) {
-      const specificTargets = new Set(["כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","טהרן","ביירות","דמשק"]);
-      const sharedSpecificTarget = [...entitiesA].some((entity) => entitiesB.has(entity) && specificTargets.has(entity));
-      if (sharedSpecificTarget) return true;
+      if ((sharedEntityMask & EVENT_SPECIFIC_TARGET_MASK) !== 0) return true;
     }
   }
   return false;
+}
+
+function sameEvent(a, b, timeDeltaMs = Infinity) {
+  return sameEventProfiles(eventProfile(a), eventProfile(b), timeDeltaMs);
 }
 
 function canonicalEventToken(word) {
@@ -2425,43 +2558,17 @@ function canonicalEventToken(word) {
   // itself by turning it into "ווית".
   if (w.length >= 4 && /^[ובלכמהש]/.test(w)) {
     const candidate = w.slice(1);
-    const prefixableStems = new Set([
-      "איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה",
-      "תקיפה","מתקפה","פגיעה","פיצוץ","ירי","שיגור","מטח","טיל","רקטה","כטבמ","רחפן","יירוט","אזעקה","התרעה","בסיס"
-    ]);
-    if (prefixableStems.has(candidate)) w = candidate;
+    if (EVENT_PREFIXABLE_STEMS.has(candidate)) w = candidate;
   }
-  const aliases = {
-    "איראני":"איראן", "איראנית":"איראן", "איראנים":"איראן", "איראניות":"איראן",
-    "iran":"איראן", "iranian":"איראן", "iranians":"איראן",
-    "כוויתי":"כווית", "כוויתית":"כווית", "כוויתים":"כווית", "kuwait":"כווית", "kuwaiti":"כווית",
-    "אמריקני":"ארהב", "אמריקנית":"ארהב", "אמריקאים":"ארהב", "american":"ארהב", "americans":"ארהב",
-    "כטבמים":"כטבמ", "כטבם":"כטבמ", "מלטים":"כטבמ", "drone":"כטבמ", "drones":"כטבמ",
-    "טילים":"טיל", "missile":"טיל", "missiles":"טיל", "רקטות":"רקטה", "rocket":"רקטה", "rockets":"רקטה",
-    "תקיפות":"תקיפה", "התקפות":"תקיפה", "מתקפה":"תקיפה", "מתקפת":"תקיפה", "attack":"תקיפה", "attacks":"תקיפה", "attacked":"תקיפה", "strike":"תקיפה", "strikes":"תקיפה",
-    "שיגורים":"שיגור", "launch":"שיגור", "launches":"שיגור", "launched":"שיגור",
-    "פיצוצים":"פיצוץ", "explosion":"פיצוץ", "explosions":"פיצוץ", "blast":"פיצוץ", "blasts":"פיצוץ",
-    "יורטו":"יירוט", "מיירטים":"יירוט", "יירוטים":"יירוט", "intercepted":"יירוט", "intercepts":"יירוט", "interception":"יירוט"
-  };
-  return aliases[w] || w;
+  return EVENT_TOKEN_ALIASES[w] || w;
 }
 
 function eventEntities(value) {
-  const tokens = titleTokens(value);
-  const known = new Set(["איראן","כווית","בחריין","קטאר","ירדן","עיראק","סעודיה","תימן","ארהב","ישראל","טהרן","ביירות","דמשק","לבנון","סוריה"]);
-  return new Set([...tokens].filter((t) => known.has(t)));
+  return eventEntitiesFromTokens(titleTokens(value));
 }
 
 function eventActions(value) {
-  const tokens = titleTokens(value);
-  const families = new Map([
-    ["attack", new Set(["תקיפה","תקף","תקפה","פגיעה","פגע","פיצוץ","ירי","שיגור","שיגרה","שיגר","מטח"])],
-    ["missile", new Set(["טיל","רקטה","כטבמ","רחפן","מלט"])],
-    ["intercept", new Set(["יירוט","יירט","הגנה","אזעקה","התרעה","התרעות"])],
-    ["base", new Set(["בסיס","צבאי","כוחות","ארהב"])]]);
-  const out = new Set();
-  for (const [family, words] of families) if ([...tokens].some((t) => words.has(t))) out.add(family);
-  return out;
+  return eventActionsFromTokens(titleTokens(value));
 }
 
 function titleSimilarity(a, b) {
@@ -2554,8 +2661,16 @@ function photoCreditLooksUseful(value) {
   return /[\p{L}]/u.test(text);
 }
 
-function extractPhotoCreditFromJsonLd(html, targetImageUrl = "") {
-  const scripts = [...String(html || "").matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+function parsePhotoCreditJsonLd(html) {
+  const parsedScripts = [];
+  const scripts = String(html || "").matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  for (const match of scripts) {
+    try { parsedScripts.push(JSON.parse(match[1].trim())); } catch {}
+  }
+  return parsedScripts;
+}
+
+function extractPhotoCreditFromJsonLdParsed(parsedScripts, targetImageUrl = "") {
   const target = String(targetImageUrl || "").split("?")[0];
 
   const scan = (node) => {
@@ -2640,14 +2755,15 @@ function extractPhotoCreditFromJsonLd(html, targetImageUrl = "") {
     return "";
   };
 
-  for (const match of scripts) {
-    try {
-      const parsed = JSON.parse(match[1].trim());
-      const found = scan(parsed);
-      if (found) return found;
-    } catch {}
+  for (const parsed of parsedScripts || []) {
+    const found = scan(parsed);
+    if (found) return found;
   }
   return "";
+}
+
+function extractPhotoCreditFromJsonLd(html, targetImageUrl = "") {
+  return extractPhotoCreditFromJsonLdParsed(parsePhotoCreditJsonLd(html), targetImageUrl);
 }
 
 function extractPhotoCreditFromMeta(html) {
@@ -2733,6 +2849,23 @@ function extractPhotoCreditNearImage(html, targetImageUrl = "") {
     }
   }
   return "";
+}
+
+function preparePhotoCreditContext(html) {
+  const source = String(html || "");
+  return { source, jsonLd: parsePhotoCreditJsonLd(source), metaCredit: undefined };
+}
+
+function extractPhotoCreditPrepared(context, targetImageUrl = "") {
+  const source = String(context?.source || "");
+  const jsonLdCredit = extractPhotoCreditFromJsonLdParsed(context?.jsonLd || [], targetImageUrl);
+  if (jsonLdCredit) return jsonLdCredit;
+  const markupCredit = extractPhotoCreditFromImageMarkup(source, targetImageUrl);
+  if (markupCredit) return markupCredit;
+  const nearCredit = extractPhotoCreditNearImage(source, targetImageUrl);
+  if (nearCredit) return nearCredit;
+  if (context && context.metaCredit === undefined) context.metaCredit = extractPhotoCreditFromMeta(source);
+  return String(context?.metaCredit || "");
 }
 
 function extractPhotoCredit(html, targetImageUrl = "") {
@@ -2846,6 +2979,17 @@ function stableId(value) {
 
 function json(data, status = 200, extraHeaders = {}) {
   return cors(new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      ...extraHeaders
+    }
+  }));
+}
+
+function jsonText(serializedJson, status = 200, extraHeaders = {}) {
+  return cors(new Response(String(serializedJson || ""), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
@@ -3271,14 +3415,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"234.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"234.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"235.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"235.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"234.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"234.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"235.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"235.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4072,7 +4216,7 @@ async function storeBackgroundMonitor(storage,input={}){
     collectorFailures:input?.collectorFailures&&typeof input.collectorFailures==="object"?input.collectorFailures:{},
     error:String(input?.error||"").slice(0,260),
     at:nowIso,
-    version:"234.0.0"
+    version:"235.0.0"
   };
   const existing=await storage.get("push.backgroundMonitor");
   const incomingTick=Date.parse(row.tickStartedAt||0);
@@ -4242,7 +4386,7 @@ async function runBackgroundPushMonitor(env, ctx) {
     }
   } catch(error) {
     const message=String(error?.message||error);
-    console.warn("V234 scheduled push monitor failed",phase,message);
+    console.warn("V235 scheduled push monitor failed",phase,message);
     await report("failed",{error:message});
   }
 }
@@ -4851,7 +4995,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"234.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"235.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -5130,7 +5274,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{direct:0,google:0,meta:0,x:0,whatsapp:0,share:0,internal:0,other:0},referrerDomains:{}});
-      return json({ok:true,version:"234.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"235.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -5172,7 +5316,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"234.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"235.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -5221,10 +5365,10 @@ export class PushHub {
       if(previousMonitor?.state==="running"&&Number.isFinite(previousStarted)&&Date.now()-previousStarted>45000){
         await storage.put("push.backgroundLastError",{
           at:nowIso,tickStartedAt:String(previousMonitor?.tickStartedAt||""),phase:String(previousMonitor?.phase||"unknown"),
-          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"234.0.0"
+          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"235.0.0"
         });
       }
-      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"234.0.0"};
+      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"235.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       await storeBackgroundMonitor(storage,{state:"running",phase:"heartbeat",tickStartedAt:heartbeat.tickStartedAt,elapsedMs:0});
       return json({ok:true,...heartbeat},200,{"Cache-Control":"no-store"});
