@@ -3,21 +3,6 @@
   "name": "hadashota",
   "main": "HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD/_worker.js",
   "compatibility_date": "2026-08-12",
-  "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true,
-      "invocation_logs": true
-    },
-    "traces": {
-      "enabled": false,
-      "persist": true,
-      "head_sampling_rate": 1
-    }
-  },
   "assets": {
     "directory": "./HADASHOTA-CLOUDFLARE-DIRECT-UPLOAD",
     "binding": "ASSETS",
