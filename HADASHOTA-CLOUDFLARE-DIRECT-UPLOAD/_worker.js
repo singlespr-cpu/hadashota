@@ -271,7 +271,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "236.0.0",
+          version: "237.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -284,7 +284,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "236.0.0",
+        version: "237.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1627,7 +1627,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "236.0.0"
+      "X-Hadashota-Version": "237.0.0"
     }));
   }
 
@@ -1635,7 +1635,7 @@ async function handleNewsBundle(request, env, ctx) {
   const bundleText = `{"ok":true,"generatedAt":${JSON.stringify(generatedAt)},"payloads":[${payloadTexts.join(",")}]}`;
   return cors(jsonText(bundleText, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "236.0.0",
+    "X-Hadashota-Version": "237.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1675,7 +1675,7 @@ async function handleNews(request, env, ctx) {
         if (!cachedText) throw new Error("INVALID_CACHED_NEWS_PAYLOAD");
         return cors(jsonText(cachedText, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "236.0.0",
+          "X-Hadashota-Version": "237.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1801,13 +1801,13 @@ async function handleNews(request, env, ctx) {
     const payloadText = JSON.stringify(payload);
     const response = jsonText(payloadText, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "236.0.0",
+      "X-Hadashota-Version": "237.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = jsonText(payloadText, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "236.0.0",
+      "X-Hadashota-Version": "237.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = jsonText(payloadText, 200, {
@@ -1841,7 +1841,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "236.0.0"
+        "X-Hadashota-Version": "237.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1863,7 +1863,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "236.0.0"
+    "X-Hadashota-Version": "237.0.0"
   });
 }
 
@@ -3415,14 +3415,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"236.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"236.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"236.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"236.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4205,7 +4205,7 @@ function backgroundDeadline(promise, timeoutMs, label="BACKGROUND_TIMEOUT") {
 function backgroundMonitorRank(state){
   return state==="complete"?3:state==="failed"?2:1;
 }
-async function storeBackgroundMonitor(storage,input={}){
+async function storeBackgroundMonitor(storage,input={},existingSnapshot=undefined){
   const nowIso=new Date().toISOString();
   const row={
     state:["running","complete","failed"].includes(String(input?.state||""))?String(input.state):"running",
@@ -4216,9 +4216,11 @@ async function storeBackgroundMonitor(storage,input={}){
     collectorFailures:input?.collectorFailures&&typeof input.collectorFailures==="object"?input.collectorFailures:{},
     error:String(input?.error||"").slice(0,260),
     at:nowIso,
-    version:"236.0.0"
+    version:"237.0.0"
   };
-  const existing=await storage.get("push.backgroundMonitor");
+  // V237: callers that already read the monitor may pass that exact snapshot.
+  // This preserves ordering/rank safeguards while avoiding a duplicate Storage read.
+  const existing=existingSnapshot===undefined?await storage.get("push.backgroundMonitor"):existingSnapshot;
   const incomingTick=Date.parse(row.tickStartedAt||0);
   const existingTick=Date.parse(existing?.tickStartedAt||0);
   // V234: monitor writes may arrive out of order because the Cron wrapper and
@@ -4290,7 +4292,7 @@ async function refreshBackgroundNewsShardsRaw(env,ctx,shards=[],tickStartedAt=""
       fresh.set(shard,raw);
     }catch(error){
       failures[shard]=String(error?.message||error);
-      console.warn(`V236 DO background shard ${shard} failed`,failures[shard]);
+      console.warn(`V237 DO background shard ${shard} failed`,failures[shard]);
     }
   }));
   Object.defineProperty(fresh,"failures",{value:failures,enumerable:false});
@@ -4397,7 +4399,9 @@ async function runBackgroundPushMonitor(env, ctx) {
 
     phase="collectors";
     const fresh=await refreshBackgroundNewsShardsRaw(env,ctx,ESCALATION_SHARDS,tickStartedAt);
-    await report("running",{collectorFailures:fresh.failures||{},freshShards:fresh.size});
+    // V237: heartbeat already marks this tick RUNNING, and any later failure is
+    // persisted by report("failed"). Avoid a second diagnostics-only DO request
+    // after collectors; /background-news records the full shard/failure status.
 
     // V236: assemble the PushHub request from already serialized collector JSON.
     // This removes six large JSON.parse operations and one large JSON.stringify
@@ -4414,11 +4418,11 @@ async function runBackgroundPushMonitor(env, ctx) {
     // /background-news performs the /lead decision inside PushHub. Its returned
     // diagnostic body is not consumed because nothing in the Cron uses it.
 
-    // The newsroom/lead cycle is complete at this point. Mark it successful
-    // BEFORE unrelated OREF/escalation work so those auxiliary monitors can
-    // never make a healthy news Push cycle look stuck.
+    // V237: /background-news already persists the COMPLETE monitor state inside
+    // PushHub after the lead decision. Do not send a second identical DO request
+    // from the Cron wrapper. This removes one DO request + monitor read/write per
+    // minute while preserving the exact newsroom success signal.
     phase="complete";
-    await report("complete",{freshShards:fresh.size,collectorFailures:fresh.failures||{}});
 
     // OREF remains independent. A successful result is reused by the five-minute
     // escalation pass in this SAME Cron invocation; on OREF failure escalation
@@ -4439,7 +4443,7 @@ async function runBackgroundPushMonitor(env, ctx) {
     }
   } catch(error) {
     const message=String(error?.message||error);
-    console.warn("V236 scheduled push monitor failed",phase,message);
+    console.warn("V237 scheduled push monitor failed",phase,message);
     await report("failed",{error:message});
   }
 }
@@ -5035,8 +5039,9 @@ export class PushHub {
       if(!ESCALATION_SHARDS.includes(shard))return json({error:"Invalid shard"},400,{"Cache-Control":"no-store"});
       try{
         const payload=await collectBackgroundShardDirect(shard,this.env);
-        // Local diagnostic only; each shard collector has its own DO instance.
-        await storage.put("collector.last",{at:new Date().toISOString(),shard,tickStartedAt:String(data?.tickStartedAt||""),generatedAt:payload.generatedAt,items:payload.items.length,partial:!!payload.partial});
+        // V237: successful collector.last was never read by runtime/admin code and
+        // wrote six diagnostic rows every minute. Keep failure diagnostics below,
+        // but avoid the success-only Storage write on the hot path.
         if(data?.rawPayload===true){
           return new Response(JSON.stringify(payload),{status:200,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-KP-Generated-At":String(payload.generatedAt||""),"X-KP-Items":String(Array.isArray(payload.items)?payload.items.length:0),"X-KP-Stale":payload.stale===true?"1":"0","X-KP-Served-From-Cache":payload.servedFromCache===true?"1":"0"}});
         }
@@ -5051,7 +5056,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"236.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"237.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -5330,7 +5335,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{direct:0,google:0,meta:0,x:0,whatsapp:0,share:0,internal:0,other:0},referrerDomains:{}});
-      return json({ok:true,version:"236.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"237.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -5372,7 +5377,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"236.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"237.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -5421,12 +5426,14 @@ export class PushHub {
       if(previousMonitor?.state==="running"&&Number.isFinite(previousStarted)&&Date.now()-previousStarted>45000){
         await storage.put("push.backgroundLastError",{
           at:nowIso,tickStartedAt:String(previousMonitor?.tickStartedAt||""),phase:String(previousMonitor?.phase||"unknown"),
-          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"236.0.0"
+          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"237.0.0"
         });
       }
-      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"236.0.0"};
+      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"237.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
-      await storeBackgroundMonitor(storage,{state:"running",phase:"heartbeat",tickStartedAt:heartbeat.tickStartedAt,elapsedMs:0});
+      // Reuse the monitor snapshot already read above; storeBackgroundMonitor
+      // still applies all V234 ordering/rank protections before writing.
+      await storeBackgroundMonitor(storage,{state:"running",phase:"heartbeat",tickStartedAt:heartbeat.tickStartedAt,elapsedMs:0},previousMonitor);
       return json({ok:true,...heartbeat},200,{"Cache-Control":"no-store"});
     }
 
@@ -5442,19 +5449,25 @@ export class PushHub {
       const collectorFailures=data?.collectorFailures&&typeof data.collectorFailures==="object"?data.collectorFailures:{};
       const now=Date.now();
       let storedCount=0;
+      const incomingRows=new Map();
       for(const shard of ESCALATION_SHARDS){
         const payload=incoming?.[shard];
         if(!payload||!Array.isArray(payload?.items))continue;
         const generated=Date.parse(payload?.generatedAt||0);
         if(!Number.isFinite(generated)||generated>now+10*60*1000)continue;
-        await storage.put(`push.newsShard:${shard}`,{payload,storedAt:new Date(now).toISOString()});
+        const row={payload,storedAt:new Date(now).toISOString()};
+        await storage.put(`push.newsShard:${shard}`,row);
+        incomingRows.set(shard,row);
         storedCount++;
       }
 
       const payloads=[];
       const shardAges={};
       for(const shard of ESCALATION_SHARDS){
-        const row=await storage.get(`push.newsShard:${shard}`);
+        // V237: a shard successfully PUT above is already available in this same
+        // invocation. Reuse it directly and only hit Storage for missing shards,
+        // preserving the existing fallback/stale-delete behavior byte-for-byte.
+        const row=incomingRows.has(shard)?incomingRows.get(shard):await storage.get(`push.newsShard:${shard}`);
         const payload=row?.payload;
         const generated=Date.parse(payload?.generatedAt||0);
         if(!payload||!Array.isArray(payload?.items)||!Number.isFinite(generated)||now-generated>2*60*60*1000){
