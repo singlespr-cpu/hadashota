@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "237.0.0";
+const KOTERET_CLIENT_BUILD = "239.0.0";
 const KOTERET_CACHE_SCHEMA = "self-heal-v120-1";
 
 (function healOldClientState() {
@@ -2411,44 +2411,68 @@ function factualRewriteSingleTitle(title, item) {
   const base = stripPublisherStyle(title);
   if (!base) return "";
 
-  // Common newsroom structures: transform punctuation/order without deleting facts.
-  const colon = base.match(/^([^:]{3,52}):\s*(.+)$/);
+  // V238 COPYRIGHT/FACT GUARD: never force a rewrite that can change facts.
+  // Direct quotations, numbers and legal qualifiers are preserved verbatim.
+  // We only apply transformations whose semantic relation is explicit in the
+  // source grammar; otherwise the cleaned factual wording is retained.
+  const hasQuote = /["״“”«»]/.test(base);
+  if (hasQuote) return base;
+
+  const colon = base.match(/^([^:]{3,64}):\s*(.+)$/);
   if (colon) {
     const left = cleanDisplayText(colon[1]);
     const right = cleanDisplayText(colon[2]);
-    if (right && left) return `${right} — ${left}`;
-  }
-
-  const dash = base.match(/^(.{8,72}?)\s+[–—-]\s+(.{6,90})$/);
-  if (dash) {
-    const left = cleanDisplayText(dash[1]);
-    const right = cleanDisplayText(dash[2]);
-    if (left && right) return `${right}: ${left}`;
-  }
-
-  // Hebrew factual action patterns: retain entities and event details, change structure.
-  const patterns = [
-    [/^(.{2,45}?)\s+(תקף|תקפה|תקפו)\s+(.+)$/u, (m) => `תקיפה של ${m[1]}: ${m[3]}`],
-    [/^(.{2,45}?)\s+(אישר|אישרה|אישרו)\s+(.+)$/u, (m) => `${m[3]} — באישור ${m[1]}`],
-    [/^(.{2,45}?)\s+(הודיע|הודיעה|הודיעו)\s+(.+)$/u, (m) => `${m[3]} — כך הודיע ${m[1]}`],
-    [/^(.{2,45}?)\s+(נעצר|נעצרה|נעצרו)\s+(.+)$/u, (m) => `מעצר ${m[1]}: ${m[3]}`],
-    [/^(.{2,45}?)\s+(נפצע|נפצעה|נפצעו)\s+(.+)$/u, (m) => `${m[1]} נפגע באירוע: ${m[3]}`],
-  ];
-  for (const [rx, fn] of patterns) {
-    const m = base.match(rx);
-    if (m) {
-      const result = cleanDisplayTitle(fn(m));
-      if (result && result !== base) return result;
+    if (left && right) {
+      const reportVerb = left.match(/^(.{2,46}?)\s+(הכריז|הכריזה|הכריזו|הודיע|הודיעה|הודיעו|אמר|אמרה|אמרו|מסר|מסרה|מסרו|ציין|ציינה|ציינו)$/u);
+      if (reportVerb) {
+        const who = cleanDisplayText(reportVerb[1]);
+        const verb = reportVerb[2];
+        const connector = ({
+          "הכריז":"הודיע", "הכריזה":"הודיעה", "הכריזו":"הודיעו",
+          "הודיע":"מסר", "הודיעה":"מסרה", "הודיעו":"מסרו",
+          "אמר":"ציין", "אמרה":"ציינה", "אמרו":"ציינו",
+          "מסר":"ציין", "מסרה":"ציינה", "מסרו":"ציינו",
+          "ציין":"מסר", "ציינה":"מסרה", "ציינו":"מסרו"
+        })[verb] || verb;
+        const rewritten = cleanDisplayTitle(`${who} ${connector} כי ${right}`);
+        return headlineRewritePreservesFacts(base, rewritten) ? rewritten : base;
+      }
+      // Punctuation-only fallback is intentionally conservative. It avoids the
+      // old clause inversion that could alter emphasis or grammatical meaning.
+      return cleanDisplayTitle(`${left} — ${right}`);
     }
   }
 
-  // Safe fallback: keep the factual sentence, but remove publisher styling and
-  // normalize it into Koteret Plus' punctuation. We prefer useful information
-  // over a meaningless generic label.
-  return base
-    .replace(/\s*[-–—]\s*/g, ": ")
-    .replace(/\s*:\s*/g, ": ")
-    .trim();
+  const patterns = [
+    [/^(.{2,45}?)\s+(הכריז|הכריזה|הכריזו)\s+(.+)$/u, (m) => `${m[1]} ${{"הכריז":"הודיע","הכריזה":"הודיעה","הכריזו":"הודיעו"}[m[2]]} כי ${m[3]}`],
+    [/^(.{2,45}?)\s+(הודיע|הודיעה|הודיעו)\s+(.+)$/u, (m) => `${m[1]} ${{"הודיע":"מסר","הודיעה":"מסרה","הודיעו":"מסרו"}[m[2]]} כי ${m[3]}`],
+    [/^(.{2,45}?)\s+(אמר|אמרה|אמרו)\s+(.+)$/u, (m) => `${m[1]} ${{"אמר":"ציין","אמרה":"ציינה","אמרו":"ציינו"}[m[2]]} כי ${m[3]}`],
+    [/^(.{2,45}?)\s+(אישר|אישרה|אישרו)\s+(.+)$/u, (m) => `${m[1]} ${{"אישר":"נתן","אישרה":"נתנה","אישרו":"נתנו"}[m[2]]} אישור ל${m[3]}`],
+  ];
+  for (const [rx, fn] of patterns) {
+    const m = base.match(rx);
+    if (!m) continue;
+    const result = cleanDisplayTitle(fn(m));
+    if (result && headlineRewritePreservesFacts(base, result)) return result;
+  }
+
+  return base.replace(/\s*—\s*/g, " – ").replace(/\s+/g, " ").trim();
+}
+
+function headlineRewritePreservesFacts(sourceTitle, rewrittenTitle) {
+  const source = cleanDisplayTitle(sourceTitle || "");
+  const out = cleanDisplayTitle(rewrittenTitle || "");
+  if (!source || !out) return false;
+  const numbers = source.match(/\d+(?:[.,]\d+)?%?/g) || [];
+  if (numbers.some((n) => !out.includes(n))) return false;
+  const qualifiers = [
+    /לפי החשד|בחשד|חשוד|נחשד|חשד ל/u,
+    /לטענת|נטען|טוען|טוענת|לדברי/u,
+    /לכאורה/u,
+    /צפוי|עשוי|ייתכן|אפשרי/u
+  ];
+  for (const rx of qualifiers) if (rx.test(source) && !rx.test(out)) return false;
+  return true;
 }
 
 function factualConsensusHeadline(item) {
@@ -2489,11 +2513,10 @@ function ensureUsefulIndependentHeadline(item) {
   }
 
   if (maxSimilarity >= 0.92) {
-    const first = sourceTitles[0] || candidate;
-    const pieces = first.split(/:\s*|\s+[–—-]\s+/).filter(Boolean);
-    if (pieces.length >= 2) {
-      return cleanDisplayTitle(`${pieces.slice(1).join(": ")} — ${pieces[0]}`);
-    }
+    // V238: accuracy beats forced paraphrase. Never reverse clauses merely to
+    // look different; that was the main source of awkward/self-distorting titles.
+    // factualRewriteSingleTitle already performs only guarded semantic rewrites.
+    return cleanDisplayTitle(candidate);
   }
 
   return candidate;
@@ -2586,14 +2609,14 @@ function editorialDeckForItem(item, sourceCount = 1) {
   const reports = normalizeClusterReports(item);
   const sources = [...new Set(reports.map((r) => cleanDisplayText(r.sourceName || "")).filter(Boolean))];
   if (sourceCount >= 3) {
-    return `${sourceCount} מקורות מדווחים על האירוע. הכותרת נוסחה עצמאית על בסיס הפרטים המשותפים בדיווחים.`;
+    return `נוסח כותרת פלוס המבוסס על ${sourceCount} דיווחים עצמאיים. הניסוח אינו כותרת המקור; לפרטים המלאים עוברים לדיווחים המקוריים.`;
   }
   if (sourceCount >= 2) {
-    return `האירוע מופיע ביותר ממקור אחד${sources.length ? `, בהם ${sources.slice(0,2).join(" ו")}` : ""}.`;
+    return `נוסח כותרת פלוס המבוסס על יותר ממקור אחד${sources.length ? `, בהם ${sources.slice(0,2).join(" ו")}` : ""}. הניסוח אינו ציטוט של המקורות.`;
   }
   return sources[0]
-    ? `הדיווח פורסם ב${sources[0]}. לפרטים המלאים ניתן לעבור ישירות למקור.`
-    : "דיווח חדשותי ממקור חיצוני. לפרטים המלאים ניתן לעבור למקור.";
+    ? `נוסח כותרת פלוס המבוסס על דיווח ב${sources[0]}. הניסוח אינו כותרת המקור; לפרטים המלאים ניתן לעבור ישירות למקור.`
+    : "נוסח כותרת פלוס המבוסס על דיווח חדשותי חיצוני. לפרטים המלאים ניתן לעבור למקור.";
 }
 
 
@@ -2996,38 +3019,27 @@ function openMediaPassesEditorialGate(media, { lead = false } = {}) {
 
 function reusableSourceImageLicense(report) {
   const license = String(report?.imageLicense || report?.mediaLicense || report?.license || "").trim();
-  const normalized = license.toUpperCase().replace(/_/g, " ");
-  // V230 maximum-safety auto mode: only public-domain/CC0-type source
-  // imagery is reused automatically. Attribution licences can be enabled later
-  // only through explicit manual approval where their exact terms are known.
-  const allowed = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
-  if (!allowed) return null;
+  const normalized = license.toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const publicDomain = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
+  const ccBy = /^CC BY(?: |$)/.test(normalized) && !/\b(?:NC|SA|ND)\b/.test(normalized);
+  if (!publicDomain && !ccBy) return null;
 
   const creator = String(report?.imageCreator || report?.mediaCreator || report?.imageCredit || "").trim();
   const licenseUrl = String(report?.imageLicenseUrl || report?.mediaLicenseUrl || "").trim();
   const landingUrl = String(report?.imageLandingUrl || report?.mediaLandingUrl || report?.url || "").trim();
-
-  // Public-domain/CC0/PDM media is the only automatic source-image class in
-  // V230, so no attribution metadata is required as a legal condition. We still
-  // preserve creator/source information whenever it is available.
-  const attributionRequired = !(normalized.includes("PUBLIC DOMAIN") || normalized === "CC0" || normalized === "PDM");
-  if (attributionRequired && (!creator || !licenseUrl)) return null;
-
+  if (ccBy && (!creator || !licenseUrl || !landingUrl)) return null;
   return { license, normalized, creator, licenseUrl, landingUrl };
 }
-
 
 function clientPhotoCreditIsAgency(value) {
   const text = cleanDisplayText(value || "");
   return /^(?:מערכת|יחצ|יח"צ|יח״צ|ארכיון|shutterstock|istock|getty(?: images)?|reuters|ap|afp)(?:\b|$)/i.test(text);
 }
 
-// V230 — BALANCED RIGHTS-AWARE image policy.
-// Green tier: public-domain/CC0/PDM or explicitly approved/site-owned media.
-// Yellow tier: an editorial image supplied directly in a publisher feed/listing
-// may be shown with source/photographer credit when it is not identified as a
-// commercial wire/stock asset. We never crawl an article page merely to obtain
-// such a photo. Red tier: known wire/stock agencies remain blocked.
+// V238 — FAIL-CLOSED RIGHTS-AWARE image policy.
+// Automatic display is limited to public-domain/CC0/PDM or explicitly
+// approved/site-owned media. RSS/OG/Telegram provenance alone is never treated
+// as permission. Known wire/stock agencies remain blocked as an extra guard.
 const HIGH_RISK_IMAGE_CREDIT_RX = /(?:\breuters\b|רויטרס|associated\s+press|\bap\b|א[יי]-?פי|agence\s+france[-\s]presse|\bafp\b|getty(?:\s+images)?|גטי(?:\s+אימג(?:׳|')?ס)?|shutterstock|שאטרסטוק|flash\s*90|פלאש\s*90|\bepa(?:-efe)?\b|alamy|istock(?:photo)?|depositphotos|dreamstime|123rf|wireimage|imago(?:\s+images)?|anadolu(?:\s+agency)?|\bupi\b)/i;
 const HIGH_RISK_IMAGE_HOST_RX = /(?:^|\.)(?:gettyimages\.|shutterstock\.|flash90\.|alamy\.|istockphoto\.|depositphotos\.|dreamstime\.|123rf\.|reuters\.|apnews\.|afp\.|epa\.|anadoluimages\.)/i;
 
@@ -3049,51 +3061,31 @@ function explicitReusableImageRights(candidate = {}) {
     return { basis: candidate?.rightsBasis || "approved", license: String(candidate?.license || "") };
   }
   const license = String(candidate?.license || candidate?.imageLicense || candidate?.mediaLicense || "").trim();
-  const normalized = license.toUpperCase().replace(/_/g, " ");
-  const allowed = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
-  if (!allowed) return null;
+  const normalized = license.toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const publicDomain = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
+  const ccBy = /^CC BY(?: |$)/.test(normalized) && !/\b(?:NC|SA|ND)\b/.test(normalized);
+  if (!publicDomain && !ccBy) return null;
   const creator = String(candidate?.creator || candidate?.imageCreator || candidate?.photographer || candidate?.imageCredit || "").trim();
   const licenseUrl = String(candidate?.licenseUrl || candidate?.imageLicenseUrl || candidate?.mediaLicenseUrl || "").trim();
-  const attributionRequired = !(normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN"));
-  if (attributionRequired && (!creator || !licenseUrl)) return null;
-  return { basis: "open-license", license, normalized, creator, licenseUrl };
+  const landingUrl = String(candidate?.landingUrl || candidate?.sourceUrl || "").trim();
+  if (ccBy && (!creator || !licenseUrl || !landingUrl)) return null;
+  return { basis: "open-license", license, normalized, creator, licenseUrl, landingUrl };
 }
 
 function originalImageAllowed(candidate = {}) {
   if (originalImageRightsRisk(candidate)) return false;
-  if (explicitReusableImageRights(candidate)) return true;
-  // V230 yellow tier: only images explicitly marked by our renderer as having
-  // arrived with the publisher's own feed/listing entry may pass without an
-  // open licence. Article-page scraping never creates this marker.
-  return candidate?.rightsBasis === "publisher-feed" || candidate?.provider === "publisher-feed" || candidate?.provider === "cluster-publisher-feed";
+  // V238 FAIL-CLOSED: appearance in RSS/OG/Telegram is provenance, not a licence.
+  // Automatic display requires an explicit reusable basis: owned/manual approval
+  // or a machine-verifiable public-domain/CC0/PDM licence.
+  return !!explicitReusableImageRights(candidate);
 }
 
 function publisherFeedImageCandidate(report, item, { cluster = false } = {}) {
-  if (!report) return null;
-  const sourceKind = String(report?.sourceKind || item?.sourceKind || "").toLowerCase();
-  // Unknown-rights Telegram imagery remains excluded unless it has an explicit
-  // reusable licence handled by the green tier.
-  if (sourceKind === "telegram") return null;
-  const raw = String(report?.imageUrl || report?.image || report?.thumbnailUrl || report?.thumbnail || report?.enclosure?.url || "").trim();
-  if (!raw || !sourceImageLooksEditorial(raw) || isKnownBadFeedImage(raw)) return null;
-  if (sourceImageConflictsWithStory(item, report, raw)) return null;
-  const sourceName = cleanDisplayText(report?.sourceName || report?.publisher || item?.sourceName || "מקור הידיעה");
-  const photographer = cleanDisplayText(report?.imageCredit || report?.imageCreator || report?.photoCredit || "");
-  const candidate = {
-    url: raw,
-    photographer,
-    imageCreator: photographer,
-    provider: cluster ? "cluster-publisher-feed" : "publisher-feed",
-    rightsBasis: "publisher-feed",
-    credit: formatClientPhotoSourceCredit(photographer, sourceName) || `מקור תמונה: ${sourceName}`,
-    sourceName,
-    sourceUrl: report?.url || item?.url || "",
-    landingUrl: report?.url || item?.url || "",
-    official: !!report?.official,
-    sourceKind
-  };
-  return originalImageAllowed(candidate) ? candidate : null;
+  // V238: provenance is not permission. RSS/OG/Telegram images with no explicit
+  // reusable licence are never displayed automatically.
+  return null;
 }
+
 
 function formatClientPhotoSourceCredit(value, sourceName = "") {
   const raw = cleanDisplayText(value || "").replace(/^(?:צילום(?:\s+ו?עריכה)?|צלם|קרדיט(?:\s+תמונה)?|photo(?:graphy)?(?:\s+by)?|photographer|image\s+credit|credit)\s*[:\-–—]?\s*/i, "").trim();
@@ -3116,7 +3108,7 @@ function sameImageAssetUrl(a, b) {
 function originalFeedSourceImage(item) {
   // The feed card may reuse the exact image supplied with its own publisher
   // entry. Explicitly reusable media remains preferred; otherwise V230 allows
-  // the yellow publisher-feed tier, except known wire/stock agencies.
+  // only an explicit reusable-rights tier; publisher-feed provenance alone is rejected.
   const itemUrl = String(item?.url || "").trim();
   const reports = [item, ...normalizeClusterReports(item || {}).filter((report) =>
     itemUrl && String(report?.url || "").trim() === itemUrl
@@ -3254,7 +3246,7 @@ function preferredSourceImage(item) {
     if (!rights) continue;
     return {
       url: String(raw),
-      credit: [rights.creator, rights.license].filter(Boolean).join(" · ") || "נחלת הכלל",
+      credit: [rights.creator, rights.license, report?.sourceName || report?.publisher || item?.sourceName || "המקור"].filter(Boolean).join(" · ") || "נחלת הכלל",
       creator: rights.creator || "",
       sourceName: report?.sourceName || report?.publisher || item?.sourceName || "המקור",
       license: rights.license,
@@ -3308,7 +3300,7 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   };
 
   // V230 hero priority: use only images supplied by reports in this exact event
-  // cluster (licensed/approved first, then eligible publisher-feed imagery).
+  // cluster when explicitly licensed/approved. Publisher-feed provenance alone is rejected.
   // If none exists, use the branded fallback — never a keyword-guessed image.
   const licensedSource = preferredSourceImage(item) || originalClusterSourceImage(item);
   if (applyLicensed(licensedSource)) return;
@@ -3892,7 +3884,7 @@ function newsCardHtml(item) {
     <details class="related-wrap story-timeline-wrap">
       <summary>התפתחות הסיפור · ${reportCount} מקורות</summary>
       <div class="related-list story-timeline-mini">
-        ${storyTimelineReports(item, 6).map((r) => `<a class="related-link" href="${escapeHtml(storyHref(r))}" target="_blank" rel="noopener noreferrer"><time>${formatClock(r.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(r.sourceName))}</span><b>עדכון מהמקור</b></a>`).join("")}
+        ${storyTimelineReports(item, 6).map((r) => `<a class="related-link" href="${escapeHtml(storyHref(r))}" target="_blank" rel="noopener noreferrer"><time>${formatClock(r.publishedAt)}</time><span>מקור: ${escapeHtml(cleanDisplayText(r.sourceName))}</span><b>לדיווח המקורי</b></a>`).join("")}
       </div>
     </details>` : "";
 
@@ -3902,7 +3894,7 @@ function newsCardHtml(item) {
         ${imageHtml}
         <div class="news-copy">
           <div class="news-meta">
-            <span class="source-name">${escapeHtml(cleanDisplayText(item.sourceName))}</span>
+            <span class="source-name">מקור הדיווח: ${escapeHtml(cleanDisplayText(item.sourceName))}</span>
             <span class="meta-sep">•</span>
             <time datetime="${escapeHtml(item.publishedAt)}" title="${escapeHtml(formatFullDate(item.publishedAt))}">${formatAge(item.publishedAt)}</time>
             ${newBadge}${telegramBadge}${officialBadge}${independentBadge}${clusterBadge}${hotBadge}${verifyBadge}
@@ -4311,7 +4303,10 @@ function renderLeadStory() {
   el.leadStoryTitle.textContent = leadTitle;
   applyLeadTitleSizing(leadTitle);
   el.leadStoryPreview.textContent = editorialDeckForItem(item, Math.max(1, Number(winner.uniqueSources) || sources.length));
-  el.leadStorySource.textContent = sourceTarget?.sourceName || item.sourceName || "כותרת פלוס";
+  const sourceLabel = cleanDisplayText(sourceTarget?.sourceName || item.sourceName || "");
+  el.leadStorySource.textContent = Number(winner.uniqueSources) > 1
+    ? `נוסח כותרת פלוס · מבוסס על ${Math.max(2, Number(winner.uniqueSources)||sources.length)} מקורות`
+    : `נוסח כותרת פלוס · מקור הדיווח: ${sourceLabel || "מקור חיצוני"}`;
   el.leadStoryAge.textContent = formatAge(winner.latestAt || item.latestReportAt || item.publishedAt);
 
   const count = Math.max(1, Number(winner.uniqueSources) || unique.length || 1);
@@ -4334,7 +4329,7 @@ function renderLeadStory() {
   if (el.leadTimeline) {
     const timeline = storyTimelineReports(item, 7);
     el.leadTimeline.innerHTML = timeline.map((report) =>
-      `<a href="${escapeHtml(storyHref(report))}" target="_blank" rel="noopener noreferrer"><time>${formatClock(report.publishedAt)}</time><span>${escapeHtml(cleanDisplayText(report.sourceName))}</span><b>עדכון מהמקור</b></a>`
+      `<a href="${escapeHtml(storyHref(report))}" target="_blank" rel="noopener noreferrer"><time>${formatClock(report.publishedAt)}</time><span>מקור: ${escapeHtml(cleanDisplayText(report.sourceName))}</span><b>לדיווח המקורי</b></a>`
     ).join("");
     el.leadTimeline.closest("details")?.classList.toggle("hidden", timeline.length < 2);
     renderLeadChanges(item, timeline);
@@ -4416,7 +4411,7 @@ function renderBreaking() {
   }
 
   el.breakingTitle.textContent = editorialTitle(latest);
-  el.breakingMeta.textContent = `${cleanDisplayText(latest.sourceName)} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
+  el.breakingMeta.textContent = `מקור הדיווח: ${cleanDisplayText(latest.sourceName)} · ${formatAge(latest.latestReportAt || latest.publishedAt)}`;
   setOptionalLink(el.breakingLink, storyHref(latest));
   el.breakingBanner.classList.remove("hidden");
 }
@@ -4724,7 +4719,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=237.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=239.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4794,7 +4789,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=237.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=239.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
