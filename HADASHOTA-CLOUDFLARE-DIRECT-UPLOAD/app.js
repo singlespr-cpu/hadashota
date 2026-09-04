@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "244.0.0";
-const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v242-1";
+const KOTERET_CLIENT_BUILD = "245.0.0";
+const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v245-1";
 
 (function healOldClientState() {
   try {
@@ -743,9 +743,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V244 · API ${apiVersion}` : "גרסה V244 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V245 · API ${apiVersion}` : "גרסה V245 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V244 · API לא מחובר";
+    marker.textContent = "גרסה V245 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -3276,7 +3276,7 @@ async function hydrateLeadOpenMediaFallback(winner, leadTitle, publicSnapshot=nu
     el.leadStoryImage.src = media.url;
     el.leadStoryImage.alt = `${leadTitle} — תמונת המחשה`;
     el.leadStoryImage.referrerPolicy = "no-referrer";
-    el.leadStoryMedia.classList.remove("image-unavailable", "contextual-fallback");
+    el.leadStoryMedia.classList.remove("hidden", "image-unavailable", "contextual-fallback");
     delete el.leadStoryMedia.dataset.fallbackLabel;
     el.leadStoryMedia.dataset.mediaCredit = credit;
     el.leadStoryMedia.dataset.mediaLanding = media.landingUrl || "";
@@ -3308,10 +3308,12 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
 
   const applyLicensed = (direct) => {
     if (!direct?.url || !originalImageAllowed(direct)) return false;
-    el.leadStoryImage.onerror = async () => {
+    el.leadStoryImage.onerror = () => {
       if (currentFingerprint !== state.displayedLeadFingerprint) return;
       el.leadStoryImage.removeAttribute("src");
-      await hydrateLeadOpenMediaFallback(winner, leadTitle, publicSnapshot);
+      el.leadStoryImage.alt = "";
+      el.leadStoryMedia.classList.add("hidden");
+      if (publicSnapshot) syncLeadVisualSnapshot(publicSnapshot, "");
     };
     el.leadStoryImage.src = direct.url;
     el.leadStoryImage.alt = leadTitle;
@@ -3335,8 +3337,15 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   const publisherSource = originalFeedSourceImage(item) || publisherClusterSourceImage(item);
   if (applyLicensed(publisherSource)) return;
 
-  // Never crawl/search elsewhere just to invent a visual for this event.
-  await hydrateLeadOpenMediaFallback(winner, leadTitle, publicSnapshot);
+  // V245: no illustrative/keyword-guessed hero image. If the exact story has no
+  // explicitly reusable source image, render the lead without a photo.
+  el.leadStoryImage.removeAttribute("src");
+  el.leadStoryImage.alt = "";
+  el.leadStoryMedia.classList.add("hidden");
+  el.leadStoryMedia.removeAttribute("data-media-credit");
+  el.leadStoryMedia.removeAttribute("data-media-landing");
+  el.leadStoryMedia.removeAttribute("data-media-license");
+  if (publicSnapshot) syncLeadVisualSnapshot(publicSnapshot, "");
 }
 
 function mediaFallbackLabelFromSlot(slot) {
@@ -3405,9 +3414,7 @@ async function hydrateSafeMediaSlot(slot) {
     img.addEventListener('error', () => {
       if (!img.isConnected) return;
       markBadFeedImage(url);
-      const replacement = createFallbackSlot();
-      img.replaceWith(replacement);
-      hydrateSafeMediaSlot(replacement).catch((error) => console.warn("Image fallback failed", error));
+      if (a?.isConnected) a.remove();
     }, { once:true });
     slot.replaceWith(img);
     const openLicensed = candidate?.rightsBasis === "open-license" || provider === "licensed-fallback";
@@ -3439,30 +3446,9 @@ async function hydrateSafeMediaSlot(slot) {
   };
   if (embedded.url && showLicensedDirect(embedded, embedded.provider || "publisher-feed")) return;
 
-  // V240 — no unlicensed publisher image. When the exact source image is not
-  // reusable, try a strictly matched open-licence/public-domain illustration.
-  // Every such result is visibly labelled "תמונת המחשה" so it cannot be
-  // mistaken for a photograph of the current event.
-  const mediaQuery = slot.dataset.mediaQuery || "";
-  const storyItem = {
-    title: slot.dataset.storyTitle || "",
-    preview: slot.dataset.storyPreview || "",
-    category: slot.dataset.category || "other"
-  };
-  const openMedia = mediaQuery ? await fetchSafeMedia(mediaQuery, storyItem.category) : null;
-  if (openMedia && originalImageAllowed(openMedia) && mediaMatchesStoryStrictly(openMedia, storyItem, storyItem.title, { lead:false })) {
-    const creditBase = openMedia.attribution || openMedia.shortAttribution || [openMedia.creator, openMedia.license, openMedia.provider].filter(Boolean).join(" · ") || "מקור תמונה פתוח";
-    const candidate = {
-      ...openMedia,
-      credit: `תמונת המחשה · ${creditBase}`,
-      rightsBasis: "open-license"
-    };
-    if (showLicensedDirect(candidate, "licensed-fallback")) return;
-  }
-
-  if (!slot.isConnected) return;
-  slot.classList.add("contextual-media-fallback");
-  slot.dataset.fallbackLabel = mediaFallbackLabelFromSlot(slot);
+  // V245: no illustrative fallback. Without an exact explicitly licensed source
+  // image, remove the image well entirely so the card remains text-only.
+  if (a?.isConnected) a.remove();
   return;
 }
 
@@ -3928,10 +3914,12 @@ function newsCardHtml(item) {
   const isSite = item.sourceKind === "site";
   const rawStoryUrl = storyHref(item);
   const storyUrl = escapeHtml(rawStoryUrl);
-  const mediaQuery = escapeHtml(licensedMediaQueryVariantsForItem(item, safeTitle).join(" | "));
-  const preferredImage = rememberedFeedImage(rawStoryUrl) || originalFeedSourceImage(item) || preferredSourceImage(item);
-  const imageHtml = state.showImages
-    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה" data-source-url="${storyUrl}" data-source-name="${escapeHtml(cleanDisplayText(item.sourceName || ""))}"${preferredImage?.url ? ` data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit || "")}" data-source-license="${escapeHtml(preferredImage.license || "")}" data-source-license-url="${escapeHtml(preferredImage.licenseUrl || "")}" data-source-creator="${escapeHtml(preferredImage.creator || preferredImage.imageCreator || preferredImage.photographer || "")}" data-source-landing="${escapeHtml(preferredImage.landingUrl || preferredImage.sourceUrl || "")}" data-source-basis="${escapeHtml(preferredImage.rightsBasis || "")}" data-source-provider="${escapeHtml(preferredImage.provider || "")}"` : ""}><span class="safe-media-slot" data-media-query="${mediaQuery}" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="${escapeHtml(newsPreviewText(item, reportCount))}" aria-hidden="true"></span></a>`
+  // V245: no guessed/illustrative media. A card gets an image only when the
+  // exact source/cluster image itself carries an explicit reusable-rights basis.
+  const preferredImage = originalFeedSourceImage(item) || preferredSourceImage(item) || originalClusterSourceImage(item);
+  const showExactLicensedImage = !!(state.showImages && preferredImage?.url && originalImageAllowed(preferredImage));
+  const imageHtml = showExactLicensedImage
+    ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה" data-source-url="${storyUrl}" data-source-name="${escapeHtml(cleanDisplayText(item.sourceName || ""))}" data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit || "")}" data-source-license="${escapeHtml(preferredImage.license || "")}" data-source-license-url="${escapeHtml(preferredImage.licenseUrl || "")}" data-source-creator="${escapeHtml(preferredImage.creator || preferredImage.imageCreator || preferredImage.photographer || "")}" data-source-landing="${escapeHtml(preferredImage.landingUrl || preferredImage.sourceUrl || "")}" data-source-basis="${escapeHtml(preferredImage.rightsBasis || "")}" data-source-provider="${escapeHtml(preferredImage.provider || "")}"><span class="safe-media-slot" data-media-query="" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="" aria-hidden="true"></span></a>`
     : "";
   const titleHtml = `<a href="${storyUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeTitle)}</a>`;
   const relatedHtml = related.length ? `
@@ -3943,7 +3931,7 @@ function newsCardHtml(item) {
     </details>` : "";
 
   return `
-    <article class="news-card clickable-story ${state.compact ? "compact" : ""} ${state.showImages ? "has-image" : ""} ${isSite ? "site-story" : "telegram-story"}" data-category="${category}" data-story-url="${storyUrl}" role="link" tabindex="0" aria-label="פתיחת המקור: ${escapeHtml(safeTitle)}">
+    <article class="news-card clickable-story ${state.compact ? "compact" : ""} ${showExactLicensedImage ? "has-image" : ""} ${isSite ? "site-story" : "telegram-story"}" data-category="${category}" data-story-url="${storyUrl}" role="link" tabindex="0" aria-label="פתיחת המקור: ${escapeHtml(safeTitle)}">
       <div class="news-main">
         ${imageHtml}
         <div class="news-copy">
@@ -4544,7 +4532,7 @@ function importantLatestItems(items, limit = 20) {
 
   const ranked = siteItems
     .map((item) => ({ item, meta: latestNewsroomScore(item) }))
-    .filter(({ meta }) => meta.ageMinutes <= 120 && meta.score >= 54)
+    .filter(({ meta }) => meta.ageMinutes <= 180 && meta.score >= 48)
     .sort((a, b) =>
       b.meta.score - a.meta.score ||
       b.meta.importance - a.meta.importance ||
@@ -4560,8 +4548,8 @@ function importantLatestItems(items, limit = 20) {
       .filter(({ item, meta }) => {
         const key = item.id || item.url || item.title;
         return !used.has(key) &&
-          meta.ageMinutes <= 90 &&
-          meta.score >= 42 &&
+          meta.ageMinutes <= 360 &&
+          meta.score >= 30 &&
           latestEditorialPenalty(item) < 30;
       })
       .sort((a, b) =>
@@ -4570,6 +4558,22 @@ function importantLatestItems(items, limit = 20) {
           Date.parse(a.item.latestReportAt || a.item.publishedAt || 0)
       );
     ranked.push(...fallback.slice(0, 5 - ranked.length));
+  }
+
+  // V245 quiet-hours floor: if Friday night / overnight has few high-scoring
+  // stories, keep up to five genuinely recent non-promotional items visible.
+  // The module is called "האחרונים החשובים" and has no one-hour promise, so a
+  // six-hour fallback is honest while still strongly preferring newer items.
+  if (ranked.length < 5) {
+    const used = new Set(ranked.map(({ item }) => item.id || item.url || item.title));
+    const quietFill = linkedItems
+      .map((item) => ({ item, meta: latestNewsroomScore(item) }))
+      .filter(({ item, meta }) => {
+        const key = item.id || item.url || item.title;
+        return !used.has(key) && meta.ageMinutes <= 360 && latestEditorialPenalty(item) < 30 && !!editorialTitle(item);
+      })
+      .sort((a,b) => Date.parse(b.item.latestReportAt || b.item.publishedAt || 0) - Date.parse(a.item.latestReportAt || a.item.publishedAt || 0));
+    ranked.push(...quietFill.slice(0, 5 - ranked.length));
   }
 
   return ranked.slice(0, limit).map(({ item }) => item);
@@ -4775,7 +4779,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=244.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=245.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4845,7 +4849,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=244.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=245.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 

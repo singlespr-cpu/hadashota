@@ -244,9 +244,13 @@ export default {
     }
 
     if (url.pathname === "/api/media") {
+      // V245: illustrative/open-media lookup retired. The public UI may show only
+      // the exact story/source image when an explicit reusable-rights basis exists.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
-      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
-      return handleOpenMedia(url, ctx);
+      return cors(json({ image: null, error: "retired_exact_source_media_only" }, 410, {
+        "Cache-Control": "public, max-age=0, s-maxage=86400",
+        "X-Hadashota-Version": "245.0.0"
+      }));
     }
 
     if (url.pathname === "/api/source-image") {
@@ -256,7 +260,7 @@ export default {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       return cors(json({ image: null, error: "retired_rights_policy" }, 410, {
         "Cache-Control": "public, max-age=0, s-maxage=86400",
-        "X-Hadashota-Version": "244.0.0"
+        "X-Hadashota-Version": "245.0.0"
       }));
     }
 
@@ -305,7 +309,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "244.0.0",
+          version: "245.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -320,7 +324,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "244.0.0",
+        version: "245.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1669,7 +1673,7 @@ function cachedNewsPayloadText(rawText, servedAt) {
 // Raw publisher/Telegram wording is used only inside this Worker/DO for fact
 // detection, clustering and ranking. Public APIs, browser snapshots and Push
 // receive an independently worded factual headline and never raw preview text.
-const PUBLIC_NEWS_CACHE_VERSION = "242";
+const PUBLIC_NEWS_CACHE_VERSION = "245";
 const PUBLIC_NEWS_GENERIC_LABEL = Object.freeze({
   security:"עדכון ביטחוני חדש",
   politics:"התפתחות פוליטית חדשה",
@@ -1678,7 +1682,7 @@ const PUBLIC_NEWS_GENERIC_LABEL = Object.freeze({
 });
 
 function internalNewsCacheKey(shard, lastGood=false){
-  return new Request(`https://hadashota.internal-news.local/v244/${lastGood?"last-good":"current"}?shard=${encodeURIComponent(shard)}`,{method:"GET"});
+  return new Request(`https://hadashota.internal-news.local/v245/${lastGood?"last-good":"current"}?shard=${encodeURIComponent(shard)}`,{method:"GET"});
 }
 
 function publicStripPublisherStyle(value){
@@ -1797,6 +1801,10 @@ function publicRewriteSingleTitle(title,item={}){
   const colon=base.match(/^([^:]{3,72}):\s*(.+)$/u);
   if(colon){
     const left=cleanText(colon[1]),right=cleanText(colon[2]);
+    if(/^הותר לפרסום$/u.test(left)){
+      const rewritten=cleanText(`הותר לפרסום כי ${right}`);
+      if(publicHeadlinePreservesFacts(base,rewritten)&&publicHeadlineUseful(rewritten))return rewritten;
+    }
     const reportVerb=left.match(/^(.{2,52}?)\s+(הכריז|הכריזה|הכריזו|הודיע|הודיעה|הודיעו|אמר|אמרה|אמרו|מסר|מסרה|מסרו|ציין|ציינה|ציינו|טען|טענה|טענו)$/u);
     if(reportVerb){
       const who=cleanText(reportVerb[1]),verb=reportVerb[2];
@@ -1848,9 +1856,12 @@ function publicRewriteSingleTitle(title,item={}){
 
 function publicTitleLooksPlainFactual(value){
   const t=publicStripPublisherStyle(value);
-  if(!t||t.length<16||t.length>128)return false;
+  // V245: do not reject ordinary breaking-news facts merely because they are
+  // short. The fallback remains unavailable for quotes, questions, exclamation
+  // copy and promotional/expressive language.
+  if(!t||t.length<10||t.length>170)return false;
   const words=t.split(/\s+/).filter(Boolean);
-  if(words.length<4||words.length>24)return false;
+  if(words.length<3||words.length>30)return false;
   const quoteStripped=t.replace(/[א-ת][״”][א-ת]/gu,"XX");
   if(/["“”«»?!]/u.test(quoteStripped))return false;
   // Reject obvious expressive/teaser copy. The fallback is reserved for short,
@@ -1858,7 +1869,7 @@ function publicTitleLooksPlainFactual(value){
   if(/(?:לא תאמינו|צפו|תיעוד|דרמה|סערה|הלם|חשיפה|בלעדי|כך זה נראה|הסיבה ש|מה עומד מאחורי|התגובה ש|המסר ש|כל מה שצריך לדעת|הסיפור שמסעיר|הפרטים שלא ידעתם|מיוחד|מטורף|מדהים)/iu.test(t))return false;
   // Require at least a factual anchor: an action/state, a number, a concrete
   // time/place relation, or a known institutional/political actor.
-  return /(?:\d|הודיע|אמר|מסר|טען|אישר|אושר|דרש|הזהיר|תקף|נפצע|נהרג|נעצר|שוחרר|אותר|נמצא|נחת|המריא|התפטר|פרש|נבחר|מונה|פרסם|הגיש|דחה|נדחה|ביטל|בוטל|פתח|נפתח|סגר|נסגר|קרא|ייפגש|נפגש|יגיע|הגיע|שוגר|נורה|פרצה|אירעה|החל|הסתיים|עלה|ירד|דווח|פורסם|צפוי|עשוי|ייתכן|יהיה|תהיה|יהיו|נמשך|הותר|נאסר|הושבת|הופסק|התחדש|מתקיים|במוקד|במרכז|לקראת|בעקבות|בשל|במגעים|בשיחות|בדיונים|בכוננות|בפגישה|בישיבה|צה[״"]ל|המשטרה|הממשלה|הכנסת|משרד\s|ראש הממשלה|הנשיא|השר|איראן|ישראל|לבנון|עזה|ארה[״"]ב)/u.test(t);
+  return /(?:\d|הודיע|הודיעה|הודיעו|אמר|אמרה|אמרו|מסר|מסרה|מסרו|טען|טענה|אישר|אישרה|אושר|אושרה|דרש|דרשה|הזהיר|הזהירה|תקף|תקפה|תקפו|נפצע|נפצעה|נפצעו|נהרג|נהרגה|נהרגו|נעצר|נעצרה|נעצרו|שוחרר|שוחררה|אותר|אותרה|נמצא|נמצאה|נחת|נחתה|המריא|המריאה|התפטר|התפטרה|פרש|פרשה|נבחר|נבחרה|מונה|מונתה|פרסם|פרסמה|הגיש|הגישה|דחה|דחתה|נדחה|נדחתה|ביטל|ביטלה|בוטל|בוטלה|פתח|פתחה|נפתח|נפתחה|סגר|סגרה|נסגר|נסגרה|קרא|קראה|ייפגש|תיפגש|נפגש|נפגשה|יגיע|תגיע|הגיע|הגיעה|שוגר|שוגרה|נורה|נורתה|פרצה|אירעה|החל|החלה|הסתיים|הסתיימה|עלה|עלתה|ירד|ירדה|דווח|פורסם|פורסמה|נרשם|נרשמה|נחשף|נחשפה|נפתח|הושק|הושקה|צפוי|צפויה|עשוי|עשויה|ייתכן|יהיה|תהיה|יהיו|נמשך|נמשכת|הותר|נאסר|הושבת|הופסק|התחדש|מתקיים|במוקד|במרכז|לקראת|בעקבות|בשל|במגעים|בשיחות|בדיונים|בכוננות|בפגישה|בישיבה|צה[״"]ל|המשטרה|הממשלה|הכנסת|משרד\s|ראש הממשלה|הנשיא|השר|איראן|ישראל|לבנון|עזה|ארה[״"]ב)/u.test(t);
 }
 
 function publicPreviewSentence(value){
@@ -1873,6 +1884,8 @@ function publicConservativeRestatement(title,item={}){
   if(/^(?:בלעדי|חשיפה|דרמה|סערה|צפו|תיעוד|לא תאמינו)\s*[:\-–—]/iu.test(original))return "";
   const base=publicStripPublisherStyle(original);
   if(!base)return "";
+  const quoteStripped=base.replace(/[א-ת][״”][א-ת]/gu,"XX");
+  if(/["“”«»]/u.test(quoteStripped))return "";
   const sourceName=cleanText(item?.sourceName||item?.publisher||"המקור");
   let m;
 
@@ -1892,7 +1905,8 @@ function publicConservativeRestatement(title,item={}){
     [/^(.{2,55}?)\s+(הגיש|הגישה|הגישו)\s+(.+)$/u,(x)=>`${x[3]} הוגש בידי ${x[1]}`],
     [/^(.{2,55}?)\s+(דחה|דחתה|דחו)\s+(.+)$/u,(x)=>`${x[3]} נדחה בידי ${x[1]}`],
     [/^(.{2,55}?)\s+(ביטל|ביטלה|ביטלו)\s+(.+)$/u,(x)=>`${x[3]} בוטל בידי ${x[1]}`],
-    [/^(.{2,55}?)\s+(פתח|פתחה|פתחו)\s+(.+)$/u,(x)=>`${x[3]} נפתח בידי ${x[1]}`],
+    [/^(.{2,55}?)\s+(פתח|פתחה|פתחו)\s+בחקירת\s+(.+)$/u,(x)=>`${x[1]} החל${x[2]==="פתחה"?"ה":""} בחקירת ${x[3]}`],
+    [/^(.{2,55}?)\s+(פתח|פתחה|פתחו)\s+(.+)$/u,(x)=>`${x[1]} החל בביצוע ${x[3]}`],
     [/^(.{2,55}?)\s+(סגר|סגרה|סגרו)\s+(.+)$/u,(x)=>`${x[3]} נסגר בידי ${x[1]}`],
     [/^(.{2,55}?)\s+(הזהיר|הזהירה|הזהירו)\s+מפני\s+(.+)$/u,(x)=>`${x[1]} פרסם אזהרה מפני ${x[3]}`],
     [/^(.{2,55}?)\s+(קרא|קראה|קראו)\s+ל(.+)$/u,(x)=>`${x[1]} פרסם קריאה ל${x[3]}`],
@@ -1908,12 +1922,28 @@ function publicConservativeRestatement(title,item={}){
     if(publicHeadlinePreservesFacts(base,rewritten)&&publicHeadlineUseful(rewritten))return rewritten;
   }
 
+  // V245 generic structure-safe restatement. Many breaking-news headlines use
+  // a neutral context/fact split that does not fit a verb-specific template.
+  // Reordering the two complete clauses preserves every factual token while
+  // avoiding a verbatim headline. Quotes/questions/expressive copy were rejected
+  // above, so this is intentionally limited to neutral punctuation structures.
+  m=base.match(/^([^:]{3,64}):\s*(.{10,})$/u);
+  if(m){
+    const rewritten=cleanText(`${m[2]} — ${m[1]}`);
+    if(publicHeadlinePreservesFacts(base,rewritten)&&publicHeadlineUseful(rewritten)&&publicHeadlineSimilarity(base,rewritten)<.96)return rewritten;
+  }
+  m=base.match(/^(.{8,72}?)\s+(?:–|—|;)\s+(.{10,})$/u);
+  if(m){
+    const rewritten=cleanText(`${m[2]} — ${m[1]}`);
+    if(publicHeadlinePreservesFacts(base,rewritten)&&publicHeadlineUseful(rewritten)&&publicHeadlineSimilarity(base,rewritten)<.96)return rewritten;
+  }
+
   // Last-resort legal/product balance: only for short, plain factual headlines
   // with no quotes/clickbait. We do NOT claim this is the publisher's headline;
   // it is explicitly source-attributed factual reporting and links to the source.
   // Creative/quoted/teaser headlines never enter this tier.
   if(publicTitleLooksPlainFactual(base)){
-    const rewritten=cleanText(`לפי דיווח ב${sourceName}, ${base}`);
+    const rewritten=cleanText(`לפי דיווח של ${sourceName}, ${base}`);
     if(publicHeadlinePreservesFacts(base,rewritten)&&publicHeadlineUseful(rewritten))return rewritten;
   }
   return "";
@@ -1972,14 +2002,39 @@ function serverPublicHeadline(item={}){
   return serverPublicHeadlineResult(item).title;
 }
 
+function publicReusableSourceImage(row={}){
+  const url=String(row?.imageUrl||row?.image||"").trim();
+  if(!/^https?:\/\//i.test(url))return null;
+  const basis=String(row?.rightsBasis||row?.imageRightsBasis||"").trim();
+  const approved=row?.rightsApproved===true || basis==="owned" || basis==="manual-license";
+  const license=String(row?.imageLicense||row?.license||"").trim();
+  const normalized=license.toUpperCase().replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+  const publicDomain=normalized==="CC0" || normalized==="PDM" || normalized.includes("PUBLIC DOMAIN");
+  if(!approved&&!publicDomain)return null;
+  const credit=cleanText(row?.imageCredit||row?.imageCreator||"");
+  const risky=/reuters|רויטרס|associated\s+press|\bap\b|afp|getty|גטי|shutterstock|שאטרסטוק|flash\s*90|פלאש\s*90/i.test(credit);
+  if(risky&&!approved)return null;
+  return {
+    imageUrl:url,
+    imageCredit:credit,
+    imageCreator:cleanText(row?.imageCreator||row?.imageCredit||""),
+    imageLicense:license,
+    imageLicenseUrl:String(row?.imageLicenseUrl||"").slice(0,1800),
+    imageLandingUrl:String(row?.imageLandingUrl||row?.url||"").slice(0,1800),
+    rightsBasis:approved?(basis||"manual-license"):"open-license",
+    rightsApproved:approved
+  };
+}
+
 function publicNewsReport(row={}, fallbackCategory="other"){
   const base={...row,category:row?.category||fallbackCategory,related:[]};
   const headline=serverPublicHeadlineResult(base),title=headline.title;
+  const media=publicReusableSourceImage(row)||{};
   return {
     id:String(row?.id||"").slice(0,220),sourceId:String(row?.sourceId||"").slice(0,120),publisher:String(row?.publisher||"").slice(0,120),
     sourceName:String(row?.sourceName||"").slice(0,160),sourceKind:String(row?.sourceKind||"").slice(0,40),verified:row?.verified===true,official:row?.official===true,independent:row?.independent===true,
     url:String(row?.url||"").slice(0,1800),publishedAt:String(row?.publishedAt||"").slice(0,64),category:String(row?.category||fallbackCategory||"other").slice(0,80),
-    title,displayTitle:title,headlineMode:headline.mode,preview:"",imageUrl:null,imageCredit:"",imageCreator:"",imageLicense:"",imageLicenseUrl:"",imageLandingUrl:"",
+    title,displayTitle:title,headlineMode:headline.mode,preview:"",imageUrl:media.imageUrl||null,imageCredit:media.imageCredit||"",imageCreator:media.imageCreator||"",imageLicense:media.imageLicense||"",imageLicenseUrl:media.imageLicenseUrl||"",imageLandingUrl:media.imageLandingUrl||"",rightsBasis:media.rightsBasis||"",rightsApproved:media.rightsApproved===true,
     attributionLabel:headline.mode==="attributed-factual"?`דיווח עובדתי מיוחס · מקור: ${cleanText(row?.sourceName||row?.publisher||"מקור חיצוני")}`:`מקור הדיווח: ${cleanText(row?.sourceName||row?.publisher||"מקור חיצוני")}`,textPolicy:headline.mode==="attributed-factual"?"source-attributed-short-factual":"facts-only-independent-wording"
   };
 }
@@ -1990,12 +2045,13 @@ function publicNewsItem(item={}){
   const related=serverClusterReports({...item,category}).map((row)=>publicNewsReport(row,category)).filter((row)=>publicHeadlineUseful(row?.displayTitle||row?.title));
   const rawUpdates=Array.isArray(item?.updates)?item.updates:[];
   const updates=rawUpdates.slice(-24).map((row)=>publicNewsReport(row,category)).filter((row)=>publicHeadlineUseful(row?.displayTitle||row?.title));
+  const media=publicReusableSourceImage(item)||{};
   return {
     id:String(item?.id||"").slice(0,220),sourceId:String(item?.sourceId||"").slice(0,120),publisher:String(item?.publisher||"").slice(0,120),sourceName:String(item?.sourceName||"").slice(0,160),sourceKind:String(item?.sourceKind||"").slice(0,40),
     verified:item?.verified===true,official:item?.official===true,independent:item?.independent===true,url:String(item?.url||"").slice(0,1800),publishedAt:String(item?.publishedAt||"").slice(0,64),
     latestReportAt:String(item?.latestReportAt||item?.publishedAt||"").slice(0,64),firstReportAt:String(item?.firstReportAt||item?.publishedAt||"").slice(0,64),category,
     reportCount:Math.max(1,Math.min(100,Number(item?.reportCount)||related.length||1)),hotScore:Number.isFinite(Number(item?.hotScore))?Math.max(0,Math.min(100,Number(item.hotScore))):undefined,
-    title,displayTitle:title,headlineMode:headline.mode,preview:"",imageUrl:null,imageCredit:"",imageCreator:"",imageLicense:"",imageLicenseUrl:"",imageLandingUrl:"",related,updates,
+    title,displayTitle:title,headlineMode:headline.mode,preview:"",imageUrl:media.imageUrl||null,imageCredit:media.imageCredit||"",imageCreator:media.imageCreator||"",imageLicense:media.imageLicense||"",imageLicenseUrl:media.imageLicenseUrl||"",imageLandingUrl:media.imageLandingUrl||"",rightsBasis:media.rightsBasis||"",rightsApproved:media.rightsApproved===true,related,updates,
     attributionLabel:headline.mode==="attributed-factual"?`דיווח עובדתי מיוחס · מקור: ${cleanText(item?.sourceName||item?.publisher||"מקור חיצוני")}`:`נוסח כותרת פלוס · מקור הדיווח: ${cleanText(item?.sourceName||item?.publisher||"מקור חיצוני")}`,textPolicy:headline.mode==="attributed-factual"?"source-attributed-short-factual":"facts-only-independent-wording"
   };
 }
@@ -2005,7 +2061,7 @@ function publicNewsPayload(payload={}){
   // rewrite nor the strict factual-attribution tier can produce a headline are
   // omitted. Do not re-apply the older aggressive usefulness filter here.
   const projected=(Array.isArray(payload?.items)?payload.items:[]).map(publicNewsItem).filter((item)=>cleanText(item?.displayTitle||item?.title));
-  return {...payload,items:projected,publicProjection:true,rawSourceTextIncluded:false,version:"244.0.0"};
+  return {...payload,items:projected,publicProjection:true,rawSourceTextIncluded:false,version:"245.0.0"};
 }
 
 async function handleNewsBundle(request, env, ctx) {
@@ -2017,7 +2073,7 @@ async function handleNewsBundle(request, env, ctx) {
 
   const cache = caches.default;
   const payloadTexts = await Promise.all(NEWS_BUNDLE_SHARDS.map(async (shard) => {
-    const cacheKey = new Request(`${PUBLIC_SITE_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&v=244`, { method: "GET" });
+    const cacheKey = new Request(`${PUBLIC_SITE_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&v=245`, { method: "GET" });
     const hit = await cache.match(cacheKey);
     if (!hit) return null;
     try {
@@ -2033,7 +2089,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "244.0.0"
+      "X-Hadashota-Version": "245.0.0"
     }));
   }
 
@@ -2041,7 +2097,7 @@ async function handleNewsBundle(request, env, ctx) {
   const bundleText = `{"ok":true,"generatedAt":${JSON.stringify(generatedAt)},"payloads":[${payloadTexts.join(",")}]}`;
   return cors(jsonText(bundleText, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "244.0.0",
+    "X-Hadashota-Version": "245.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -2062,12 +2118,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=244`;
+  cacheUrl.search = `?shard=${shard}&v=245`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=244`;
+  lastGoodUrl.search = `?shard=${shard}&v=245`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -2081,7 +2137,7 @@ async function handleNews(request, env, ctx) {
         if (!cachedText) throw new Error("INVALID_CACHED_NEWS_PAYLOAD");
         return cors(jsonText(cachedText, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "244.0.0",
+          "X-Hadashota-Version": "245.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -2208,14 +2264,14 @@ async function handleNews(request, env, ctx) {
     const publicPayloadText = JSON.stringify(publicNewsPayload(payload));
     const response = jsonText(publicPayloadText, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "244.0.0",
+      "X-Hadashota-Version": "245.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0",
       "X-Koteret-Text-Policy": "facts-only-independent-wording"
     });
     const sharedSnapshotResponse = jsonText(publicPayloadText, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "244.0.0",
+      "X-Hadashota-Version": "245.0.0",
       "X-Hadashota-Shard": shard,
       "X-Koteret-Text-Policy": "facts-only-independent-wording"
     });
@@ -2256,7 +2312,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "244.0.0"
+        "X-Hadashota-Version": "245.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -2278,7 +2334,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "244.0.0"
+    "X-Hadashota-Version": "245.0.0"
   });
 }
 
@@ -3831,14 +3887,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"244.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"244.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"245.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"245.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"244.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"244.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"245.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"245.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4619,7 +4675,7 @@ async function storeBackgroundMonitor(storage,input={},existingSnapshot=undefine
     collectorFailures:input?.collectorFailures&&typeof input.collectorFailures==="object"?input.collectorFailures:{},
     error:String(input?.error||"").slice(0,260),
     at:nowIso,
-    version:"244.0.0"
+    version:"245.0.0"
   };
   // V237: callers that already read the monitor may pass that exact snapshot.
   // This preserves ordering/rank safeguards while avoiding a duplicate Storage read.
@@ -5467,7 +5523,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"244.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"245.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -5756,7 +5812,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{direct:0,google:0,meta:0,x:0,whatsapp:0,share:0,internal:0,other:0},referrerDomains:{}});
-      return json({ok:true,version:"244.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"245.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -5798,7 +5854,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"244.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"245.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -5847,10 +5903,10 @@ export class PushHub {
       if(previousMonitor?.state==="running"&&Number.isFinite(previousStarted)&&Date.now()-previousStarted>45000){
         await storage.put("push.backgroundLastError",{
           at:nowIso,tickStartedAt:String(previousMonitor?.tickStartedAt||""),phase:String(previousMonitor?.phase||"unknown"),
-          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"244.0.0"
+          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"245.0.0"
         });
       }
-      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"244.0.0"};
+      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"245.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       // Reuse the monitor snapshot already read above; storeBackgroundMonitor
       // still applies all V234 ordering/rank protections before writing.
