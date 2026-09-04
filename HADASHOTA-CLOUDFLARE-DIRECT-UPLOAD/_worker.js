@@ -60,43 +60,6 @@ const SOURCES = [
   { id: "tg-israel-news-uncensored", publisher: "israel-news-uncensored", name: "ללא צנזורה חדשות ישראל", kind: "telegram", adapter: "telegram", url: "https://t.me/s/israel_news_telegram", home: "https://t.me/israel_news_telegram", language: "he", verified: false, independent: true }
 ];
 
-// V239 — SOURCE RIGHTS POLICY (reviewed 2026-09-04).
-// Legal-risk reduction is fail-closed for automated collection from publisher sites:
-// a commercial publisher is collected only when we have a clearly permissive feed
-// workflow or it is an official/public institutional source. Public Telegram preview
-// pages are used for FACT DETECTION ONLY: never verbatim republication and never as
-// an image licence. Sources without a reviewed basis stay configured but inactive
-// until permission/terms are reviewed. This policy intentionally does not add any
-// extra network call, polling, DO request or storage write.
-const SOURCE_RIGHTS_POLICY = Object.freeze({
-  "globes-all": { collection:"publisher-feed-permitted", factsOnly:true, media:false, reviewedAt:"2026-09-04", basis:"RSS terms permit use on a web page with attribution and original link" },
-  "jpost-breaking": { collection:"publisher-feed-permitted", factsOnly:true, media:false, reviewedAt:"2026-09-04", basis:"RSS terms expressly permit creating a website/service from RSS content" },
-  "govil-news": { collection:"official-public-source", factsOnly:true, media:false, reviewedAt:"2026-09-04", basis:"official institutional public source" },
-  "boi-press": { collection:"official-public-source", factsOnly:true, media:false, reviewedAt:"2026-09-04", basis:"official institutional public source" },
-  "knesset-press": { collection:"official-public-source", factsOnly:true, media:false, reviewedAt:"2026-09-04", basis:"official institutional public source" },
-  "iaa-updates": { collection:"official-public-source", factsOnly:true, media:false, reviewedAt:"2026-09-04", basis:"official institutional public source" }
-});
-const SOURCE_POLICY_BLOCKED_IDS = new Set([
-  // Explicitly restrictive / permission-required based on published terms reviewed.
-  "ynet-news","walla-news","timesofisrael","kikar-latest","srugim",
-  // Commercial HTML/JSON-LD or feeds not yet individually cleared for automated
-  // commercial aggregation. They remain in SOURCES so they can be re-enabled only
-  // after a documented permission/terms review.
-  "israelhayom-news","n12-breaking","kan-headlines","now14-breaking","0404",
-  "bhol-breaking","bhol-news","jdn","13tv-flash","maariv-flash","calcalist",
-  "makorrishon","arutz7"
-]);
-function sourceRightsPolicy(source){
-  if(!source)return {collection:"permission-required",factsOnly:true,media:false};
-  if(SOURCE_RIGHTS_POLICY[source.id])return SOURCE_RIGHTS_POLICY[source.id];
-  if(source.kind==="telegram")return {collection:"public-preview-facts-only",factsOnly:true,media:false,reviewedAt:"2026-09-04",basis:"public preview monitored only to identify facts; wording/media are not republished"};
-  if(SOURCE_POLICY_BLOCKED_IDS.has(source.id))return {collection:"permission-required",factsOnly:true,media:false,reviewedAt:"2026-09-04",basis:"not enabled for automated commercial collection without documented permission/review"};
-  return {collection:"permission-required",factsOnly:true,media:false,reviewedAt:"2026-09-04",basis:"not yet cleared"};
-}
-function sourceCollectionAllowed(source){
-  return sourceRightsPolicy(source).collection!=="permission-required";
-}
-
 const SECURITY_WORDS = [
   "צהל", "צה״ל", "חמאס", "חיזבאללה", "איראן", "איראני", "פיגוע", "מחבל", "מחבלים", "טיל", "טילים", "רקט", "כטב", "רחפן", "אזעק", "יירוט", "יירט", "תקיפה", "תקיפות", "ירי", "נפילה", "גבול", "עזה", "לבנון", "סוריה", "שבכ", "שב״כ", "מוסד", "צבא", "ביטחון", "ביטחוני", "כוחות", "חטוף", "חטופים", "טרור", "terror", "idf", "hamas", "hezbollah", "iran", "missile", "rocket", "drone", "attack", "security", "gaza", "lebanon", "syria", "hostage"
 ];
@@ -308,12 +271,10 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "239.0.0",
+          version: "237.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
-          activeRightsClearedSources: SOURCES.filter(sourceCollectionAllowed).length,
-          blockedPermissionRequiredSources: SOURCES.filter((s)=>!sourceCollectionAllowed(s)).length,
           configuredShardSources: shardSources.length,
           respondingSources: sourceStatus.filter((item) => item.ok).length,
           diagnosticShards: ["sites-1","sites-2","sites-3","telegram-1","telegram-2","telegram-3"],
@@ -323,7 +284,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "239.0.0",
+        version: "237.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -960,10 +921,8 @@ function mediaCandidateScore(query, candidateText, specificity = 1) {
 }
 
 function commonsLicenseAllowed(name) {
-  const value = cleanText(name || "").toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  const publicDomain = value.includes("PUBLIC DOMAIN") || value === "CC0" || value === "PDM";
-  const ccBy = /^CC BY(?: |$)/.test(value) && !/\b(?:NC|SA|ND)\b/.test(value);
-  return publicDomain || ccBy;
+  const value = cleanText(name || "").toUpperCase();
+  return value.includes("PUBLIC DOMAIN") || value === "CC0" || value === "PDM";
 }
 
 function stripHtmlText(value) {
@@ -1549,26 +1508,20 @@ function getShardSources(shard) {
   };
 
   const sites = SOURCES
-    .filter((source) => source.kind !== "telegram" && sourceCollectionAllowed(source))
+    .filter((source) => source.kind !== "telegram")
     .sort((a, b) => priority(b) - priority(a));
 
   const telegram = SOURCES
-    .filter((source) => source.kind === "telegram" && sourceCollectionAllowed(source))
+    .filter((source) => source.kind === "telegram")
     .sort((a, b) => priority(b) - priority(a));
 
-  // V239: rights filtering can leave fewer publisher feeds than the historic
-  // 8/8/8 split. Round-robin keeps all three site shards non-empty while
-  // preserving the existing two-minute rotation and DO isolation.
-  const split3 = (rows) => [0,1,2].map((bucket) => rows.filter((_,index)=>index%3===bucket));
-  const [sites1,sites2,sites3]=split3(sites);
-  const [telegram1,telegram2,telegram3]=split3(telegram);
   const shardMap = {
-    "sites-1": sites1,
-    "sites-2": sites2,
-    "sites-3": sites3,
-    "telegram-1": telegram1,
-    "telegram-2": telegram2,
-    "telegram-3": telegram3,
+    "sites-1": sites.slice(0, 8),
+    "sites-2": sites.slice(8, 16),
+    "sites-3": sites.slice(16, 24),
+    "telegram-1": telegram.slice(0, 7),
+    "telegram-2": telegram.slice(7, 14),
+    "telegram-3": telegram.slice(14, 21),
 
     // Backward-compatible aliases for diagnostics/manual inspection only.
     "sites": sites,
@@ -1604,9 +1557,6 @@ function summarizeSourceHealth(settled, now, cutoff) {
       verified: !!result.source.verified,
       official: !!result.source.official,
       independent: !!result.source.independent,
-      rightsPolicy: sourceRightsPolicy(result.source).collection,
-      factsOnly: sourceRightsPolicy(result.source).factsOnly === true,
-      mediaReuseAllowed: sourceRightsPolicy(result.source).media === true,
       itemCount: recentItems.length,
       latencyMs: result.latencyMs,
       lastItemAt,
@@ -1677,7 +1627,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "239.0.0"
+      "X-Hadashota-Version": "237.0.0"
     }));
   }
 
@@ -1685,7 +1635,7 @@ async function handleNewsBundle(request, env, ctx) {
   const bundleText = `{"ok":true,"generatedAt":${JSON.stringify(generatedAt)},"payloads":[${payloadTexts.join(",")}]}`;
   return cors(jsonText(bundleText, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "239.0.0",
+    "X-Hadashota-Version": "237.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1725,7 +1675,7 @@ async function handleNews(request, env, ctx) {
         if (!cachedText) throw new Error("INVALID_CACHED_NEWS_PAYLOAD");
         return cors(jsonText(cachedText, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "239.0.0",
+          "X-Hadashota-Version": "237.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -1851,13 +1801,13 @@ async function handleNews(request, env, ctx) {
     const payloadText = JSON.stringify(payload);
     const response = jsonText(payloadText, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "239.0.0",
+      "X-Hadashota-Version": "237.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0"
     });
     const sharedSnapshotResponse = jsonText(payloadText, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "239.0.0",
+      "X-Hadashota-Version": "237.0.0",
       "X-Hadashota-Shard": shard
     });
     const lastGoodResponse = jsonText(payloadText, 200, {
@@ -1891,7 +1841,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "239.0.0"
+        "X-Hadashota-Version": "237.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -1913,7 +1863,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "239.0.0"
+    "X-Hadashota-Version": "237.0.0"
   });
 }
 
@@ -3465,14 +3415,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"239.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"239.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"239.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"239.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"237.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4266,7 +4216,7 @@ async function storeBackgroundMonitor(storage,input={},existingSnapshot=undefine
     collectorFailures:input?.collectorFailures&&typeof input.collectorFailures==="object"?input.collectorFailures:{},
     error:String(input?.error||"").slice(0,260),
     at:nowIso,
-    version:"239.0.0"
+    version:"237.0.0"
   };
   // V237: callers that already read the monitor may pass that exact snapshot.
   // This preserves ordering/rank safeguards while avoiding a duplicate Storage read.
@@ -5106,7 +5056,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"239.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"237.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -5385,7 +5335,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{direct:0,google:0,meta:0,x:0,whatsapp:0,share:0,internal:0,other:0},referrerDomains:{}});
-      return json({ok:true,version:"239.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"237.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -5427,7 +5377,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"239.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"237.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -5476,10 +5426,10 @@ export class PushHub {
       if(previousMonitor?.state==="running"&&Number.isFinite(previousStarted)&&Date.now()-previousStarted>45000){
         await storage.put("push.backgroundLastError",{
           at:nowIso,tickStartedAt:String(previousMonitor?.tickStartedAt||""),phase:String(previousMonitor?.phase||"unknown"),
-          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"239.0.0"
+          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"237.0.0"
         });
       }
-      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"239.0.0"};
+      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"237.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       // Reuse the monitor snapshot already read above; storeBackgroundMonitor
       // still applies all V234 ordering/rank protections before writing.
