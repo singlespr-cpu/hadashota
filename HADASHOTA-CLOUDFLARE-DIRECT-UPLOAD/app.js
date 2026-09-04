@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "243.0.0";
+const KOTERET_CLIENT_BUILD = "244.0.0";
 const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v242-1";
 
 (function healOldClientState() {
@@ -743,9 +743,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V237 · API ${apiVersion}` : "גרסה V237 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V244 · API ${apiVersion}` : "גרסה V244 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V237 · API לא מחובר";
+    marker.textContent = "גרסה V244 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -2545,7 +2545,7 @@ function preserveSourceLegalQualifier(candidate, item) {
 function editorialHeadlineForItem(item) {
   // V242 public API / Push snapshots already carry an independently worded
   // displayTitle. Do not rewrite it a second time (which could garble grammar).
-  if (item?.textPolicy === "facts-only-independent-wording" && item?.displayTitle) {
+  if (["facts-only-independent-wording","source-attributed-short-factual"].includes(item?.textPolicy) && item?.displayTitle) {
     return cleanDisplayTitle(item.displayTitle);
   }
   const headline = ensureUsefulIndependentHeadline(item);
@@ -4581,13 +4581,13 @@ function renderFlashDeck() {
 
   clearFlashDeckTimer();
 
-  if (preferred.length < 2) {
+  if (preferred.length < 1) {
     el.flashDeck.classList.add("hidden");
     return;
   }
 
   el.flashDeckItems.innerHTML = preferred.map((item, index) => `<a class="flash-item" data-flash-index="${index}" href="${escapeHtml(storyHref(item))}" target="_blank" rel="noopener noreferrer">
-    <span>מקור הדיווח: ${escapeHtml(cleanDisplayText(item.sourceName))} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
+    <span>${escapeHtml(cleanDisplayText(item.attributionLabel || `מקור הדיווח: ${item.sourceName || ""}`))} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
     <strong>${escapeHtml(editorialTitle(item))}</strong>
   </a>`).join("");
 
@@ -4775,7 +4775,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=243.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=244.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4845,7 +4845,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=243.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=244.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
