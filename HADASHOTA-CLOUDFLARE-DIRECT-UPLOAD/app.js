@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "241.0.0";
-const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v241-1";
+const KOTERET_CLIENT_BUILD = "242.0.0";
+const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v242-1";
 
 (function healOldClientState() {
   try {
@@ -2511,7 +2511,7 @@ function ensureUsefulIndependentHeadline(item) {
   }
 
   if (maxSimilarity >= 0.92) {
-    // V241: never fall back to publisher wording merely because a safe rewrite
+    // V242: never fall back to publisher wording merely because a safe rewrite
     // cannot be produced. Public API titles are already independent, but this
     // guard also protects restored/legacy data during upgrades.
     const category = String(item?.category || "other");
@@ -2549,7 +2549,7 @@ function preserveSourceLegalQualifier(candidate, item) {
 }
 
 function editorialHeadlineForItem(item) {
-  // V241 public API / Push snapshots already carry an independently worded
+  // V242 public API / Push snapshots already carry an independently worded
   // displayTitle. Do not rewrite it a second time (which could garble grammar).
   if (item?.textPolicy === "facts-only-independent-wording" && item?.displayTitle) {
     return cleanDisplayTitle(item.displayTitle);
@@ -2866,10 +2866,10 @@ function isKnownBadFeedImage(url) {
   return true;
 }
 
-// V241: publisher article-image scraping removed. Open/public-domain media only.
+// V242: publisher article-image scraping removed. Open/public-domain media only.
 
 let safeMediaRequests = 0;
-const SAFE_MEDIA_REQUEST_LIMIT = 10; // V241: public-domain-only resolver, still bounded to protect Worker/subrequest usage.
+const SAFE_MEDIA_REQUEST_LIMIT = 10; // V242: public-domain-only resolver, still bounded to protect Worker/subrequest usage.
 async function fetchSafeMedia(query, category = "other") {
   const normalized = String(query || "").trim().slice(0, 260);
   if (!normalized) return null;
@@ -2943,6 +2943,15 @@ function mediaMatchesStoryStrictly(media, item, displayTitle = "", { lead = fals
   if (!media) return false;
 
   const storyText = `${displayTitle} ${item?.title||""} ${item?.preview||""}`;
+  // V242: the lead must not show an old/generic soldiers/police/war photo merely
+  // because it shares the same broad category. For the Hero, open-media imagery is
+  // accepted only when a likely named person is present in the story AND the media
+  // metadata/query contains that person. Otherwise use the branded fallback.
+  if (lead) {
+    const person = extractLikelyPersonName([displayTitle, item?.title||"", ...(normalizeClusterReports(item).map((r)=>r.title||""))].filter(Boolean));
+    const mediaText = cleanDisplayText([media?.candidateTitle||"",media?.candidateDescription||"",media?.title||"",media?.description||"",media?.matchedQuery||"",media?.query||""].join(" ")).toLowerCase();
+    if (!person || !mediaText.includes(cleanDisplayText(person).toLowerCase())) return false;
+  }
   if (mediaContextConflict(storyText, media)) return false;
 
   const story = mediaEventContext(storyText);
@@ -4536,7 +4545,8 @@ function latestNewsroomScore(item) {
 }
 
 function importantLatestItems(items, limit = 20) {
-  const siteItems = items.filter((item) => item.sourceKind === "site" && item.url);
+  const linkedItems = items.filter((item) => item.url);
+  const siteItems = linkedItems.filter((item) => item.sourceKind === "site");
 
   const ranked = siteItems
     .map((item) => ({ item, meta: latestNewsroomScore(item) }))
@@ -4551,7 +4561,7 @@ function importantLatestItems(items, limit = 20) {
   // Quiet-news fallback: keep the module useful, but do not admit obvious PR.
   if (ranked.length < 5) {
     const used = new Set(ranked.map(({ item }) => item.id || item.url || item.title));
-    const fallback = siteItems
+    const fallback = linkedItems
       .map((item) => ({ item, meta: latestNewsroomScore(item) }))
       .filter(({ item, meta }) => {
         const key = item.id || item.url || item.title;
@@ -4771,7 +4781,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=241.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=242.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4841,7 +4851,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=241.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=242.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
