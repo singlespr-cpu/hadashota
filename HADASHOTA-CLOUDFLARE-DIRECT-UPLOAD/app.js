@@ -1,4 +1,4 @@
-const KOTERET_CLIENT_BUILD = "245.0.0";
+const KOTERET_CLIENT_BUILD = "247.0.0";
 const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v245-1";
 
 (function healOldClientState() {
@@ -743,9 +743,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V245 · API ${apiVersion}` : "גרסה V245 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V247 · API ${apiVersion}` : "גרסה V247 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V245 · API לא מחובר";
+    marker.textContent = "גרסה V247 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1478,14 +1478,22 @@ function refreshNewsOnForeground(reason = "foreground") {
   loadNews(false, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
+const PRESENCE_HEARTBEAT_MS = 120000; // V247: admin online cutoff is 150s; 120s stays accurate while cutting DO writes.
+let lastPresenceHeartbeatAt = 0;
+function presenceDeviceIdIfDue(){
+  const now=Date.now();
+  if(now-lastPresenceHeartbeatAt<PRESENCE_HEARTBEAT_MS)return "";
+  lastPresenceHeartbeatAt=now;
+  return getPushDeviceId();
+}
+
 async function fetchNewsBundle() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort("bundle_timeout"), CLIENT_NEWS_TIMEOUT_MS);
   try {
-    const params = new URLSearchParams({
-      presenceDeviceId: getPushDeviceId(),
-      _: String(Math.floor(Date.now() / 15000))
-    });
+    const params = new URLSearchParams({ _: String(Math.floor(Date.now() / 15000)) });
+    const presenceDeviceId = presenceDeviceIdIfDue();
+    if (presenceDeviceId) params.set("presenceDeviceId", presenceDeviceId);
     const response = await fetch(`/api/news-bundle?${params}`, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
@@ -1712,8 +1720,11 @@ async function fetchNewsShard(shard, force = false, delayMs = 0) {
   try {
     const params = new URLSearchParams({ shard });
     if (shard === NEWS_SHARDS[0]) {
-      params.set("presenceDeviceId", getPushDeviceId());
-      params.set("presencePage", "home");
+      const presenceDeviceId = presenceDeviceIdIfDue();
+      if (presenceDeviceId) {
+        params.set("presenceDeviceId", presenceDeviceId);
+        params.set("presencePage", "home");
+      }
     }
     if (force) params.set("force", "1");
     params.set("_", String(Math.floor(Date.now() / 15000)));
@@ -2545,7 +2556,7 @@ function preserveSourceLegalQualifier(candidate, item) {
 function editorialHeadlineForItem(item) {
   // V242 public API / Push snapshots already carry an independently worded
   // displayTitle. Do not rewrite it a second time (which could garble grammar).
-  if (["facts-only-independent-wording","source-attributed-short-factual"].includes(item?.textPolicy) && item?.displayTitle) {
+  if (["facts-only-independent-wording-v247","source-attributed-short-factual"].includes(item?.textPolicy) && item?.displayTitle) {
     return cleanDisplayTitle(item.displayTitle);
   }
   const headline = ensureUsefulIndependentHeadline(item);
@@ -2863,20 +2874,10 @@ function isKnownBadFeedImage(url) {
 // V242: publisher article-image scraping removed. Open/public-domain media only.
 
 let safeMediaRequests = 0;
-const SAFE_MEDIA_REQUEST_LIMIT = 10; // V242: public-domain-only resolver, still bounded to protect Worker/subrequest usage.
-async function fetchSafeMedia(query, category = "other") {
-  const normalized = String(query || "").trim().slice(0, 260);
-  if (!normalized) return null;
-  const key = `${category}|${normalized}`;
-  if (SAFE_MEDIA_CACHE.has(key)) return SAFE_MEDIA_CACHE.get(key);
-  if (safeMediaRequests >= SAFE_MEDIA_REQUEST_LIMIT) return null;
-  safeMediaRequests += 1;
-  const promise = fetch(`/api/media?q=${encodeURIComponent(normalized)}&category=${encodeURIComponent(category)}`, { cache: "no-store" })
-    .then((r) => r.ok ? r.json() : null)
-    .then((data) => data?.image?.url ? data.image : null)
-    .catch(() => null);
-  SAFE_MEDIA_CACHE.set(key, promise);
-  return promise;
+const SAFE_MEDIA_REQUEST_LIMIT = 0; // V247: disabled — exact licensed source media only.
+async function fetchSafeMedia() {
+  // Hard cost/rights guardrail: no illustrative or keyword media lookup.
+  return null;
 }
 
 function sourceImageLooksEditorial(raw) {
@@ -3013,13 +3014,14 @@ function openMediaPassesEditorialGate(media, { lead = false } = {}) {
 function reusableSourceImageLicense(report) {
   const license = String(report?.imageLicense || report?.mediaLicense || report?.license || "").trim();
   const normalized = license.toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const approved = report?.rightsApproved === true || report?.rightsBasis === "owned" || report?.rightsBasis === "manual-license";
   const publicDomain = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
-  if (!publicDomain) return null;
+  if (!approved && !publicDomain) return null;
 
   const creator = String(report?.imageCreator || report?.mediaCreator || report?.imageCredit || "").trim();
   const licenseUrl = String(report?.imageLicenseUrl || report?.mediaLicenseUrl || "").trim();
   const landingUrl = String(report?.imageLandingUrl || report?.mediaLandingUrl || report?.url || "").trim();
-  return { license, normalized, creator, licenseUrl, landingUrl };
+  return { license, normalized, creator, licenseUrl, landingUrl, approved };
 }
 
 function clientPhotoCreditIsAgency(value) {
@@ -3115,7 +3117,8 @@ function originalFeedSourceImage(item) {
         photographer: rights.creator || photographer,
         imageCreator: rights.creator || photographer,
         provider: "feed-licensed",
-        rightsBasis: "open-license",
+        rightsBasis: rights.approved ? (report?.rightsBasis || "manual-license") : "open-license",
+        rightsApproved: rights.approved === true,
         credit: [rights.creator, rights.license, sourceName].filter(Boolean).join(" · "),
         sourceName,
         sourceUrl: report?.url || item?.url || "",
@@ -3225,25 +3228,9 @@ function sourceImageConflictsWithStory(item, report, rawUrl = "") {
 }
 
 function preferredSourceImage(item) {
-  const reports = normalizeClusterReports(item || {});
-  const candidates = [item, ...reports].filter(Boolean);
-  for (const report of candidates) {
-    const raw = report?.imageUrl;
-    if (!sourceImageLooksEditorial(raw)) continue;
-    if (sourceImageConflictsWithStory(item, report, raw)) continue;
-    const rights = reusableSourceImageLicense(report);
-    if (!rights) continue;
-    return {
-      url: String(raw),
-      credit: [rights.creator, rights.license, report?.sourceName || report?.publisher || item?.sourceName || "המקור"].filter(Boolean).join(" · ") || "נחלת הכלל",
-      creator: rights.creator || "",
-      sourceName: report?.sourceName || report?.publisher || item?.sourceName || "המקור",
-      license: rights.license,
-      licenseUrl: rights.licenseUrl,
-      landingUrl: rights.landingUrl
-    };
-  }
-  return null;
+  // V247: only the exact article image can be considered. No image borrowed
+  // from another report in the cluster and no illustrative search fallback.
+  return originalFeedSourceImage(item);
 }
 
 async function hydrateLeadOpenMediaFallback(winner, leadTitle, publicSnapshot=null) {
@@ -3332,10 +3319,11 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   // V230 hero priority: use only images supplied by reports in this exact event
   // cluster when explicitly licensed/approved. Publisher-feed provenance alone is rejected.
   // If none exists, use the branded fallback — never a keyword-guessed image.
-  const licensedSource = preferredSourceImage(item) || originalClusterSourceImage(item);
-  if (applyLicensed(licensedSource)) return;
-  const publisherSource = originalFeedSourceImage(item) || publisherClusterSourceImage(item);
-  if (applyLicensed(publisherSource)) return;
+  // V247 exact-story media only. A different report in the same cluster may be
+  // about the same event but is not necessarily the same photograph/context.
+  // Therefore only the selected article's own explicitly reusable image may show.
+  const exactLicensedSource = originalFeedSourceImage(item);
+  if (applyLicensed(exactLicensedSource)) return;
 
   // V245: no illustrative/keyword-guessed hero image. If the exact story has no
   // explicitly reusable source image, render the lead without a photo.
@@ -3947,7 +3935,7 @@ function newsCardHtml(item) {
         <div class="news-side"><span class="category-badge ${category}">${CATEGORY_LABELS[category] || "כללי"}</span></div>
       </div>
       ${relatedHtml}
-      <div class="content-rights-tools"><a href="${escapeHtml(contentReportHref(safeTitle, rawStoryUrl))}" data-content-report onclick="event.stopPropagation()">דווח על תוכן/תמונה</a></div>
+      <div class="content-rights-tools"><a class="original-report-link" href="${storyUrl}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">לדיווח המקורי ↗</a><span aria-hidden="true"> · </span><a href="${escapeHtml(contentReportHref(safeTitle, rawStoryUrl))}" data-content-report onclick="event.stopPropagation()">דווח על תוכן/תמונה</a></div>
     </article>`;
 }
 
@@ -4400,7 +4388,7 @@ function renderLeadStory() {
     firstAt:item.firstReportAt||clusterFirstAt(item)||item.publishedAt||"",
     link:leadHref||"",
     image:initialLeadMedia?.url||"",
-    textPolicy:"facts-only-independent-wording",
+    textPolicy:"facts-only-independent-wording-v247",
     savedAt:Date.now()
   };
   try { localStorage.setItem("hadashota.publicLead.v1", JSON.stringify(publicLeadSnapshot)); } catch {}
@@ -4591,7 +4579,7 @@ function renderFlashDeck() {
   }
 
   el.flashDeckItems.innerHTML = preferred.map((item, index) => `<a class="flash-item" data-flash-index="${index}" href="${escapeHtml(storyHref(item))}" target="_blank" rel="noopener noreferrer">
-    <span>${escapeHtml(cleanDisplayText(item.attributionLabel || `מקור הדיווח: ${item.sourceName || ""}`))} · ${formatAge(item.latestReportAt || item.publishedAt)}</span>
+    <span>${escapeHtml(cleanDisplayText(item.attributionLabel || `מקור הדיווח: ${item.sourceName || ""}`))} · ${formatAge(item.latestReportAt || item.publishedAt)} · לדיווח המקורי ↗</span>
     <strong>${escapeHtml(editorialTitle(item))}</strong>
   </a>`).join("");
 
@@ -4779,7 +4767,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=245.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=247.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4849,7 +4837,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=245.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=247.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
