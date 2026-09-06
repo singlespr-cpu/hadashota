@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "247.0.0";
-const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v245-1";
+const KOTERET_CLIENT_BUILD = "248.0.0";
+const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v248-1";
 
 (function healOldClientState() {
   try {
@@ -126,7 +126,8 @@ const state = {
   currentMatchingAlerts: [],
   currentLeadEntry: null,
   forceLeadReevaluation: false,
-  feedVisibleCount: 10
+  feedVisibleCount: 10,
+  liveSnapshotReady: false
 };
 
 const el = {
@@ -324,7 +325,7 @@ const NEWS_SHARD_STAGGER_MS = 45;
 const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.correctShardsV86.";
 const LEGACY_LAST_GOOD_PREFIXES = [];
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v112";
+const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v248";
 const FAST_RENDER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -743,9 +744,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V247 · API ${apiVersion}` : "גרסה V247 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V248 · API ${apiVersion}` : "גרסה V248 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V247 · API לא מחובר";
+    marker.textContent = "גרסה V248 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1478,7 +1479,7 @@ function refreshNewsOnForeground(reason = "foreground") {
   loadNews(false, true, true).catch((error) => console.warn(`Foreground refresh (${reason}) failed`, error));
 }
 
-const PRESENCE_HEARTBEAT_MS = 120000; // V247: admin online cutoff is 150s; 120s stays accurate while cutting DO writes.
+const PRESENCE_HEARTBEAT_MS = 120000; // V248: admin online cutoff is 150s; 120s stays accurate while cutting DO writes.
 let lastPresenceHeartbeatAt = 0;
 function presenceDeviceIdIfDue(){
   const now=Date.now();
@@ -1630,17 +1631,15 @@ async function loadNews(force = false, fromRetry = false, silent = false) {
 
     renderStats(data);
     persistFastRenderSnapshot(data);
-    if (materiallyChanged || !state.lastNewsFingerprint) {
-      // V197: rendering is also cooperative. Most blocks are small, but yielding
-      // between them prevents one complete newsroom rebuild from monopolising the
-      // main thread on slower phones/desktops.
+    const needsAuthoritativeFirstRender = !state.liveSnapshotReady;
+    if (needsAuthoritativeFirstRender || materiallyChanged || !state.lastNewsFingerprint) {
       await renderResponsive();
       state.lastNewsFingerprint = nextFingerprint;
+      state.liveSnapshotReady = true;
     } else {
-      // Do not rebuild the entire DOM for a manual/entry refresh when the visible
-      // newsroom snapshot is byte-for-byte equivalent. Re-evaluate only the lead,
-      // whose eligibility may change with time/source freshness.
       try { renderLeadStory(); } catch (error) { console.warn("Lead reevaluation failed", error); }
+      try { renderFlashDeck(); } catch (error) { console.warn("Latest deck refresh failed", error); }
+      try { renderFeed(); } catch (error) { console.warn("Feed time-window refresh failed", error); }
     }
     setDataStatus(state.dataDelayed, true, state.dataDelaySeverity);
 
@@ -1767,7 +1766,7 @@ function persistFastRenderSnapshot(data) {
   if (!data?.items?.length) return;
   try {
     const payload = {
-      version: 112,
+      version: 248,
       savedAt: Date.now(),
       generatedAt: data.generatedAt || new Date().toISOString(),
       items: data.items.slice(0, 140).map(compactFastRenderItem),
@@ -1923,14 +1922,17 @@ function setDataStatus(delayed, hasData = state.items.length > 0, severity = sta
   if (el.dataStatus) el.dataStatus.classList.add("hidden");
 }
 function newsSnapshotFingerprint(data) {
-  const parts = (data?.items || []).slice(0, 220).map((item) =>
+  const rows = data?.items || [];
+  const parts = rows.slice(0, 260).map((item) =>
     [
       item.id || item.url || item.title || "",
       item.latestReportAt || item.publishedAt || "",
-      item.reportCount || 1
+      item.reportCount || 1,
+      item.displayTitle || item.title || "",
+      item.textPolicy || ""
     ].join("|")
   );
-  return `${parts.join("~")}#${(data?.sources || []).length}`;
+  return `${rows.length}#${parts.join("~")}#${(data?.sources || []).length}`;
 }
 
 function yieldToBrowser() {
@@ -2556,7 +2558,7 @@ function preserveSourceLegalQualifier(candidate, item) {
 function editorialHeadlineForItem(item) {
   // V242 public API / Push snapshots already carry an independently worded
   // displayTitle. Do not rewrite it a second time (which could garble grammar).
-  if (["facts-only-independent-wording-v247","source-attributed-short-factual"].includes(item?.textPolicy) && item?.displayTitle) {
+  if (["facts-only-independent-wording-v248","source-attributed-short-factual"].includes(item?.textPolicy) && item?.displayTitle) {
     return cleanDisplayTitle(item.displayTitle);
   }
   const headline = ensureUsefulIndependentHeadline(item);
@@ -2874,7 +2876,7 @@ function isKnownBadFeedImage(url) {
 // V242: publisher article-image scraping removed. Open/public-domain media only.
 
 let safeMediaRequests = 0;
-const SAFE_MEDIA_REQUEST_LIMIT = 0; // V247: disabled — exact licensed source media only.
+const SAFE_MEDIA_REQUEST_LIMIT = 0; // V248: disabled — exact licensed source media only.
 async function fetchSafeMedia() {
   // Hard cost/rights guardrail: no illustrative or keyword media lookup.
   return null;
@@ -3228,7 +3230,7 @@ function sourceImageConflictsWithStory(item, report, rawUrl = "") {
 }
 
 function preferredSourceImage(item) {
-  // V247: only the exact article image can be considered. No image borrowed
+  // V248: only the exact article image can be considered. No image borrowed
   // from another report in the cluster and no illustrative search fallback.
   return originalFeedSourceImage(item);
 }
@@ -3319,7 +3321,7 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   // V230 hero priority: use only images supplied by reports in this exact event
   // cluster when explicitly licensed/approved. Publisher-feed provenance alone is rejected.
   // If none exists, use the branded fallback — never a keyword-guessed image.
-  // V247 exact-story media only. A different report in the same cluster may be
+  // V248 exact-story media only. A different report in the same cluster may be
   // about the same event but is not necessarily the same photograph/context.
   // Therefore only the selected article's own explicitly reusable image may show.
   const exactLicensedSource = originalFeedSourceImage(item);
@@ -4388,7 +4390,7 @@ function renderLeadStory() {
     firstAt:item.firstReportAt||clusterFirstAt(item)||item.publishedAt||"",
     link:leadHref||"",
     image:initialLeadMedia?.url||"",
-    textPolicy:"facts-only-independent-wording-v247",
+    textPolicy:"facts-only-independent-wording-v248",
     savedAt:Date.now()
   };
   try { localStorage.setItem("hadashota.publicLead.v1", JSON.stringify(publicLeadSnapshot)); } catch {}
@@ -4767,7 +4769,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=247.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=248.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4837,7 +4839,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=247.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=248.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 
