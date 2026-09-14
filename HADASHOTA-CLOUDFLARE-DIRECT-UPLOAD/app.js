@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "248.0.0";
-const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v248-1";
+const KOTERET_CLIENT_BUILD = "249.0.0";
+const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v249-1";
 
 (function healOldClientState() {
   try {
@@ -325,7 +325,7 @@ const NEWS_SHARD_STAGGER_MS = 45;
 const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.correctShardsV86.";
 const LEGACY_LAST_GOOD_PREFIXES = [];
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v248";
+const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v249";
 const FAST_RENDER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -744,9 +744,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V248 · API ${apiVersion}` : "גרסה V248 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V249 · API ${apiVersion}` : "גרסה V249 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V248 · API לא מחובר";
+    marker.textContent = "גרסה V249 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1766,7 +1766,7 @@ function persistFastRenderSnapshot(data) {
   if (!data?.items?.length) return;
   try {
     const payload = {
-      version: 248,
+      version: 249,
       savedAt: Date.now(),
       generatedAt: data.generatedAt || new Date().toISOString(),
       items: data.items.slice(0, 140).map(compactFastRenderItem),
@@ -3017,12 +3017,18 @@ function reusableSourceImageLicense(report) {
   const license = String(report?.imageLicense || report?.mediaLicense || report?.license || "").trim();
   const normalized = license.toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   const approved = report?.rightsApproved === true || report?.rightsBasis === "owned" || report?.rightsBasis === "manual-license";
-  const publicDomain = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
-  if (!approved && !publicDomain) return null;
-
   const creator = String(report?.imageCreator || report?.mediaCreator || report?.imageCredit || "").trim();
   const licenseUrl = String(report?.imageLicenseUrl || report?.mediaLicenseUrl || "").trim();
   const landingUrl = String(report?.imageLandingUrl || report?.mediaLandingUrl || report?.url || "").trim();
+  const normalizedUrl = licenseUrl.toLowerCase();
+  const publicDomain = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN") || /creativecommons\.org\/(?:publicdomain\/zero|publicdomain\/mark)\//i.test(normalizedUrl);
+  const nonCommercial = /\bNC\b|NON ?COMMERCIAL/i.test(normalized) || /creativecommons\.org\/licenses\/by(?:-[a-z]+)*-nc(?:-[a-z]+)*\//i.test(normalizedUrl);
+  const noDerivatives = /\bND\b|NO ?DERIVATIVES/i.test(normalized) || /creativecommons\.org\/licenses\/by(?:-[a-z]+)*-nd(?:-[a-z]+)*\//i.test(normalizedUrl);
+  const ccBySa = /\bCC BY SA(?:\s|$)/i.test(normalized) || /creativecommons\.org\/licenses\/by-sa\//i.test(normalizedUrl);
+  const ccBy = !ccBySa && (/\bCC BY(?:\s|$)/i.test(normalized) || /creativecommons\.org\/licenses\/by\//i.test(normalizedUrl));
+  const attributionOpen = !nonCommercial && !noDerivatives && (ccBy || ccBySa);
+  if (!approved && !publicDomain && !attributionOpen) return null;
+  if (!approved && attributionOpen && (!creator || !/^https?:\/\/creativecommons\.org\/licenses\/(?:by|by-sa)\//i.test(licenseUrl))) return null;
   return { license, normalized, creator, licenseUrl, landingUrl, approved };
 }
 
@@ -3031,10 +3037,10 @@ function clientPhotoCreditIsAgency(value) {
   return /^(?:מערכת|יחצ|יח"צ|יח״צ|ארכיון|shutterstock|istock|getty(?: images)?|reuters|ap|afp)(?:\b|$)/i.test(text);
 }
 
-// V238 — FAIL-CLOSED RIGHTS-AWARE image policy.
-// Automatic display is limited to public-domain/CC0/PDM or explicitly
-// approved/site-owned media. RSS/OG/Telegram provenance alone is never treated
-// as permission. Known wire/stock agencies remain blocked as an extra guard.
+// V249 — FAIL-CLOSED RIGHTS-AWARE image policy.
+// Automatic display is limited to explicit reusable licences (CC0/Public Domain,
+// attributed CC BY/CC BY-SA) or explicitly approved/site-owned media. RSS/OG/
+// Telegram provenance alone is never permission. Known wire/stock agencies stay blocked.
 const HIGH_RISK_IMAGE_CREDIT_RX = /(?:\breuters\b|רויטרס|associated\s+press|\bap\b|א[יי]-?פי|agence\s+france[-\s]presse|\bafp\b|getty(?:\s+images)?|גטי(?:\s+אימג(?:׳|')?ס)?|shutterstock|שאטרסטוק|flash\s*90|פלאש\s*90|\bepa(?:-efe)?\b|alamy|istock(?:photo)?|depositphotos|dreamstime|123rf|wireimage|imago(?:\s+images)?|anadolu(?:\s+agency)?|\bupi\b)/i;
 const HIGH_RISK_IMAGE_HOST_RX = /(?:^|\.)(?:gettyimages\.|shutterstock\.|flash90\.|alamy\.|istockphoto\.|depositphotos\.|dreamstime\.|123rf\.|reuters\.|apnews\.|afp\.|epa\.|anadoluimages\.)/i;
 
@@ -3057,19 +3063,26 @@ function explicitReusableImageRights(candidate = {}) {
   }
   const license = String(candidate?.license || candidate?.imageLicense || candidate?.mediaLicense || "").trim();
   const normalized = license.toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  const publicDomain = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN");
-  if (!publicDomain) return null;
   const creator = String(candidate?.creator || candidate?.imageCreator || candidate?.photographer || candidate?.imageCredit || "").trim();
   const licenseUrl = String(candidate?.licenseUrl || candidate?.imageLicenseUrl || candidate?.mediaLicenseUrl || "").trim();
   const landingUrl = String(candidate?.landingUrl || candidate?.sourceUrl || "").trim();
+  const normalizedUrl = licenseUrl.toLowerCase();
+  const publicDomain = normalized === "CC0" || normalized === "PDM" || normalized.includes("PUBLIC DOMAIN") || /creativecommons\.org\/(?:publicdomain\/zero|publicdomain\/mark)\//i.test(normalizedUrl);
+  const nonCommercial = /\bNC\b|NON ?COMMERCIAL/i.test(normalized) || /creativecommons\.org\/licenses\/by(?:-[a-z]+)*-nc(?:-[a-z]+)*\//i.test(normalizedUrl);
+  const noDerivatives = /\bND\b|NO ?DERIVATIVES/i.test(normalized) || /creativecommons\.org\/licenses\/by(?:-[a-z]+)*-nd(?:-[a-z]+)*\//i.test(normalizedUrl);
+  const ccBySa = /\bCC BY SA(?:\s|$)/i.test(normalized) || /creativecommons\.org\/licenses\/by-sa\//i.test(normalizedUrl);
+  const ccBy = !ccBySa && (/\bCC BY(?:\s|$)/i.test(normalized) || /creativecommons\.org\/licenses\/by\//i.test(normalizedUrl));
+  const attributionOpen = !nonCommercial && !noDerivatives && (ccBy || ccBySa);
+  if (!publicDomain && !attributionOpen) return null;
+  if (attributionOpen && (!creator || !/^https?:\/\/creativecommons\.org\/licenses\/(?:by|by-sa)\//i.test(licenseUrl))) return null;
   return { basis: "open-license", license, normalized, creator, licenseUrl, landingUrl };
 }
 
 function originalImageAllowed(candidate = {}) {
   if (originalImageRightsRisk(candidate)) return false;
-  // V238 FAIL-CLOSED: appearance in RSS/OG/Telegram is provenance, not a licence.
+  // V249 FAIL-CLOSED: appearance in RSS/OG/Telegram is provenance, not a licence.
   // Automatic display requires an explicit reusable basis: owned/manual approval
-  // or a machine-verifiable public-domain/CC0/PDM licence.
+  // or a machine-verifiable open licence accepted above.
   return !!explicitReusableImageRights(candidate);
 }
 
@@ -3314,7 +3327,13 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
     el.leadStoryMedia.dataset.mediaCredit = directCredit;
     el.leadStoryMedia.dataset.mediaLanding = direct.landingUrl || direct.sourceUrl || item?.url || "";
     el.leadStoryMedia.dataset.mediaLicense = direct.licenseUrl || "";
-    el.leadStoryMedia.title = directCredit;
+    const openLicensed = direct?.rightsBasis === "open-license";
+    const rightsLink = openLicensed ? (direct.licenseUrl || direct.landingUrl || direct.sourceUrl || "") : "";
+    if (rightsLink) {
+      el.leadStoryMedia.href = rightsLink;
+      el.leadStoryMedia.setAttribute("aria-label", "פתיחת מקור ורישיון התמונה");
+    }
+    el.leadStoryMedia.title = [directCredit, direct.licenseUrl ? `רישיון: ${direct.licenseUrl}` : ""].filter(Boolean).join(" · ");
     return true;
   };
 
@@ -4769,7 +4788,7 @@ function reconcileNotificationPermission() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=248.0.0", { updateViaCache: "none" });
+    state.serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js?v=249.0.0", { updateViaCache: "none" });
     syncPushDeviceIdToServiceWorker(state.serviceWorkerRegistration);
     navigator.serviceWorker.ready.then((registration)=>syncPushDeviceIdToServiceWorker(registration)).catch(()=>{});
     state.serviceWorkerRegistration.update().catch(() => {});
@@ -4839,7 +4858,7 @@ async function getReadyPushServiceWorkerRegistration() {
 
   let registration = state.serviceWorkerRegistration;
   if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js?v=248.0.0", { updateViaCache: "none" });
+    registration = await navigator.serviceWorker.register("/sw.js?v=249.0.0", { updateViaCache: "none" });
     state.serviceWorkerRegistration = registration;
   }
 

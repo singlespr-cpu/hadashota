@@ -249,7 +249,7 @@ export default {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       return cors(json({ image: null, error: "retired_exact_source_media_only" }, 410, {
         "Cache-Control": "public, max-age=0, s-maxage=86400",
-        "X-Hadashota-Version": "248.0.0"
+        "X-Hadashota-Version": "249.0.0"
       }));
     }
 
@@ -260,7 +260,7 @@ export default {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       return cors(json({ image: null, error: "retired_rights_policy" }, 410, {
         "Cache-Control": "public, max-age=0, s-maxage=86400",
-        "X-Hadashota-Version": "248.0.0"
+        "X-Hadashota-Version": "249.0.0"
       }));
     }
 
@@ -309,7 +309,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "248.0.0",
+          version: "249.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -324,7 +324,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "248.0.0",
+        version: "249.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1270,7 +1270,7 @@ const PUBLIC_NEWS_GENERIC_LABEL = Object.freeze({
 });
 
 function internalNewsCacheKey(shard, lastGood=false){
-  return new Request(`https://hadashota.internal-news.local/v248/${lastGood?"last-good":"current"}?shard=${encodeURIComponent(shard)}`,{method:"GET"});
+  return new Request(`https://hadashota.internal-news.local/v249/${lastGood?"last-good":"current"}?shard=${encodeURIComponent(shard)}`,{method:"GET"});
 }
 
 function publicStripPublisherStyle(value){
@@ -1332,7 +1332,7 @@ function publicHeadlineReadability(value){
   const t=cleanText(value||"");
   if(!t)return {ok:false,score:0,reason:"empty"};
   const words=t.split(/\s+/).filter(Boolean);
-  if(words.length<4||words.length>28)return {ok:false,score:0,reason:"word-count"};
+  if(words.length<3||words.length>28)return {ok:false,score:0,reason:"word-count"};
   if(/[,:;\-–—]\s*$/u.test(t))return {ok:false,score:0,reason:"dangling-punctuation"};
   if(/(?:^|\s)(?:של|את|על|עם|אל|כי|אם|או|אך|לפי|בידי|מטעם|בעקבות|בשל|אחרי|לפני)$/u.test(t))return {ok:false,score:0,reason:"dangling-connector"};
   const awkward=[
@@ -1348,7 +1348,7 @@ function publicHeadlineReadability(value){
   for(let i=1;i<normalizedWords.length;i++)if(normalizedWords[i]===normalizedWords[i-1]&&normalizedWords[i].length>1)return {ok:false,score:0,reason:"repeated-word"};
   const opens=(t.match(/\(/g)||[]).length,closes=(t.match(/\)/g)||[]).length;if(opens!==closes)return {ok:false,score:0,reason:"parentheses"};
   // A public headline must read as a sentence/event, not a bag of keywords.
-  const predicate=/(?:דווח|פורסם|פרסם|פרסמה|פרסמו|הזהיר|הזהירה|הזהירו|נמסר|נבדק|נבדקים|בוצע|בוצעה|בוצעו|התקבלה|התקבל|נרשמה|נרשם|נרשמו|צפוי|צפויה|צפויים|אושר|אושרה|אושרו|נדחה|נדחתה|בוטל|בוטלה|נפתח|נפתחה|נסגר|נסגרה|נעצר|נעצרה|נעצרו|נפצע|נפצעה|נפצעו|נהרג|נהרגה|נהרגו|שוחרר|שוחררה|שוחררו|הגיע|הגיעה|הגיעו|יגיע|תגיע|ייפגש|תיפגש|פרצה|אירעה|נשמע|נשמעו|הופעלו|שוגר|שוגרה|שוגרו|נחתם|נחתמה|נכנסה|נכנס|החל|החלה|החלו|חודש|חודשה|הוטלו|תשובץ|ישובץ|נבחר|נבחרה|מונה|מונתה|עלה|עלתה|ירד|ירדה|הותיר|הותירה|קבע|קבעה|החליט|החליטה|תקיפה|מעצר|אישור|ביטול|דחיית|פתיחת|סגירת|חתימת|שיגור|ירי|שריפה|תאונה|רעידת אדמה)/u.test(t);
+  const predicate=/(?:דווח|פורסם|פרסם|פרסמה|פרסמו|הזהיר|הזהירה|הזהירו|נמסר|נבדק|נבדקים|בוצע|בוצעה|בוצעו|התקבלה|התקבל|נרשמה|נרשם|נרשמו|צפוי|צפויה|צפויים|אושר|אושרה|אושרו|נדחה|נדחתה|בוטל|בוטלה|נפתח|נפתחה|נסגר|נסגרה|נעצר|נעצרה|נעצרו|נפצע|נפצעה|נפצעו|נהרג|נהרגה|נהרגו|שוחרר|שוחררה|שוחררו|הגיע|הגיעה|הגיעו|יגיע|תגיע|ייפגש|תיפגש|נפגש|נפגשה|נפגשו|נערכה|נערך|התפטר|התפטרה|פרש|פרשה|הופסק|הופסקה|הופסקו|הושבת|הושבתה|אותר|אותרה|נמצא|נמצאה|פרצה|אירעה|נשמע|נשמעו|הופעלו|שוגר|שוגרה|שוגרו|נחתם|נחתמה|נכנסה|נכנס|החל|החלה|החלו|חודש|חודשה|הוטלו|תשובץ|ישובץ|נבחר|נבחרה|מונה|מונתה|עלה|עלתה|ירד|ירדה|הותיר|הותירה|קבע|קבעה|החליט|החליטה|תקיפה|מעצר|אישור|ביטול|דחיית|פתיחת|סגירת|חתימת|שיגור|ירי|שריפה|תאונה|פגישה|התפטרות|פרישה|הפסקת|רעידת אדמה)/u.test(t);
   if(!predicate)return {ok:false,score:0,reason:"no-predicate"};
   let score=70;
   if(/[,.–—]/u.test(t))score+=3;
@@ -1439,12 +1439,15 @@ function publicHeadlinePreservesFacts(sourceTitle,rewrittenTitle){
 
 function publicHeadlineUseful(value){
   const t=cleanText(value||"");
-  if(t.length<16)return false;
+  // V249: allow compact breaking-news facts. Safety still comes from the
+  // readability predicate, fact guards and similarity QA; this only stops the
+  // old blanket four-word rule from discarding concise factual events.
+  if(t.length<12)return false;
   if(/^עדכון (?:חדשותי|ביטחוני)(?: חדש)?(?:\s*[:;]|$)/u.test(t))return false;
   if(/^התפתחות (?:פוליטית|מדינית)(?: חדשה)?(?:\s*[:;]|$)/u.test(t))return false;
   if(/הפרטים בדיווח המקורי/u.test(t))return false;
   const words=t.split(/\s+/).filter(Boolean);
-  return words.length>=4;
+  return words.length>=3;
 }
 
 function publicRewriteFactClause(value){
@@ -1614,6 +1617,47 @@ function publicTitleLooksPlainFactual(value){
   return /(?:\d|הודיע|הודיעה|הודיעו|אמר|אמרה|אמרו|מסר|מסרה|מסרו|טען|טענה|אישר|אישרה|אושר|אושרה|דרש|דרשה|הזהיר|הזהירה|תקף|תקפה|תקפו|נפצע|נפצעה|נפצעו|נהרג|נהרגה|נהרגו|נעצר|נעצרה|נעצרו|שוחרר|שוחררה|אותר|אותרה|נמצא|נמצאה|נחת|נחתה|המריא|המריאה|התפטר|התפטרה|פרש|פרשה|נבחר|נבחרה|מונה|מונתה|פרסם|פרסמה|הגיש|הגישה|דחה|דחתה|נדחה|נדחתה|ביטל|ביטלה|בוטל|בוטלה|פתח|פתחה|נפתח|נפתחה|סגר|סגרה|נסגר|נסגרה|קרא|קראה|ייפגש|תיפגש|נפגש|נפגשה|יגיע|תגיע|הגיע|הגיעה|שוגר|שוגרה|נורה|נורתה|פרצה|אירעה|החל|החלה|הסתיים|הסתיימה|עלה|עלתה|ירד|ירדה|דווח|פורסם|פורסמה|נרשם|נרשמה|נחשף|נחשפה|נפתח|הושק|הושקה|צפוי|צפויה|עשוי|עשויה|ייתכן|יהיה|תהיה|יהיו|נמשך|נמשכת|הותר|נאסר|הושבת|הופסק|התחדש|מתקיים|במוקד|במרכז|לקראת|בעקבות|בשל|במגעים|בשיחות|בדיונים|בכוננות|בפגישה|בישיבה|צה[״"]ל|המשטרה|הממשלה|הכנסת|משרד\s|ראש הממשלה|הנשיא|השר|איראן|ישראל|לבנון|עזה|ארה[״"]ב)/u.test(t);
 }
 
+function publicPlainFactualRestatement(value,item={}){
+  const base=publicStripPublisherStyle(value);
+  if(!base||!publicTitleLooksPlainFactual(base))return "";
+  const quoteStripped=base.replace(/[א-ת][״”"][א-ת]/gu,"XX");
+  if(/["“”«»?!]/u.test(quoteStripped))return "";
+  // Negation is too position-sensitive for a generic structural fallback. Keep
+  // these rows internal unless one of the specific rewrite rules handles them.
+  if(/(?:^|\s)(?:לא|טרם|ללא)(?:\s|$)/u.test(base))return "";
+  let m;
+
+  // V249: deterministic, high-confidence fallback grammars for concise factual
+  // headlines that V248 collected but could not independently restate. No AI,
+  // no network request and no storage access is used here.
+  m=base.match(/^(.{2,70}?)\s+(נעצרה|נעצרו|נעצר)\s*(.*)$/u);
+  if(m){
+    const rewritten=cleanText(`דווח על מעצר של ${m[1]}${m[3]?` ${m[3]}`:""}`);
+    if(publicHeadlineQa(base,rewritten).ok)return rewritten;
+  }
+  m=base.match(/^(.{2,70}?)\s+(התפטרה|התפטר)\s*(.*)$/u);
+  if(m){
+    const rewritten=cleanText(`דווח על התפטרות ${m[1]}${m[3]?` ${m[3]}`:""}`);
+    if(publicHeadlineQa(base,rewritten).ok)return rewritten;
+  }
+  m=base.match(/^(.{2,70}?)\s+(פרש|פרשה)\s*(.*)$/u);
+  if(m){
+    const rewritten=cleanText(`דווח על פרישת ${m[1]}${m[3]?` ${m[3]}`:""}`);
+    if(publicHeadlineQa(base,rewritten).ok)return rewritten;
+  }
+  m=base.match(/^(.{2,80}?)\s+(נפצעו|נהרגו|נעצרו|פונו)\s+(.+)$/u);
+  if(m){
+    const rewritten=cleanText(`${m[3]} — ${m[2]} ${m[1]}`);
+    if(publicHeadlineQa(base,rewritten).ok)return rewritten;
+  }
+  m=base.match(/^(.{2,70}?)\s+(הופסקה|הופסקו|הופסק)\s*(.*)$/u);
+  if(m){
+    const rewritten=cleanText(`דווח על הפסקת ${m[1]}${m[3]?` ${m[3]}`:""}`);
+    if(publicHeadlineQa(base,rewritten).ok)return rewritten;
+  }
+  return "";
+}
+
 function publicPreviewSentence(value){
   const t=cleanText(value||"");
   if(!t)return "";
@@ -1757,12 +1801,18 @@ function serverPublicHeadlineResult(item={}){
   const generateFrom=(entry)=>{
     const sourceTitle=entry.text;
     const sourceItem={...item,...entry.row,sourceName:entry.row?.sourceName||item?.sourceName,publisher:entry.row?.publisher||item?.publisher};
-    const generated=[publicRewriteSingleTitle(sourceTitle,sourceItem),publicConservativeRestatement(entry.raw||sourceTitle,sourceItem)].filter(Boolean);
-    for(const candidate of generated){
+    const before=candidates.length;
+    const addCandidate=(candidate)=>{
+      if(!candidate)return;
       const qa=publicHeadlineQa(sourceTitle,candidate);
-      if(!qa.ok)continue;
+      if(!qa.ok)return;
       candidates.push({title:candidate,mode:"independent",similarity:qa.similarity,anchorCoverage:qa.anchorCoverage,readability:Number(qa.readability)||0,sourceTitle});
-    }
+    };
+    // Keep the V248 paths first. The new plain-factual fallback is evaluated only
+    // when both existing paths fail QA, avoiding extra regex/QA work on healthy rows.
+    addCandidate(publicRewriteSingleTitle(sourceTitle,sourceItem));
+    addCandidate(publicConservativeRestatement(entry.raw||sourceTitle,sourceItem));
+    if(candidates.length===before)addCandidate(publicPlainFactualRestatement(entry.raw||sourceTitle,sourceItem));
   };
   for(const entry of candidateRows)generateFrom(entry);
   // If no title yielded a safe headline, use at most two preview first-sentences
@@ -1800,18 +1850,28 @@ function publicReusableSourceImage(row={}){
   const basis=String(row?.rightsBasis||row?.imageRightsBasis||"").trim();
   const approved=row?.rightsApproved===true || basis==="owned" || basis==="manual-license";
   const license=String(row?.imageLicense||row?.license||"").trim();
+  const licenseUrl=String(row?.imageLicenseUrl||"").trim();
   const normalized=license.toUpperCase().replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
-  const publicDomain=normalized==="CC0" || normalized==="PDM" || normalized.includes("PUBLIC DOMAIN");
-  if(!approved&&!publicDomain)return null;
+  const normalizedUrl=licenseUrl.toLowerCase();
+  const publicDomain=normalized==="CC0" || normalized==="PDM" || normalized.includes("PUBLIC DOMAIN") || /creativecommons\.org\/(?:publicdomain\/zero|publicdomain\/mark)\//i.test(normalizedUrl);
+  const nonCommercial=/\bNC\b|NON ?COMMERCIAL/i.test(normalized) || /creativecommons\.org\/licenses\/by(?:-[a-z]+)*-nc(?:-[a-z]+)*\//i.test(normalizedUrl);
+  const noDerivatives=/\bND\b|NO ?DERIVATIVES/i.test(normalized) || /creativecommons\.org\/licenses\/by(?:-[a-z]+)*-nd(?:-[a-z]+)*\//i.test(normalizedUrl);
+  const ccBySa=(/\bCC BY SA(?:\s|$)/i.test(normalized) || /creativecommons\.org\/licenses\/by-sa\//i.test(normalizedUrl));
+  const ccBy=(!ccBySa && (/\bCC BY(?:\s|$)/i.test(normalized) || /creativecommons\.org\/licenses\/by\//i.test(normalizedUrl)));
+  const attributionOpen=!nonCommercial&&!noDerivatives&&(ccBy||ccBySa);
   const credit=cleanText(row?.imageCredit||row?.imageCreator||"");
   const risky=/reuters|רויטרס|associated\s+press|\bap\b|afp|getty|גטי|shutterstock|שאטרסטוק|flash\s*90|פלאש\s*90/i.test(credit);
   if(risky&&!approved)return null;
+  if(!approved&&!publicDomain&&!attributionOpen)return null;
+  // Attribution licences are accepted only when both the creator/credit and an
+  // explicit Creative Commons licence URL came with the same already-fetched row.
+  if(!approved&&attributionOpen&&(!credit||!/^https?:\/\/creativecommons\.org\/licenses\/(?:by|by-sa)\//i.test(licenseUrl)))return null;
   return {
     imageUrl:url,
     imageCredit:credit,
     imageCreator:cleanText(row?.imageCreator||row?.imageCredit||""),
     imageLicense:license,
-    imageLicenseUrl:String(row?.imageLicenseUrl||"").slice(0,1800),
+    imageLicenseUrl:licenseUrl.slice(0,1800),
     imageLandingUrl:String(row?.imageLandingUrl||row?.url||"").slice(0,1800),
     rightsBasis:approved?(basis||"manual-license"):"open-license",
     rightsApproved:approved
@@ -1856,7 +1916,7 @@ function publicNewsPayload(payload={}){
     if(cleanText(item?.displayTitle||item?.title))projected.push(item);
     else rejectedNoSafeHeadline++;
   }
-  return {...payload,items:projected,publicProjection:true,rawSourceTextIncluded:false,version:"248.0.0",editorialQa:{policy:"v248-independent-fact-preserving",accepted:projected.length,rejectedNoSafeHeadline,externalAiCalls:0,externalMediaLookup:false,maxHeadlineSimilarity:PUBLIC_EDITORIAL_QA.maxHeadlineSimilarity}};
+  return {...payload,items:projected,publicProjection:true,rawSourceTextIncluded:false,version:"249.0.0",editorialQa:{policy:"v249-independent-fact-preserving",accepted:projected.length,rejectedNoSafeHeadline,externalAiCalls:0,externalMediaLookup:false,maxHeadlineSimilarity:PUBLIC_EDITORIAL_QA.maxHeadlineSimilarity}};
 }
 
 async function handleNewsBundle(request, env, ctx) {
@@ -1868,7 +1928,7 @@ async function handleNewsBundle(request, env, ctx) {
 
   const cache = caches.default;
   const payloadTexts = await Promise.all(NEWS_BUNDLE_SHARDS.map(async (shard) => {
-    const cacheKey = new Request(`${PUBLIC_SITE_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&v=248`, { method: "GET" });
+    const cacheKey = new Request(`${PUBLIC_SITE_ORIGIN}/api/news?shard=${encodeURIComponent(shard)}&v=249`, { method: "GET" });
     const hit = await cache.match(cacheKey);
     if (!hit) return null;
     try {
@@ -1884,7 +1944,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "248.0.0"
+      "X-Hadashota-Version": "249.0.0"
     }));
   }
 
@@ -1892,7 +1952,7 @@ async function handleNewsBundle(request, env, ctx) {
   const bundleText = `{"ok":true,"generatedAt":${JSON.stringify(generatedAt)},"payloads":[${payloadTexts.join(",")}]}`;
   return cors(jsonText(bundleText, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "248.0.0",
+    "X-Hadashota-Version": "249.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1913,12 +1973,12 @@ async function handleNews(request, env, ctx) {
 
   const cacheUrl = new URL(request.url);
   cacheUrl.pathname = "/api/news";
-  cacheUrl.search = `?shard=${shard}&v=248`;
+  cacheUrl.search = `?shard=${shard}&v=249`;
   const cacheKey = new Request(cacheUrl.toString(), { method: "GET" });
 
   const lastGoodUrl = new URL(request.url);
   lastGoodUrl.pathname = "/api/news-last-good";
-  lastGoodUrl.search = `?shard=${shard}&v=248`;
+  lastGoodUrl.search = `?shard=${shard}&v=249`;
   const lastGoodKey = new Request(lastGoodUrl.toString(), { method: "GET" });
 
   if (!force) {
@@ -1932,7 +1992,7 @@ async function handleNews(request, env, ctx) {
         if (!cachedText) throw new Error("INVALID_CACHED_NEWS_PAYLOAD");
         return cors(jsonText(cachedText, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "248.0.0",
+          "X-Hadashota-Version": "249.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -2059,14 +2119,14 @@ async function handleNews(request, env, ctx) {
     const publicPayloadText = JSON.stringify(publicNewsPayload(payload));
     const response = jsonText(publicPayloadText, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "248.0.0",
+      "X-Hadashota-Version": "249.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0",
       "X-Koteret-Text-Policy": "facts-only-independent-wording-v248"
     });
     const sharedSnapshotResponse = jsonText(publicPayloadText, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "248.0.0",
+      "X-Hadashota-Version": "249.0.0",
       "X-Hadashota-Shard": shard,
       "X-Koteret-Text-Policy": "facts-only-independent-wording-v248"
     });
@@ -2107,7 +2167,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "248.0.0"
+        "X-Hadashota-Version": "249.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -2129,7 +2189,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "248.0.0"
+    "X-Hadashota-Version": "249.0.0"
   });
 }
 
@@ -2337,6 +2397,34 @@ function chooseRssArticleUrl(block, source) {
   return [...candidates].sort((a,b) => rank(b)-rank(a))[0] || candidates[0];
 }
 
+function rssMediaRightsForImage(block,imageUrl,base){
+  const raw=String(block||"");
+  const selected=sanitizeImageUrl(imageUrl);
+  if(!selected)return {license:"",licenseUrl:"",credit:""};
+  const mediaRe=/<media:content\b([^>]*?)(?:\/\s*>|>([\s\S]*?)<\/media:content>)/gi;
+  let match;
+  while((match=mediaRe.exec(raw))){
+    const attrs=String(match[1]||"");
+    const rawUrl=attrs.match(/\burl=["']([^"']+)["']/i)?.[1]||"";
+    const candidate=absoluteUrl(decodeEntities(rawUrl),base);
+    if(!candidate||sanitizeImageUrl(candidate)!==selected)continue;
+    const inner=String(match[2]||"");
+    const licenseTag=inner.match(/<media:license\b([^>]*)>([\s\S]*?)<\/media:license>/i);
+    if(!licenseTag)return {license:"",licenseUrl:"",credit:""};
+    const licenseAttrs=String(licenseTag[1]||"");
+    const licenseUrl=decodeEntities(licenseAttrs.match(/\bhref=["']([^"']+)["']/i)?.[1]||licenseAttrs.match(/\burl=["']([^"']+)["']/i)?.[1]||"").trim();
+    let license=cleanText(licenseTag[2]||"");
+    const lower=licenseUrl.toLowerCase();
+    if(!license&&/creativecommons\.org\/licenses\/by-sa\//i.test(lower))license="CC BY-SA";
+    else if(!license&&/creativecommons\.org\/licenses\/by\//i.test(lower))license="CC BY";
+    else if(!license&&/creativecommons\.org\/publicdomain\/zero\//i.test(lower))license="CC0";
+    else if(!license&&/creativecommons\.org\/publicdomain\/mark\//i.test(lower))license="Public Domain";
+    const credit=normalizePhotoCreditText(firstTag(inner,["media:credit","photo:credit","image:credit"])||"");
+    return {license,licenseUrl,credit};
+  }
+  return {license:"",licenseUrl:"",credit:""};
+}
+
 function parseRss(xml, source) {
   const blocks = xml.match(/<item\b[\s\S]*?<\/item>/gi) || xml.match(/<entry\b[\s\S]*?<\/entry>/gi) || [];
   const items = [];
@@ -2349,13 +2437,20 @@ function parseRss(xml, source) {
     const publishedAt = safeIso(dateRaw);
     const url = chooseRssArticleUrl(block, source);
     const imageUrl = extractRssImage(block, descriptionRaw, source.home);
-    const rssPhotoCredit = normalizePhotoCreditText(
-      firstTag(block, ["media:credit", "photo:credit", "image:credit"]) ||
-      extractPhotoCredit(block, imageUrl || "") || ""
-    );
+    const rssRights = imageUrl ? rssMediaRightsForImage(block,imageUrl,source.home) : { license:"", licenseUrl:"", credit:"" };
+    const rssPhotoCredit = rssRights.license
+      ? rssRights.credit
+      : normalizePhotoCreditText(
+          firstTag(block, ["media:credit", "photo:credit", "image:credit"]) ||
+          extractPhotoCredit(block, imageUrl || "") || ""
+        );
 
     if (!title || !url || !publishedAt) continue;
-    items.push(makeItem({ source, title, url, publishedAt, preview: trimPreview(description), imageUrl, imageCredit: rssPhotoCredit }));
+    items.push(makeItem({
+      source, title, url, publishedAt, preview: trimPreview(description), imageUrl, imageCredit: rssPhotoCredit,
+      imageLicense:rssRights.license, imageLicenseUrl:rssRights.licenseUrl, imageLandingUrl:url,
+      rightsBasis:rssRights.license?"open-license":""
+    }));
   }
   return items;
 }
@@ -2535,8 +2630,8 @@ function sanitizeSourceImageUrl(value) {
   }
 }
 
-function makeItem({ source, title, url, publishedAt, preview, imageUrl = null, imageCredit = "", imageCreator = "" }) {
-  return {
+function makeItem({ source, title, url, publishedAt, preview, imageUrl = null, imageCredit = "", imageCreator = "", imageLicense = "", imageLicenseUrl = "", imageLandingUrl = "", rightsBasis = "", rightsApproved = false }) {
+  const item = {
     id: stableId(`${source.id}|${url}|${publishedAt}`),
     sourceId: source.id,
     publisher: source.publisher,
@@ -2559,6 +2654,18 @@ function makeItem({ source, title, url, publishedAt, preview, imageUrl = null, i
     publishedAt,
     defaultCategory: source.defaultCategory || null
   };
+  // V249 data-cost guardrail: rights metadata is sparse. Do not duplicate the
+  // article URL or serialize empty licence fields on every collected row.
+  const cleanLicense=cleanText(imageLicense || "");
+  const cleanLicenseUrl=String(imageLicenseUrl || "").slice(0,1800);
+  const cleanLanding=String(imageLandingUrl || "").slice(0,1800);
+  const cleanBasis=String(rightsBasis || "").slice(0,80);
+  if(cleanLicense)item.imageLicense=cleanLicense;
+  if(cleanLicenseUrl)item.imageLicenseUrl=cleanLicenseUrl;
+  if(cleanLanding&&(cleanLicense||cleanLicenseUrl||cleanBasis||rightsApproved===true))item.imageLandingUrl=cleanLanding;
+  if(cleanBasis)item.rightsBasis=cleanBasis;
+  if(rightsApproved===true)item.rightsApproved=true;
+  return item;
 }
 
 function classify(item) {
@@ -2578,6 +2685,21 @@ function scoreWords(text, words) {
   let score = 0;
   for (const word of words) if (text.includes(word.toLowerCase())) score += word.length > 6 ? 1.2 : 1;
   return score;
+}
+
+function imageRightsSnapshot(row={}){
+  const out={};
+  if(row?.imageLicense)out.imageLicense=row.imageLicense;
+  if(row?.imageLicenseUrl)out.imageLicenseUrl=row.imageLicenseUrl;
+  if(row?.imageLandingUrl)out.imageLandingUrl=row.imageLandingUrl;
+  if(row?.rightsBasis)out.rightsBasis=row.rightsBasis;
+  if(row?.rightsApproved===true)out.rightsApproved=true;
+  return out;
+}
+function applyImageRights(target={},source={}){
+  for(const key of ["imageLicense","imageLicenseUrl","imageLandingUrl","rightsBasis","rightsApproved"])delete target[key];
+  Object.assign(target,imageRightsSnapshot(source));
+  return target;
 }
 
 function clusterItems(items) {
@@ -2650,6 +2772,7 @@ function clusterItems(items) {
       imageUrl: item.imageUrl || null,
       imageCredit: item.imageCredit || "",
       imageCreator: item.imageCreator || "",
+      ...imageRightsSnapshot(item),
       title: item.title || "",
       preview: item.preview || "",
       category: item.category || null
@@ -2686,6 +2809,7 @@ function clusterItems(items) {
       match.imageUrl = item.imageUrl;
       match.imageCredit = item.imageCredit || "";
       match.imageCreator = item.imageCreator || item.imageCredit || "";
+      applyImageRights(match,item);
     }
     if (itemTime > timeFor(match.latestReportAt || 0)) match.latestReportAt = item.publishedAt;
     if (itemTime < timeFor(match.firstReportAt || item.publishedAt)) match.firstReportAt = item.publishedAt;
@@ -2704,10 +2828,12 @@ function clusterItems(items) {
       const clusterImage = existingImageUrl || item.imageUrl || null;
       const clusterImageCredit = existingImageUrl ? (match.imageCredit || "") : (item.imageCredit || "");
       const clusterImageCreator = existingImageUrl ? (match.imageCreator || match.imageCredit || "") : (item.imageCreator || item.imageCredit || "");
+      const clusterImageRights = imageRightsSnapshot(existingImageUrl ? match : item);
       Object.assign(match, item, {
         related, updates, reportCount, latestReportAt, firstReportAt, imageUrl: clusterImage,
         imageCredit: clusterImageCredit, imageCreator: clusterImageCreator
       });
+      applyImageRights(match,clusterImageRights);
     }
   }
 
@@ -2782,6 +2908,12 @@ function sameEventProfiles(profileA, profileB, timeDeltaMs = Infinity) {
   const A = profileA.tokens;
   const B = profileB.tokens;
   if (!A.size || !B.size) return false;
+  // V249: two reports that explicitly name different specific regional targets
+  // are separate developments even when the action vocabulary is otherwise
+  // nearly identical. This is invocation-local math only and adds no I/O.
+  const specificA = profileA.entityMask & EVENT_SPECIFIC_TARGET_MASK;
+  const specificB = profileB.entityMask & EVENT_SPECIFIC_TARGET_MASK;
+  if (specificA && specificB && (specificA & specificB) === 0) return false;
   let intersection = 0;
   if (profileA.numericTokens && profileB.numericTokens) {
     const a = profileA.numericTokens;
@@ -3682,14 +3814,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"248.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"248.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"249.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"249.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"248.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"248.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"249.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"249.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4470,7 +4602,7 @@ async function storeBackgroundMonitor(storage,input={},existingSnapshot=undefine
     collectorFailures:input?.collectorFailures&&typeof input.collectorFailures==="object"?input.collectorFailures:{},
     error:String(input?.error||"").slice(0,260),
     at:nowIso,
-    version:"248.0.0"
+    version:"249.0.0"
   };
   // V237: callers that already read the monitor may pass that exact snapshot.
   // This preserves ordering/rank safeguards while avoiding a duplicate Storage read.
@@ -5358,7 +5490,7 @@ async function compactOldAnalyticsDays(storage,now){
   return {scanned:rows.size,deleted:await retentionDeleteBatches(storage,remove),compacted};
 }
 async function runDailyStorageRetentionV248(storage,now=Date.now()){
-  const day=new Date(now).toISOString().slice(0,10),result={day,at:new Date(now).toISOString(),version:"248.0.0",newsArchivePersistent:false};
+  const day=new Date(now).toISOString().slice(0,10),result={day,at:new Date(now).toISOString(),version:"249.0.0",newsArchivePersistent:false};
   const days=(n)=>now-n*86400000;
   result.notifications=await retentionDeletePrefix(storage,"notification:",days(STORAGE_RETENTION_V248.notificationDays));
   result.pushEvents=await retentionDeletePrefix(storage,"push.event:",days(STORAGE_RETENTION_V248.pushEventDays));
@@ -5382,7 +5514,7 @@ async function maybeRunDailyStorageRetentionV248(storage,now=Date.now()){
   const day=d.toISOString().slice(0,10);
   if(String(await storage.get("maintenance.retention.lastDay")||"")===day)return null;
   try{return await runDailyStorageRetentionV248(storage,now);}catch(error){
-    const row={day,at:new Date(now).toISOString(),version:"248.0.0",error:String(error?.message||error).slice(0,260)};
+    const row={day,at:new Date(now).toISOString(),version:"249.0.0",error:String(error?.message||error).slice(0,260)};
     await storage.put("maintenance.retention.lastError",row);return row;
   }
 }
@@ -5417,7 +5549,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"248.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"249.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -5706,7 +5838,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{direct:0,google:0,meta:0,x:0,whatsapp:0,share:0,internal:0,other:0},referrerDomains:{}});
-      return json({ok:true,version:"248.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"249.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -5748,7 +5880,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"248.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"249.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -5797,10 +5929,10 @@ export class PushHub {
       if(previousMonitor?.state==="running"&&Number.isFinite(previousStarted)&&Date.now()-previousStarted>45000){
         await storage.put("push.backgroundLastError",{
           at:nowIso,tickStartedAt:String(previousMonitor?.tickStartedAt||""),phase:String(previousMonitor?.phase||"unknown"),
-          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"248.0.0"
+          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"249.0.0"
         });
       }
-      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"248.0.0"};
+      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"249.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       // V248: piggyback bounded housekeeping on the existing heartbeat. The helper
       // is a no-op on 1,439 of 1,440 daily ticks and creates no extra DO request.
