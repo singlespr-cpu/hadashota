@@ -1,5 +1,5 @@
-const KOTERET_CLIENT_BUILD = "249.0.0";
-const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v249-1";
+const KOTERET_CLIENT_BUILD = "250.0.0";
+const KOTERET_CACHE_SCHEMA = "copyright-public-projection-v250-1";
 
 (function healOldClientState() {
   try {
@@ -325,7 +325,7 @@ const NEWS_SHARD_STAGGER_MS = 45;
 const LAST_GOOD_PREFIX = "hadashota.lastGoodShard.correctShardsV86.";
 const LEGACY_LAST_GOOD_PREFIXES = [];
 const LOCAL_LAST_GOOD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v249";
+const FAST_RENDER_SNAPSHOT_KEY = "koteretPlus.fastRenderSnapshot.v250";
 const FAST_RENDER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const CLIENT_NEWS_TIMEOUT_MS = 12_000;
 const FOREGROUND_FRESHNESS_MS = 10_000;
@@ -744,9 +744,9 @@ async function verifyApiVersion() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const apiVersion = String(data?.version || "");
-    marker.textContent = apiVersion ? `גרסה V249 · API ${apiVersion}` : "גרסה V249 · API לא מזוהה";
+    marker.textContent = apiVersion ? `גרסה V250 · API ${apiVersion}` : "גרסה V250 · API לא מזוהה";
   } catch (error) {
-    marker.textContent = "גרסה V249 · API לא מחובר";
+    marker.textContent = "גרסה V250 · API לא מחובר";
     console.warn("Koteret Plus API health check failed", error);
   } finally {
     clearTimeout(timer);
@@ -1766,7 +1766,7 @@ function persistFastRenderSnapshot(data) {
   if (!data?.items?.length) return;
   try {
     const payload = {
-      version: 249,
+      version: 250,
       savedAt: Date.now(),
       generatedAt: data.generatedAt || new Date().toISOString(),
       items: data.items.slice(0, 140).map(compactFastRenderItem),
@@ -3242,10 +3242,114 @@ function sourceImageConflictsWithStory(item, report, rawUrl = "") {
   return mediaContextConflict(storyText, media);
 }
 
+// V250 — ZERO-SERVER-CALL curated archive fallback.
+// Every entry below was manually rights-reviewed at build time from its Wikimedia
+// Commons file page. Runtime selection is a local string match only: no API,
+// fetch, Worker request, DO read/write or media search. The browser fetches the
+// chosen image directly from Wikimedia only when the story itself is rendered.
+const STATIC_ARCHIVE_MEDIA = Object.freeze([
+  Object.freeze({
+    entity:"בנימין נתניהו", match:["בנימין נתניהו","ראש הממשלה נתניהו","נתניהו","benjamin netanyahu"],
+    exclude:["שרה נתניהו","יאיר נתניהו","אבנר נתניהו","sara netanyahu","yair netanyahu"],
+    file:"Benjamin Netanyahu, January 2024.jpg", creator:"Rory Arnold / UK Government",
+    license:"CC BY 2.0", licenseUrl:"https://creativecommons.org/licenses/by/2.0/"
+  }),
+  Object.freeze({
+    entity:"דונלד טראמפ", match:["דונלד טראמפ","הנשיא טראמפ","טראמפ","donald trump"],
+    exclude:["מלניה טראמפ","איוונקה טראמפ","אריק טראמפ","טיפאני טראמפ","דונלד טראמפ ג׳וניור","donald trump jr","ivanka trump","melania trump"],
+    file:"Official Presidential Portrait of President Donald J. Trump (2025).jpg", creator:"Daniel Torok / White House",
+    license:"Public Domain", licenseUrl:""
+  }),
+  Object.freeze({
+    entity:"ולדימיר פוטין", match:["ולדימיר פוטין","פוטין","vladimir putin"],
+    file:"Vladimir Putin official portrait.jpg", creator:"Kremlin.ru",
+    license:"CC BY 4.0", licenseUrl:"https://creativecommons.org/licenses/by/4.0/"
+  }),
+  Object.freeze({
+    entity:"וולודימיר זלנסקי", match:["וולודימיר זלנסקי","זלנסקי","זלנסקי","volodymyr zelenskyy","volodymyr zelensky"],
+    file:"Volodymyr Zelenskyy 2025 (cropped).jpg", creator:"President of Ukraine",
+    license:"CC0", licenseUrl:"https://creativecommons.org/publicdomain/zero/1.0/"
+  }),
+  Object.freeze({
+    entity:"ירושלים", match:["ירושלים","jerusalem"],
+    file:"Jerusalem panorama view from Mt. Scopus.jpg", creator:"AhaRethinking",
+    license:"CC BY-SA 4.0", licenseUrl:"https://creativecommons.org/licenses/by-sa/4.0/"
+  }),
+  Object.freeze({
+    entity:"תל אביב", match:["תל אביב","תל-אביב","tel aviv"],
+    file:"Tel Aviv Skyline 01.jpg", creator:"Ynhockey",
+    license:"CC BY-SA 4.0", licenseUrl:"https://creativecommons.org/licenses/by-sa/4.0/"
+  }),
+  Object.freeze({
+    entity:"עזה", match:["עזה","gaza"],
+    file:"Gaza skyline.jpg", creator:"Giorgio Montersino",
+    license:"CC BY-SA 2.0", licenseUrl:"https://creativecommons.org/licenses/by-sa/2.0/"
+  }),
+  Object.freeze({
+    entity:"ביירות", match:["ביירות","beirut"],
+    file:"Beirut skyline view.jpg", creator:"Laura C Ellis",
+    license:"CC BY-SA 4.0", licenseUrl:"https://creativecommons.org/licenses/by-sa/4.0/"
+  }),
+  Object.freeze({
+    entity:"טהראן", match:["טהראן","tehran"],
+    file:"Tehran Skyline and Alborz Mountains.jpg", creator:"Julia Maudlin",
+    license:"CC BY 2.0", licenseUrl:"https://creativecommons.org/licenses/by/2.0/"
+  }),
+  Object.freeze({
+    entity:"חיפה", match:["חיפה","haifa"],
+    file:"Haifa skyline view.jpg", creator:"StateofIsrael",
+    license:"CC BY-SA 2.0", licenseUrl:"https://creativecommons.org/licenses/by-sa/2.0/"
+  }),
+  Object.freeze({
+    entity:"הכנסת", match:["הכנסת","בכנסת","כנסת ישראל","knesset"],
+    file:"The Knesset-Jerusalem.jpg", creator:"Yair Haklai",
+    license:"CC BY-SA 3.0", licenseUrl:"https://creativecommons.org/licenses/by-sa/3.0/"
+  }),
+  Object.freeze({
+    entity:"הבית הלבן", match:["הבית הלבן","white house"],
+    file:"The White House Washington D.C..jpg", creator:"Reynolds / Library of Congress",
+    license:"Public Domain", licenseUrl:"https://creativecommons.org/publicdomain/mark/1.0/"
+  })
+]);
+
+function staticArchiveMediaForStory(item = {}, displayTitle = "") {
+  const haystack = `${item?.title || ""} ${displayTitle || ""}`
+    .toLowerCase().replace(/[־–—]/g, "-").replace(/\s+/g, " ").trim();
+  if (!haystack) return null;
+  const entry = STATIC_ARCHIVE_MEDIA.find((candidate) => {
+    const excluded = Array.isArray(candidate.exclude) && candidate.exclude.some((term) =>
+      haystack.includes(String(term || "").toLowerCase())
+    );
+    if (excluded) return false;
+    return candidate.match.some((term) => haystack.includes(String(term || "").toLowerCase()));
+  });
+  if (!entry) return null;
+  const file = String(entry.file || "").trim();
+  if (!file) return null;
+  const landingUrl = `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file).replace(/%20/g, "_")}`;
+  const url = `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(file)}?width=960`;
+  return {
+    url,
+    creator: entry.creator,
+    imageCreator: entry.creator,
+    photographer: entry.creator,
+    provider: "static-archive-open",
+    rightsBasis: "open-license",
+    rightsApproved: false,
+    sourceName: "Wikimedia Commons",
+    sourceUrl: landingUrl,
+    landingUrl,
+    license: entry.license,
+    licenseUrl: entry.licenseUrl,
+    credit: `צילום ארכיון: ${entry.entity} · ${entry.creator} · ${entry.license}`,
+    archiveEntity: entry.entity
+  };
+}
+
 function preferredSourceImage(item) {
-  // V248: only the exact article image can be considered. No image borrowed
-  // from another report in the cluster and no illustrative search fallback.
-  return originalFeedSourceImage(item);
+  // Exact source media remains the first choice in callers. This helper is the
+  // V250 local archive tier only and never performs a network/API lookup.
+  return staticArchiveMediaForStory(item, editorialTitle(item));
 }
 
 async function hydrateLeadOpenMediaFallback(winner, leadTitle, publicSnapshot=null) {
@@ -3346,8 +3450,13 @@ async function hydrateLeadSafeMedia(winner, leadTitle, publicSnapshot=null) {
   const exactLicensedSource = originalFeedSourceImage(item);
   if (applyLicensed(exactLicensedSource)) return;
 
-  // V245: no illustrative/keyword-guessed hero image. If the exact story has no
-  // explicitly reusable source image, render the lead without a photo.
+  // V250: rights-reviewed static archive fallback. Selection is local and
+  // explicit-entity-only; no media API or Worker request is made.
+  const archiveMedia = staticArchiveMediaForStory(item, leadTitle);
+  if (applyLicensed(archiveMedia)) return;
+
+  // No exact reusable source image and no verified archive entity match: keep
+  // the lead text-only rather than guessing an illustration.
   el.leadStoryImage.removeAttribute("src");
   el.leadStoryImage.alt = "";
   el.leadStoryMedia.classList.add("hidden");
@@ -3434,7 +3543,7 @@ async function hydrateSafeMediaSlot(slot) {
         a.setAttribute("aria-label", "פתיחת מקור ורישיון התמונה");
       }
     }
-    addCredit(candidate?.credit || (candidate?.sourceName ? `מקור תמונה: ${candidate.sourceName}` : "מקור תמונה"), openLicensed ? "" : (candidate?.landingUrl || candidate?.sourceUrl || ""));
+    addCredit(candidate?.credit || (candidate?.sourceName ? `מקור תמונה: ${candidate.sourceName}` : "מקור תמונה"), candidate?.landingUrl || candidate?.sourceUrl || "");
     return true;
   };
 
@@ -3923,9 +4032,9 @@ function newsCardHtml(item) {
   const isSite = item.sourceKind === "site";
   const rawStoryUrl = storyHref(item);
   const storyUrl = escapeHtml(rawStoryUrl);
-  // V245: no guessed/illustrative media. A card gets an image only when the
-  // exact source/cluster image itself carries an explicit reusable-rights basis.
-  const preferredImage = originalFeedSourceImage(item) || preferredSourceImage(item) || originalClusterSourceImage(item);
+  // V250: exact licensed story media is preferred. If none exists, a card may
+  // use a manually rights-reviewed entity archive image, visibly labelled as archive.
+  const preferredImage = originalFeedSourceImage(item) || originalClusterSourceImage(item) || preferredSourceImage(item);
   const showExactLicensedImage = !!(state.showImages && preferredImage?.url && originalImageAllowed(preferredImage));
   const imageHtml = showExactLicensedImage
     ? `<a class="news-image safe-news-image${isSite ? "" : " telegram-image"}" href="${storyUrl}" target="_blank" rel="noopener noreferrer" aria-label="פתיחת מקור הידיעה" data-source-url="${storyUrl}" data-source-name="${escapeHtml(cleanDisplayText(item.sourceName || ""))}" data-source-image="${escapeHtml(preferredImage.url)}" data-source-credit="${escapeHtml(preferredImage.credit || "")}" data-source-license="${escapeHtml(preferredImage.license || "")}" data-source-license-url="${escapeHtml(preferredImage.licenseUrl || "")}" data-source-creator="${escapeHtml(preferredImage.creator || preferredImage.imageCreator || preferredImage.photographer || "")}" data-source-landing="${escapeHtml(preferredImage.landingUrl || preferredImage.sourceUrl || "")}" data-source-basis="${escapeHtml(preferredImage.rightsBasis || "")}" data-source-provider="${escapeHtml(preferredImage.provider || "")}"><span class="safe-media-slot" data-media-query="" data-category="${escapeHtml(category)}" data-story-title="${escapeHtml(safeTitle)}" data-story-preview="" aria-hidden="true"></span></a>`
@@ -4399,7 +4508,7 @@ function renderLeadStory() {
   const leadResolvedHref = storyHref(sourceTarget || item);
   setOptionalLink(el.leadStoryLink, leadResolvedHref);
   const leadHref = safeHttpHref(leadResolvedHref);
-  const initialLeadMedia = preferredSourceImage(item) || originalClusterSourceImage(item) || originalFeedSourceImage(item) || publisherClusterSourceImage(item);
+  const initialLeadMedia = originalFeedSourceImage(item) || originalClusterSourceImage(item) || preferredSourceImage(item) || publisherClusterSourceImage(item);
   const publicLeadSnapshot={
     fingerprint:winnerFingerprint,
     title:leadTitle,
