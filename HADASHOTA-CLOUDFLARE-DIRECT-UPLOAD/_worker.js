@@ -249,7 +249,7 @@ export default {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       return cors(json({ image: null, error: "retired_exact_source_media_only" }, 410, {
         "Cache-Control": "public, max-age=0, s-maxage=86400",
-        "X-Hadashota-Version": "251.0.0"
+        "X-Hadashota-Version": "252.0.0"
       }));
     }
 
@@ -260,7 +260,7 @@ export default {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       return cors(json({ image: null, error: "retired_rights_policy" }, 410, {
         "Cache-Control": "public, max-age=0, s-maxage=86400",
-        "X-Hadashota-Version": "251.0.0"
+        "X-Hadashota-Version": "252.0.0"
       }));
     }
 
@@ -309,7 +309,7 @@ export default {
         return json({
           ok: sourceStatus.some((item) => item.ok),
           service: "hadashota-news",
-          version: "251.0.0",
+          version: "252.0.0",
           checkedAt,
           shard,
           configuredSources: SOURCES.length,
@@ -324,7 +324,7 @@ export default {
       return json({
         ok: true,
         service: "hadashota-news",
-        version: "251.0.0",
+        version: "252.0.0",
         time: new Date().toISOString(),
         configuredSources: SOURCES.length,
         configuredSiteSources: getShardSources("sites").length,
@@ -1911,7 +1911,7 @@ function publicNewsPayload(payload={}){
     if(cleanText(item?.displayTitle||item?.title))projected.push(item);
     else rejectedMissingTitle++;
   }
-  return {...payload,items:projected,publicProjection:true,rawSourceTextIncluded:false,sourceTitlesPreserved:true,version:"251.0.0",editorialQa:{policy:"v251-source-original",accepted:projected.length,rejectedMissingTitle,externalAiCalls:0,externalMediaLookup:false}};
+  return {...payload,items:projected,publicProjection:true,rawSourceTextIncluded:false,sourceTitlesPreserved:true,version:"252.0.0",editorialQa:{policy:"v251-source-original",accepted:projected.length,rejectedMissingTitle,externalAiCalls:0,externalMediaLookup:false}};
 }
 
 async function handleNewsBundle(request, env, ctx) {
@@ -1939,7 +1939,7 @@ async function handleNewsBundle(request, env, ctx) {
   if (missing.length) {
     return cors(json({ ok: false, bundleMiss: true, missing }, 503, {
       "Cache-Control": "no-store",
-      "X-Hadashota-Version": "251.0.0"
+      "X-Hadashota-Version": "252.0.0"
     }));
   }
 
@@ -1947,7 +1947,7 @@ async function handleNewsBundle(request, env, ctx) {
   const bundleText = `{"ok":true,"generatedAt":${JSON.stringify(generatedAt)},"payloads":[${payloadTexts.join(",")}]}`;
   return cors(jsonText(bundleText, 200, {
     "Cache-Control": "no-store, max-age=0",
-    "X-Hadashota-Version": "251.0.0",
+    "X-Hadashota-Version": "252.0.0",
     "X-Hadashota-Bundle": "HIT"
   }));
 }
@@ -1987,7 +1987,7 @@ async function handleNews(request, env, ctx) {
         if (!cachedText) throw new Error("INVALID_CACHED_NEWS_PAYLOAD");
         return cors(jsonText(cachedText, 200, {
           "Cache-Control": "no-store, max-age=0",
-          "X-Hadashota-Version": "251.0.0",
+          "X-Hadashota-Version": "252.0.0",
           "X-Hadashota-Shard": shard,
           "X-Hadashota-Cache": "HIT"
         }));
@@ -2114,14 +2114,14 @@ async function handleNews(request, env, ctx) {
     const publicPayloadText = JSON.stringify(publicNewsPayload(payload));
     const response = jsonText(publicPayloadText, 200, {
       "Cache-Control": "no-store, max-age=0",
-      "X-Hadashota-Version": "251.0.0",
+      "X-Hadashota-Version": "252.0.0",
       "X-Hadashota-Shard": shard,
       "X-Hadashota-Force": force ? "1" : "0",
       "X-Koteret-Text-Policy": "source-original-title-v251"
     });
     const sharedSnapshotResponse = jsonText(publicPayloadText, 200, {
       "Cache-Control": "public, max-age=0, s-maxage=25",
-      "X-Hadashota-Version": "251.0.0",
+      "X-Hadashota-Version": "252.0.0",
       "X-Hadashota-Shard": shard,
       "X-Koteret-Text-Policy": "source-original-title-v251"
     });
@@ -2162,7 +2162,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
       return json(payload, 200, {
         "Cache-Control": "no-store",
         "X-Hadashota-Stale": "1",
-        "X-Hadashota-Version": "251.0.0"
+        "X-Hadashota-Version": "252.0.0"
       });
     } catch {
       // A corrupt cache entry should never prevent a proper error response.
@@ -2184,7 +2184,7 @@ async function lastGoodOrError(cache, lastGoodKey, shard, reason, currentSources
   }, 200, {
     "Cache-Control": "no-store",
     "X-Hadashota-Stale": "1",
-    "X-Hadashota-Version": "251.0.0"
+    "X-Hadashota-Version": "252.0.0"
   });
 }
 
@@ -3609,22 +3609,86 @@ function mergeAirRiskWithFaa(base,faa){
   if(base?.available===false)return escSignal("airrisk",faa.recent?24:10,true,`EASA לא זמין ברענון זה; FAA מציגה מגבלות/אזהרות פעילות למרחבים אזוריים${faa.recent?" והעמוד עודכן ב־14 הימים האחרונים":""}.`,{source:"FAA Prohibitions & Restrictions",sourceUrl:faa.url,freshness:faa.recent?"FAA עודכן לאחרונה":"FAA זמין",stats:{faaRelevant:faa.relevant,faaRecent:faa.recent}});
   return {...base,score:escClamp(Number(base.score||0)+bonus),source:`${base.source||"EASA"} + FAA`,reason:`${base.reason} FAA משמשת מקור הצלבה נוסף למגבלות טיסה; ${faa.recent?"עמוד המגבלות עודכן לאחרונה ולכן נוסף חיזוק מתון.":"לא זוהה עדכון FAA חדש מספיק כדי לשנות את הציון."}`,stats:{...(base.stats||{}),faaRelevant:faa.relevant,faaRecent:faa.recent}};
 }
+function extractRecentDualNumericDateSnippets(text,days=30){
+  const clean=normalizeSpace(stripHtml(text)),hits=[];let m;const rx=/(\d{1,2})\/(\d{1,2})\/(20\d{2})/g;
+  while((m=rx.exec(clean))&&hits.length<120){
+    const a=Number(m[1]),b=Number(m[2]),y=Number(m[3]),candidates=[];
+    if(a>=1&&a<=12&&b>=1&&b<=31)candidates.push(Date.UTC(y,a-1,b,12));
+    if(b>=1&&b<=12&&a>=1&&a<=31)candidates.push(Date.UTC(y,b-1,a,12));
+    const recent=candidates.some(ts=>{const age=Date.now()-ts;return Number.isFinite(ts)&&age>=-86400000&&age<=days*86400000;});
+    if(recent)hits.push({date:Math.max(...candidates),snippet:clean.slice(Math.max(0,m.index-100),Math.min(clean.length,m.index+550))});
+  }
+  return hits;
+}
+async function fetchGulfAviationCorroboration(){
+  // V252: two official Gulf aviation authorities only. This is a corroborator,
+  // not a standalone domain. Pages are edge-cached for 30 minutes so the
+  // existing ~15-minute external cycle does not repeatedly pull the same bytes.
+  const sources=[
+    ["QCAA","https://www.caa.gov.qa/en/qcaa-news"],
+    ["UAE GCAA","https://www.gcaa.gov.ae/en/epublication/Pages/ViewAllDocuments.aspx"]
+  ];
+  const settled=await Promise.allSettled(sources.map(([,url])=>escFetch(url,{timeout:6000,cf:{cacheEverything:true,cacheTtl:1800}})));
+  let reached=0,risk=0,relief=0;const notes=[];
+  settled.forEach((res,i)=>{
+    if(res.status!=="fulfilled")return;reached++;
+    const label=sources[i][0],raw=String(res.value||""),recent=[...extractRecentDatedSnippets(raw,30),...extractRecentDualNumericDateSnippets(raw,30)];
+    let localRisk=0,localRelief=0;
+    for(const row of recent){
+      const x=row.snippet;
+      if(/(?:airspace closure|closure of.{0,50}airspace|suspension of flight operations|temporary suspension|precautionary closure|heightened regional tensions|Iranian attacks|conflict zones|operational risks|missile launches|airspace restrictions)/i.test(x))localRisk++;
+      if(/(?:return to normal|full resumption|resumption of operations|reopening|partial reopening|full operational control|lifting of temporary precautionary measures|information.{0,60}closure.{0,60}inaccurate)/i.test(x))localRelief++;
+    }
+    risk+=Math.min(3,localRisk);relief+=Math.min(3,localRelief);
+    if(localRisk||localRelief)notes.push(`${label}: ${localRisk} אינדיקציות סיכון / ${localRelief} אינדיקציות חזרה לשגרה`);
+  });
+  if(!reached)return {ok:false,score:0,risk:0,relief:0,reached:0,reason:"רשויות התעופה במפרץ אינן זמינות כרגע."};
+  let score=10+Math.min(66,risk*18)-Math.min(32,relief*10);score=escClamp(score,5,86);
+  return {ok:true,score,risk,relief,reached,reason:notes.length?notes.join(" · "):"לא זוהה שינוי תעופתי רשמי חדש במפרץ ב־30 הימים האחרונים.",source:"QCAA + UAE GCAA",url:sources[0][1]};
+}
+function mergeAirRiskWithGulf(base,gulf){
+  if(!gulf?.ok)return base;
+  let delta=0;
+  if(gulf.risk>gulf.relief){if(gulf.score>=70)delta=8;else if(gulf.score>=50)delta=5;else if(gulf.score>=35)delta=3;}
+  else if(gulf.relief>gulf.risk&&gulf.relief>=2)delta=-3;
+  if(base?.available===false){
+    const fallback=gulf.risk>gulf.relief?Math.min(30,Math.round(gulf.score*.45)):10;
+    return escSignal("airrisk",fallback,true,`EASA/FAA לא זמינים ברענון זה; רשויות התעופה במפרץ משמשות הצלבה מוגבלת. ${gulf.reason}`,{source:gulf.source,sourceUrl:gulf.url,freshness:`${gulf.reached}/2 רשויות מפרץ`,stats:{gulfReached:gulf.reached,gulfRisk:gulf.risk,gulfRelief:gulf.relief,gulfScore:gulf.score}});
+  }
+  return {...base,score:escClamp(Number(base.score||0)+delta),source:`${base.source||"EASA/FAA"} + Gulf CAA`,reason:`${base.reason} הצלבת רשויות התעופה במפרץ: ${gulf.reason}${delta>0?` נוסף חיזוק מתון של ${delta} נק׳.`:delta<0?` הופחתו ${Math.abs(delta)} נק׳ בעקבות אינדיקציות חזרה לשגרה.`:" ללא שינוי בציון."}`,stats:{...(base.stats||{}),gulfReached:gulf.reached,gulfRisk:gulf.risk,gulfRelief:gulf.relief,gulfScore:gulf.score,gulfDelta:delta}};
+}
 async function fetchInternationalIranNewsSignal(){
+  // V252: three independent international feeds + one Iranian state cross-check.
+  // IRNA can never raise the signal by itself; it only nudges an already
+  // corroborated independent picture. All four feeds are cached at the edge for
+  // 15 minutes to keep origin data transfer low.
   const sources=[
     {id:"esc-bbc",publisher:"bbc",name:"BBC Middle East",kind:"site",adapter:"rss",url:"https://feeds.bbci.co.uk/news/topics/cjnwl8q4ggwt/rss.xml",home:"https://www.bbc.com/news/world/middle_east",language:"en",verified:true},
-    {id:"esc-aj",publisher:"aljazeera",name:"Al Jazeera",kind:"site",adapter:"rss",url:"https://www.aljazeera.com/xml/rss/all.xml",home:"https://www.aljazeera.com/",language:"en",verified:true}
+    {id:"esc-aj",publisher:"aljazeera",name:"Al Jazeera",kind:"site",adapter:"rss",url:"https://www.aljazeera.com/xml/rss/all.xml",home:"https://www.aljazeera.com/",language:"en",verified:true},
+    {id:"esc-dw",publisher:"dw",name:"DW English",kind:"site",adapter:"rss",url:"https://rss.dw.com/rdf/rss-en-all",home:"https://www.dw.com/en/",language:"en",verified:true}
   ];
-  const settled=await Promise.allSettled(sources.map(src=>escFetch(src.url,{timeout:6000,headers:{Accept:"application/rss+xml,application/xml,text/xml,*/*"}})));
+  const iranSource={id:"esc-irna",publisher:"irna",name:"IRNA English",kind:"site",adapter:"rss",url:"https://en.irna.ir/rss",home:"https://en.irna.ir/",language:"en",verified:false};
+  const [independentSettled,iranSettled]=await Promise.all([
+    Promise.allSettled(sources.map(src=>escFetch(src.url,{timeout:6000,headers:{Accept:"application/rss+xml,application/xml,text/xml,*/*"},cf:{cacheEverything:true,cacheTtl:900}}))),
+    Promise.allSettled([escFetch(iranSource.url,{timeout:6000,headers:{Accept:"application/rss+xml,application/xml,text/xml,*/*"},cf:{cacheEverything:true,cacheTtl:900}})])
+  ]);
   const now=Date.now(),items=[];let reached=0;
-  settled.forEach((res,i)=>{if(res.status!=="fulfilled")return;reached++;try{items.push(...parseRss(String(res.value||""),sources[i]));}catch{}});
-  if(!reached)return escSignal("intlnews",0,false,"BBC ו-Al Jazeera אינם זמינים כרגע להצלבת חדשות בינלאומית.",{source:"BBC + Al Jazeera",sourceUrl:sources[0].home,freshness:"לא זמין"});
+  independentSettled.forEach((res,i)=>{if(res.status!=="fulfilled")return;reached++;try{items.push(...parseRss(String(res.value||""),sources[i]));}catch{}});
+  const iranItems=[];let iranReached=0;
+  iranSettled.forEach(res=>{if(res.status!=="fulfilled")return;iranReached++;try{iranItems.push(...parseRss(String(res.value||""),iranSource));}catch{}});
+  if(!reached)return escSignal("intlnews",0,false,"BBC, Al Jazeera ו-DW אינם זמינים כרגע להצלבת חדשות בינלאומית.",{source:"BBC + Al Jazeera + DW",sourceUrl:sources[0].home,freshness:"לא זמין",stats:{independentReached:0,iranCrossCheckReached:iranReached}});
   const relevant=items.filter(r=>{const t=Date.parse(r?.publishedAt||0),text=`${r?.title||""} ${r?.preview||""}`;return Number.isFinite(t)&&now-t>=-600000&&now-t<=24*3600000&&ESCALATION_CORE_RX.test(text);});
+  const iranRelevant=iranItems.filter(r=>{const t=Date.parse(r?.publishedAt||0),text=`${r?.title||""} ${r?.preview||""}`;return Number.isFinite(t)&&now-t>=-600000&&now-t<=24*3600000&&ESCALATION_CORE_RX.test(text);});
   let denom=0,alerts=0,deescWeight=0,recentHard=0;const hardSources=new Set();
   for(const r of relevant){const text=`${r?.title||""} ${r?.preview||""}`,age=Math.max(0,now-Date.parse(r.publishedAt||now)),base=Math.pow(.5,age/(8*3600000));const hard=ESCALATION_HARD_RX.test(text),soft=ESCALATION_SOFT_RX.test(text),deesc=ESCALATION_DEESC_RX.test(text),boiler=ESCALATION_NEWS_BOILERPLATE_RX.test(String(r?.title||""));let a=hard?(deesc ? .35 : 1):(soft?(deesc ? .15 : .35):0);if(boiler)a=Math.min(a,.15);denom+=base;alerts+=base*a;if(deesc)deescWeight+=base;if(hard&&!deesc){hardSources.add(r.publisher||r.sourceId);if(age<=4*3600000)recentHard++;}}
+  const iranHard=iranRelevant.filter(r=>ESCALATION_HARD_RX.test(`${r?.title||""} ${r?.preview||""}`)&&!ESCALATION_DEESC_RX.test(`${r?.title||""} ${r?.preview||""}`)).length;
+  const iranDeesc=iranRelevant.filter(r=>ESCALATION_DEESC_RX.test(`${r?.title||""} ${r?.preview||""}`)).length;
   const ratio=denom?alerts/denom:0,deRatio=denom?deescWeight/denom:0;let score=5+Math.pow(Math.min(1,ratio),1.55)*76+Math.min(8,hardSources.size*4)+Math.min(8,recentHard*2)-deRatio*18;
-  if(relevant.length<3)score=Math.min(score,35);if(hardSources.size<2)score=Math.min(score,58);score=escClamp(Math.round(score));
-  const reason=relevant.length?`BBC ו-Al Jazeera: ${relevant.length} פריטים ממוקדי איראן ב־24 שעות; ${hardSources.size} מערכות חדשות בינלאומיות עם דיווחי הסלמה; ${recentHard} דיווחים קשים בארבע השעות האחרונות.`:"שני המקורות הבינלאומיים זמינים, אך לא אותרה מסה חדשה וממוקדת איראן ב־24 השעות האחרונות.";
-  return escSignal("intlnews",score,true,reason,{source:"BBC World + Al Jazeera English",sourceUrl:sources[0].home,freshness:`${reached}/2 פידים בינלאומיים`,stats:{reached,relevant:relevant.length,hardSources:hardSources.size,recentHard,alertRatio:Number(ratio.toFixed(3)),deescalationRatio:Number(deRatio.toFixed(3))}});
+  if(relevant.length<3)score=Math.min(score,35);if(hardSources.size<2)score=Math.min(score,58);
+  let iranDelta=0;if(hardSources.size>=2&&recentHard>=2){if(iranHard>=2)iranDelta=4;else if(iranHard===1)iranDelta=2;if(iranDeesc>=2&&deRatio>.15)iranDelta=Math.min(iranDelta,-2);}
+  score=escClamp(Math.round(score+iranDelta));
+  const reason=relevant.length?`BBC, Al Jazeera ו-DW: ${relevant.length} פריטים ממוקדי איראן ב־24 שעות; ${hardSources.size} מערכות חדשות בינלאומיות עם דיווחי הסלמה; ${recentHard} דיווחים קשים בארבע השעות האחרונות.${iranReached?` IRNA משמשת הצלבה בלבד: ${iranHard} מסלים / ${iranDeesc} מרגיע${iranDelta?` (${iranDelta>0?"+":""}${iranDelta} נק׳ לאחר אימות עצמאי)`:" (ללא השפעה עצמאית)"}.`:""}`:"המקורות הבינלאומיים זמינים, אך לא אותרה מסה חדשה וממוקדת איראן ב־24 השעות האחרונות.";
+  return escSignal("intlnews",score,true,reason,{source:"BBC World + Al Jazeera English + DW · IRNA cross-check",sourceUrl:sources[0].home,freshness:`${reached}/3 פידים עצמאיים${iranReached?" · IRNA זמין להצלבה":""}`,stats:{reached,independentReached:reached,iranCrossCheckReached:iranReached,relevant:relevant.length,hardSources:hardSources.size,recentHard,iranRelevant:iranRelevant.length,iranHard,iranDeesc,iranDelta,alertRatio:Number(ratio.toFixed(3)),deescalationRatio:Number(deRatio.toFixed(3))}});
 }
 function oilScoreFromContext({move24=0,move7=0,premium20=0,latest=null,source="Yahoo Finance / FRED"}={}){
   const up24=Math.max(0,Number(move24)||0),up7=Math.max(0,Number(move7)||0),premium=Math.max(0,Number(premium20)||0),price=Number(latest);
@@ -3770,8 +3834,8 @@ async function fetchPizzaExperimental(){
   const url="https://www.pizzint.watch/";try{const html=await escFetch(url,{timeout:6000});const text=normalizeSpace(stripHtml(html));const m=text.match(/DOUGHCON\s*([1-5])/i);if(!m)return {available:false,weight:0,experimental:true,reason:"PizzINT נטען אך רמת DOUGHCON לא זוהתה.",source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};const level=Number(m[1]),mapping={5:10,4:30,3:55,2:78,1:94};return {available:true,weight:0,experimental:true,level:`DOUGHCON ${level}`,score:mapping[level],reason:`PizzINT מציג DOUGHCON ${level}. מוצג לניטור OSINT בלבד ואינו משפיע על דופק ההסלמה.`,source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};}catch(error){return {available:false,weight:0,experimental:true,reason:`מדד הפיצה אינו זמין כרגע: ${String(error?.message||error).slice(0,80)}`,source:"PizzINT",sourceUrl:url,checkedAt:new Date().toISOString()};}
 }
 async function collectExternalEscalationSignals(){
-  const [airBundle,notam,airriskBase,faa,oil,us,maritime,nuclear,market,diplomatic,intlnews,pizza]=await Promise.all([fetchAviationSignals(),fetchNotamSignal(),fetchEasaAirRiskSignal(),fetchFaaAirRiskCorroboration(),fetchOilSignal(),fetchUSPostureSignal(),fetchMaritimeSignal(),fetchNuclearSignal(),fetchPredictionMarketSignal(),fetchDiplomaticRiskSignal(),fetchInternationalIranNewsSignal(),fetchPizzaExperimental()]);
-  const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
+  const [airBundle,notam,airriskBase,faa,gulf,oil,us,maritime,nuclear,market,diplomatic,intlnews,pizza]=await Promise.all([fetchAviationSignals(),fetchNotamSignal(),fetchEasaAirRiskSignal(),fetchFaaAirRiskCorroboration(),fetchGulfAviationCorroboration(),fetchOilSignal(),fetchUSPostureSignal(),fetchMaritimeSignal(),fetchNuclearSignal(),fetchPredictionMarketSignal(),fetchDiplomaticRiskSignal(),fetchInternationalIranNewsSignal(),fetchPizzaExperimental()]);
+  const airrisk=mergeAirRiskWithGulf(mergeAirRiskWithFaa(airriskBase,faa),gulf);
   return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil,us,maritime,nuclear,market,diplomatic,intlnews},experimental:{pizza},updatedAt:new Date().toISOString()};
 }
 // V167 background calibration refresh: split the external OSINT set into three
@@ -3780,8 +3844,8 @@ async function collectExternalEscalationSignals(){
 async function collectExternalEscalationSignalGroup(groupIndex=0){
   const group=((Number(groupIndex)||0)%3+3)%3;
   if(group===0){
-    const [airBundle,notam,airriskBase,faa,oil]=await Promise.all([fetchAviationSignals(),fetchNotamSignal(),fetchEasaAirRiskSignal(),fetchFaaAirRiskCorroboration(),fetchOilSignal()]);
-    const airrisk=mergeAirRiskWithFaa(airriskBase,faa);
+    const [airBundle,notam,airriskBase,faa,gulf,oil]=await Promise.all([fetchAviationSignals(),fetchNotamSignal(),fetchEasaAirRiskSignal(),fetchFaaAirRiskCorroboration(),fetchGulfAviationCorroboration(),fetchOilSignal()]);
+    const airrisk=mergeAirRiskWithGulf(mergeAirRiskWithFaa(airriskBase,faa),gulf);
     return {signals:{aviation:airBundle.aviation,military:airBundle.military,notam,airrisk,oil},experimental:{},updatedAt:new Date().toISOString(),group};
   }
   if(group===1){
@@ -3809,14 +3873,14 @@ async function handleEscalation(request,env,ctx){
     const requestUrl=new URL(request.url),presenceDeviceId=String(requestUrl.searchParams.get("presenceDeviceId")||"").replace(/[^a-zA-Z0-9._:-]/g,"").slice(0,120);
     if(presenceDeviceId&&ctx?.waitUntil)ctx.waitUntil(adminHubCall(env,"/presence",{deviceId:presenceDeviceId,page:"escalation"}).catch(()=>{}));
     const claim=await escalationHubCall(env,"/escalation/claim","POST",{});
-    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"251.0.0"});
-    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"251.0.0"});}
+    if(!claim?.claimed&&claim?.public?.latest)return json(claim.public,200,{"Cache-Control":"no-store","X-Hadashota-Version":"252.0.0"});
+    if(!claim?.claimed){const p=await escalationHubCall(env,"/escalation/public");return json(p,200,{"Cache-Control":"no-store","X-Hadashota-Version":"252.0.0"});}
     const cacheData=await readEscalationNewsCache(request);const orefPromise=fetchOrefForEscalation();const idfWebPromise=fetchIdfOfficialForEscalation();const nscWebPromise=fetchNscOfficialForEscalation();let external=claim.external||null;
     if(claim.externalDue||!external){const fresh=await collectExternalEscalationSignals();external=mergeEscalationExternal(claim.external,fresh);}
     const [oref,idfWeb,nscWeb]=await Promise.all([orefPromise,idfWebPromise,nscWebPromise]);const localSignals={news:scoreKoteretNews(cacheData),official:scoreOfficialSignal(cacheData,oref,idfWeb,nscWeb)};
     const payload={signals:{...localSignals,...(external?.signals||{})},experimental:external?.experimental||{},external,externalUpdatedAt:external?.updatedAt||claim.externalUpdatedAt||null,collectedAt:new Date().toISOString()};
-    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"251.0.0"});
-  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"251.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
+    const publicData=await escalationHubCall(env,"/escalation/snapshot","POST",payload);return json(publicData,200,{"Cache-Control":"no-store","X-Hadashota-Version":"252.0.0"});
+  }catch(error){console.warn("Escalation refresh failed",error);try{const p=await escalationHubCall(env,"/escalation/public");return json({...p,refreshError:String(error?.message||error)},200,{"Cache-Control":"no-store","X-Hadashota-Version":"252.0.0"});}catch{return json({ok:false,error:"Escalation index temporarily unavailable"},503,{"Cache-Control":"no-store"});}}
 }
 function escPublicHistory(history){return (Array.isArray(history)?history:[]).filter(x=>x&&Number.isFinite(Number(x.score))&&x.at).slice(-900);}
 function escClosestScore(history,target){let best=null,dist=Infinity;for(const row of history||[]){const d=Math.abs(Date.parse(row?.at||0)-target);if(d<dist){dist=d;best=row;}}return dist<=3*3600000?Number(best?.score):null;}
@@ -4597,7 +4661,7 @@ async function storeBackgroundMonitor(storage,input={},existingSnapshot=undefine
     collectorFailures:input?.collectorFailures&&typeof input.collectorFailures==="object"?input.collectorFailures:{},
     error:String(input?.error||"").slice(0,260),
     at:nowIso,
-    version:"251.0.0"
+    version:"252.0.0"
   };
   // V237: callers that already read the monitor may pass that exact snapshot.
   // This preserves ordering/rank safeguards while avoiding a duplicate Storage read.
@@ -5485,7 +5549,7 @@ async function compactOldAnalyticsDays(storage,now){
   return {scanned:rows.size,deleted:await retentionDeleteBatches(storage,remove),compacted};
 }
 async function runDailyStorageRetentionV248(storage,now=Date.now()){
-  const day=new Date(now).toISOString().slice(0,10),result={day,at:new Date(now).toISOString(),version:"251.0.0",newsArchivePersistent:false};
+  const day=new Date(now).toISOString().slice(0,10),result={day,at:new Date(now).toISOString(),version:"252.0.0",newsArchivePersistent:false};
   const days=(n)=>now-n*86400000;
   result.notifications=await retentionDeletePrefix(storage,"notification:",days(STORAGE_RETENTION_V248.notificationDays));
   result.pushEvents=await retentionDeletePrefix(storage,"push.event:",days(STORAGE_RETENTION_V248.pushEventDays));
@@ -5509,7 +5573,7 @@ async function maybeRunDailyStorageRetentionV248(storage,now=Date.now()){
   const day=d.toISOString().slice(0,10);
   if(String(await storage.get("maintenance.retention.lastDay")||"")===day)return null;
   try{return await runDailyStorageRetentionV248(storage,now);}catch(error){
-    const row={day,at:new Date(now).toISOString(),version:"251.0.0",error:String(error?.message||error).slice(0,260)};
+    const row={day,at:new Date(now).toISOString(),version:"252.0.0",error:String(error?.message||error).slice(0,260)};
     await storage.put("maintenance.retention.lastError",row);return row;
   }
 }
@@ -5544,7 +5608,7 @@ export class PushHub {
     if(url.pathname==="/config"){
       const keys=await ensureVapidKeys(storage);
       const stats=await ensurePushStats(storage);
-      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"251.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,publicKey:keys.publicKey,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},fanout:"paged-alarm",mode:"true-web-push",version:"252.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/subscribe"&&request.method==="POST"){
@@ -5833,7 +5897,7 @@ export class PushHub {
       const presenceRows=[...(await storage.list({prefix:"presence:",limit:5000})).entries()],onlineCutoff=Date.now()-150000;let onlineTotal=0,onlineHome=0,onlineEscalation=0;for(const [key,row] of presenceRows){const seen=Date.parse(row?.lastSeenAt||0);if(Number.isFinite(seen)&&seen>=onlineCutoff){onlineTotal+=1;if(row?.page==="escalation")onlineEscalation+=1;else onlineHome+=1;}else if(Number.isFinite(seen)&&Date.now()-seen>24*3600000)await storage.delete(key);}
       const peakHour=[...hourOfDay].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||{hour:0,views:0};
       const peakDay=[...dayRows].sort((a,b)=>Number(b.views||0)-Number(a.views||0))[0]||null;const todayParts=analyticsJerusalemParts();const today=stripAnalyticsDay(await storage.get(`analytics.day:${todayParts.date}`)||{date:todayParts.date,views:0,pages:{},unique:0,uniqueHome:0,uniqueEscalation:0,devices:{mobile:0,tablet:0,desktop:0},sources:{direct:0,google:0,meta:0,x:0,whatsapp:0,share:0,internal:0,other:0},referrerDomains:{}});
-      return json({ok:true,version:"251.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
+      return json({ok:true,version:"252.0.0",analytics:{summary,days:dayRows,hours:hourRows,hourOfDay,peakHour,peakDay,today},push:{subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastResult:lastResult||null,activeJob:activeJob||null,latestNotification:latestNotification||null,latestLead:latestLead||null,leadCandidate:leadCandidate||null,lastPushedFingerprint:lastPushedFingerprint||null,backgroundNews:backgroundNews||null,backgroundHeartbeat:backgroundHeartbeat||null,lastDecision:lastDecision||null,history:history.slice(-50).reverse(),adminDevices:{registered:adminDeviceRows.length,pushReady:adminPushReady,activeSessions:activeSessions.length,items:adminDeviceItems},online:{total:onlineTotal,home:onlineHome,escalation:onlineEscalation}},escalation:escalation?{score:escalation.score,level:escalation.level,updatedAt:escalation.updatedAt,delta6h:escalation.delta6h,sourceHealth:escalation.sourceHealth,coverage:escalation.coverage}:null,contacts:{total:Number(contactSummary.total||0),newCount:Number(contactSummary.newCount||0),items:contactRows}},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/admin/contact"&&request.method==="POST"){
@@ -5875,7 +5939,7 @@ export class PushHub {
       const fullDisplay=await storage.get("lead.fullDisplay");
       const displayLatest=await storage.get("lead.displayLatest");
       const displayDiagnostic=fullDisplay?{fingerprint:String(fullDisplay.fingerprint||""),savedAt:fullDisplay.savedAt||null,sources:Number(fullDisplay.uniqueSources||0),reports:Array.isArray(fullDisplay.reports)?fullDisplay.reports.length:0,hasImage:!!String(fullDisplay?.item?.imageUrl||"").trim(),title:String(displayLatest?.title||fullDisplay?.item?.title||""),mode:String(displayLatest?.displayReason||""),pushQualified:displayLatest?.pushQualified===true}:null;
-      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"251.0.0"},200,{"Cache-Control":"no-store"});
+      return json({enabled:true,subscriptions:Number(stats.count||0),platforms:stats.platforms||{},lastPushedFingerprint:previous||null,latest:latest||null,leadDisplay:displayDiagnostic,background:background||null,backgroundHeartbeat:heartbeat||null,backgroundMonitor:backgroundMonitor||null,backgroundLastError:backgroundLastError||null,lastDecision:lastDecision||null,fanoutActive:!!activeJob,lastResult:lastResult||null,lastFailureDetails:lastFailureDetails||null,version:"252.0.0"},200,{"Cache-Control":"no-store"});
     }
 
     if(url.pathname==="/escalation/public"&&request.method==="GET") {
@@ -5924,10 +5988,10 @@ export class PushHub {
       if(previousMonitor?.state==="running"&&Number.isFinite(previousStarted)&&Date.now()-previousStarted>45000){
         await storage.put("push.backgroundLastError",{
           at:nowIso,tickStartedAt:String(previousMonitor?.tickStartedAt||""),phase:String(previousMonitor?.phase||"unknown"),
-          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"251.0.0"
+          error:"PREVIOUS_RUN_INCOMPLETE_OR_TIMED_OUT",elapsedMs:Date.now()-previousStarted,version:"252.0.0"
         });
       }
-      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"251.0.0"};
+      const heartbeat={at:nowIso,tickStartedAt:String(data?.tickStartedAt||""),version:"252.0.0"};
       await storage.put("push.backgroundHeartbeat",heartbeat);
       // V248: piggyback bounded housekeeping on the existing heartbeat. The helper
       // is a no-op on 1,439 of 1,440 daily ticks and creates no extra DO request.
